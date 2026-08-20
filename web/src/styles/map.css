@@ -125,6 +125,9 @@
 .map-medal-toggle:hover { border-color: var(--accent); color: var(--fg); }
 .map-medal-row { display: flex; align-items: center; gap: 8px; padding: 4px 10px; font-size: 13px; }
 .map-medal-row .map-layer-name { flex: none; }
+/* 行首筛选开关(复用收集按钮样式,缩窄以适配行布局);关掉该项后滑块置灰 */
+.map-medal-row .map-collect-btn { width: 24px; }
+.map-medal-range:disabled { opacity: .3; cursor: default; }
 .map-medal-val {
   flex: none; min-width: 42px; text-align: right;
   font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; font-size: 12px; color: var(--fg);

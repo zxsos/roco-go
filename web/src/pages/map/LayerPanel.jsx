@@ -66,15 +66,21 @@ export default function LayerPanel({ pois, wilds, paint, collapsed, onClose }) {
             const num = wilds.num[k] || 0
             const gone = wilds.numStale[k] || 0
             const th = wilds.medals[k]
+            const on = wilds.medalOn.has(k)
             return (
               <div className="map-medal-row" key={k}
                 title={gone ? `视野内 ${num - gone} · 已离开视野 ${gone}` : undefined}>
+                {/* 行首开关:关掉该项后图上不再标这类奖牌,阈值保留但滑块置灰 */}
+                <button className={'map-collect-btn map-medal-switch' + (on ? ' on' : '')}
+                  onClick={() => wilds.toggleMedal(k)}
+                  title={on ? `关闭${n}筛选` : `开启${n}筛选`} aria-label={`${n}筛选开关`}
+                  aria-pressed={on}>✓</button>
                 <span className="map-wild-swatch" style={{ borderColor: color }} />
                 <span className="map-layer-name">{n}</span>
                 <span className="map-medal-val">{dir}{th}</span>
                 <input type="range" className="map-medal-range" min={lo} max={hi} step={0.5}
                   value={th} onChange={(e) => wilds.setThreshold(k, Number(e.target.value))}
-                  aria-label={`${n}判定阈值`} />
+                  disabled={!on} aria-label={`${n}判定阈值`} />
                 <span className="muted">{num}</span>
               </div>
             )

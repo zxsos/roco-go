@@ -7,7 +7,8 @@ import { getWildPets, subscribe } from '../../api'
 // 前端只管开关与摆放。判定依据(捕捉前后一致的属性)见 docs/data.md 3.5。
 //
 // 存储键带版本号:这一版把「奖牌四件套」从开关(开/关二态)换成**只严不宽的阈值滑块**
-// (默认=奖牌边界,只能往更极端拖),沿用旧键会让旧选择错位,故 bump 到 v5。
+// (默认=奖牌边界,只能往更极端拖),沿用旧键会让旧选择错位,故 bump 到 v5;
+// 之后又给 4 条各加了开关(medalOn 字段,旧数据缺该字段时默认全开,不必再 bump)。
 const LS_KEY = 'map.wildLayers.v5'
 
 // 与数值无关的开关图层:一个开关可覆盖后端 kinds 里的**多个**类别(异色与炫彩合成一个);
@@ -30,6 +31,9 @@ export const MEDAL_FILTERS = [
 const DEFAULT_MEDALS = Object.fromEntries(MEDAL_FILTERS.map((m) => [m.k, m.def]))
 const SWITCH_KEYS = new Set(WILD_LAYERS.map((l) => l.k))
 const DEFAULT_SWITCHES = WILD_LAYERS.filter((l) => l.on).map((l) => l.k)
+// 奖牌开关:每条默认全开(与无开关时代的旧行为一致),用户可单独关掉某项。
+const MEDAL_KEYS = new Set(MEDAL_FILTERS.map((m) => m.k))
+const DEFAULT_MEDAL_ON = MEDAL_FILTERS.map((m) => m.k)
 
 // wildTags 把一只宠物命中的类别翻成悬浮提示上的标签(比图层名更细:图层把异色/炫彩合成
 // 一个开关,提示里仍分开说)。异色 + 炫彩兼具时游戏自己有个合称「异色炫彩」
@@ -58,10 +62,12 @@ export function wildRing(kinds = []) {
   return style
 }
 
-// —— 存储:v5 起为一个对象 { on: 开关键数组, medals: {big:…}, open: 奖牌筛选是否展开 } ——
+// —— 存储:v5 起为一个对象 { on: 开关键数组, medals: {big:…}, open: 奖牌筛选是否展开,
+//   medalOn: 奖牌开关数组 } ——
 // null = 用户从没手动选过(或旧格式),按默认值;数组只可能是旧键,同样回默认。
+// medalOn 是后加的字段,旧数据缺失时按默认(全开)处理,与无开关时代的旧行为一致。
 const loadState = () => {
-  const base = { on: new Set(DEFAULT_SWITCHES), medals: { ...DEFAULT_MEDALS }, open: false }
+  const base = { on: new Set(DEFAULT_SWITCHES), medals: { ...DEFAULT_MEDALS }, open: false, medalOn: new Set(DEFAULT_MEDAL_ON) }
   try {
     const v = JSON.parse(localStorage.getItem(LS_KEY))
     if (!v || typeof v !== 'object' || Array.isArray(v)) return base
@@ -73,11 +79,12 @@ const loadState = () => {
         if (typeof t === 'number' && t >= m.lo && t <= m.hi) medals[m.k] = t
       }
     }
-    return { on, medals, open: !!v.open }
+    const medalOn = new Set(Array.isArray(v.medalOn) ? v.medalOn.filter((k) => MEDAL_KEYS.has(k)) : DEFAULT_MEDAL_ON)
+    return { on, medals, open: !!v.open, medalOn }
   } catch { return base }
 }
-const persist = (on, medals, open) => {
-  localStorage.setItem(LS_KEY, JSON.stringify({ on: [...on], medals, open }))
+const persist = (on, medals, open, medalOn) => {
+  localStorage.setItem(LS_KEY, JSON.stringify({ on: [...on], medals, open, medalOn: [...medalOn] }))
 }
 
 // useWildPets 管理野生宠物图层:订阅后端推送、按「开关 + 奖牌阈值」筛出可绘制的标记。
@@ -87,6 +94,7 @@ export function useWildPets(account) {
   const [on, setOn] = useState(st.on)
   const [medals, setMedals] = useState(st.medals)
   const [open, setOpen] = useState(st.open)
+  const [medalOn, setMedalOn] = useState(st.medalOn)
 
   useEffect(() => {
     let alive = true
@@ -104,7 +112,7 @@ export function useWildPets(account) {
     setOn((prev) => {
       const next = new Set(prev)
       next.has(k) ? next.delete(k) : next.add(k)
-      persist(next, medals, open)
+      persist(next, medals, open, medalOn)
       return next
     })
   }
@@ -112,14 +120,23 @@ export function useWildPets(account) {
   const setThreshold = (k, v) => {
     setMedals((prev) => {
       const next = { ...prev, [k]: v }
-      persist(on, next, open)
+      persist(on, next, open, medalOn)
+      return next
+    })
+  }
+
+  const toggleMedal = (k) => {
+    setMedalOn((prev) => {
+      const next = new Set(prev)
+      next.has(k) ? next.delete(k) : next.add(k)
+      persist(on, medals, open, next)
       return next
     })
   }
 
   const toggleOpen = () => {
     setOpen((prev) => {
-      persist(on, medals, !prev)
+      persist(on, medals, !prev, medalOn)
       return !prev
     })
   }
@@ -133,16 +150,16 @@ export function useWildPets(account) {
   }
   const marks = pets.filter((p) =>
     (p.kinds || []).some((k) => shownKinds.has(k)) ||
-    MEDAL_FILTERS.some((m) => medalHit(m, p)))
+    MEDAL_FILTERS.some((m) => medalOn.has(m.k) && medalHit(m, p)))
   // 图层行上的计数与地图上画出的标记一一对应:灰点(已离开视野的最后所见)也画在图上,
   // 故也计入——否则侧栏显示 0 而图上还挂着几个,只会让人以为标记出错了。
   // 另单算其中的灰点数,供侧栏悬浮说明拆开「视野内 / 已离开」(见 LayerPanel)。
   const hit = (l, p) => l.kinds
     ? (p.kinds || []).some((k) => l.kinds.includes(k))
-    : medalHit(l, p)
+    : medalOn.has(l.k) && medalHit(l, p)
   const count = (l, pick) => pets.filter((p) => pick(p) && hit(l, p)).length
   const num = Object.fromEntries([...WILD_LAYERS, ...MEDAL_FILTERS].map((l) => [l.k, count(l, () => true)]))
   const numStale = Object.fromEntries([...WILD_LAYERS, ...MEDAL_FILTERS].map((l) => [l.k, count(l, (p) => p.stale)]))
 
-  return { marks, num, numStale, on, toggle, medals, setThreshold, open, toggleOpen }
+  return { marks, num, numStale, on, toggle, medals, setThreshold, open, toggleOpen, medalOn, toggleMedal }
 }
