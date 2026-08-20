@@ -130,6 +130,11 @@ sudo ./rocom-capture -iface <网卡> -port 8195 -addr :4939
 
 # 启用 HTTPS(自签证书;手机经局域网访问时用)
 sudo ./rocom-capture -iface <网卡> -tls
+
+# 云端 socks5 抓包:本机同时当 socks5 网关 + 抓包机(带公网 IP 的服务器)
+#   -socks5-addr :1080   内置 SOCKS5 代理(仅 TCP CONNECT、无认证),手机 clash mate 连「公网IP:1080」
+#   -skip-self-ip=false  不忽略本机 IP——否则代理进程以本机 IP 出站的游戏流量会被单臂去重逻辑丢弃
+sudo ./rocom-capture -iface eth0 -socks5-addr :1080 -skip-self-ip=false -tls
 ```
 
 浏览器打开 `http://localhost:4939`。
