@@ -209,13 +209,13 @@ export default function MapPage() {
                 {n.egg && <img className="map-nest-egg" src={imgURL(n.egg.icon)} alt="" draggable={false} />}
               </div>
             ))}
-            {/* 野生宠物标记:圆头像 + 类别描边(异色/炫彩、污染、声音),同属 .map-world 一起
-                平移。与 POI 同样尺寸恒定,故用 left/top + translate(-50%,-50%) 钉在锚点上。
+            {/* 野生宠物标记:圆头像 + 类别描边(异色/炫彩、污染、奖牌四件套),同属 .map-world
+                一起平移。与 POI 同样尺寸恒定,故用 left/top + translate(-50%,-50%) 钉在锚点上。
                 描边色按命中类别算(见 wildRing),不用 CSS 类组合——组合数太多。 */}
             {wilds.marks.map((p) => (
               <div key={p.id} title={wildTitle(p)}
                 className={'map-wild' + (p.stale ? ' stale' : '')}
-                style={{ left: p.u * mapPx, top: p.v * mapPx, ...wildRing(p.kinds) }}>
+                style={{ left: p.u * mapPx, top: p.v * mapPx, ...wildRing(p, wilds.on, wilds.medals, wilds.medalOn) }}>
                 {p.img ? <img src={imgURL(p.img)} alt="" draggable={false} /> : <span>🐾</span>}
               </div>
             ))}
