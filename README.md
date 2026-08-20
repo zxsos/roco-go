@@ -134,8 +134,16 @@ sudo ./rocom-capture -iface <网卡> -tls
 # 云端 socks5 抓包:本机同时当 socks5 网关 + 抓包机(带公网 IP 的服务器)
 #   -socks5-addr :1080   内置 SOCKS5 代理(仅 TCP CONNECT、无认证),手机 clash mate 连「公网IP:1080」
 #   -skip-self-ip=false  不忽略本机 IP——否则代理进程以本机 IP 出站的游戏流量会被单臂去重逻辑丢弃
-sudo ./rocom-capture -iface eth0 -socks5-addr :1080 -skip-self-ip=false -tls
-```
+#   -socks5-allow <IP>   客户端 IP 白名单(逗号分隔,支持 CIDR)。公网部署必填:全网扫描器几
+#                        分钟内就会找上无认证代理并滥用(日志里出现一堆陌生 IP 即是被扫),不设
+#                        白名单会耗尽 fd/goroutine,把同进程的 Web 服务也拖垮。
+#   -socks5-max-conns 64 同时处理的最大连接数,超限直接拒绝(默认 64),防连接风暴。
+#   -socks5-user/-socks5-pass  RFC 1929 用户名/密码认证。Clash 里在 socks5 代理上填同款
+#                              username/password 即可。注意该认证密码是明文传输的(无加密
+#                              通道),公网直连建议白名单+认证双保险,或走 tailscale 加密隧道。
+sudo ./rocom-capture -iface eth0 -socks5-addr :1080 -skip-self-ip=false \
+  -socks5-allow 1.2.3.4 -socks5-user rocom -socks5-pass 换成强密码 -tls
+# ↑ 把 1.2.3.4 换成手机当前公网出口 IP;手机 IP 变了就更新参数重启。
 
 浏览器打开 `http://localhost:4939`。
 
