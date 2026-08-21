@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useContext, useCallback, useLayoutEffect } from 'react'
+import React, { useState, useEffect, useRef, useContext, useCallback, useLayoutEffect, useMemo } from 'react'
 import { subscribe, getPosition } from '../../api'
 import { AccountContext } from '../../context'
 import { imgURL } from '../../components/icons'
@@ -10,6 +10,15 @@ import { useHomeNests, nestTitle } from './useHomeNests'
 import { usePaint } from './usePaint'
 import { PetDetailModal } from '../../components/PetDetailModal'
 import LayerPanel from './LayerPanel'
+
+// —— 本次会话轨迹 ——
+// 纯前端累积:把每个移动包投到底图上的位置连成折线,看这次上线走了哪(与涂色互补:
+// 涂色是「刷新过精灵的区域」,轨迹是「具体走过的路线」)。换底图(换场景/家园换等级)
+// 清空重来,刷新页面即清。抽稀:移动包约 0.1s 一个,走路时相邻包只差零点几米,不抽稀
+// 点会越攒越多;断线:同底图内传送会让位置瞬间跳几十上百米,不应画成横穿地图的飞线。
+const TRACK_LS_KEY = 'map.track' // 开关记忆
+const TRACK_MIN_STEP = 0.001     // 抽稀最小步距(底图边长的 0.1%,约 1-4m)
+const TRACK_BREAK = 0.02         // 大跳变判传送断线(底图边长的 2%,几十米以上)
 
 // wildTitle 组一条野生宠物标记的悬停说明,格式:
 //   {种类} Lv.44 异色炫彩 W 19.6% V -55
@@ -69,6 +78,17 @@ export default function MapPage() {
 
   // 逐帧外推的锚点:最近一个移动包的位置/速度/朝向 + 收到它时与画面位置的落差(cu/cv/dh)。
   const anchorRef = useRef(null)
+  // —— 本次会话轨迹(见文件顶注释):ref 存点,ver 只在有新点/换底图清空时递增,
+  // TrackLayer 的点串随 ver 重拼;位置推送(ver 不变)整层跳过重渲染。 ——
+  const [trackOn, setTrackOn] = useState(() => localStorage.getItem(TRACK_LS_KEY) !== '0')
+  const [trackVer, setTrackVer] = useState(0)
+  const trackRef = useRef([])     // 当前段(未断线的连续点)
+  const trackSegsRef = useRef([]) // 已完成段(传送/换底图前的点)
+  const trackImgRef = useRef(null)
+  const toggleTrack = useCallback(() => setTrackOn((v) => {
+    localStorage.setItem(TRACK_LS_KEY, v ? '0' : '1')
+    return !v
+  }), [])
   const dispRef = useRef(null) // 当前画面上的位置/朝向(每帧算出,供下一个包算落差)
   const worldRef = useRef(null)
   const arrowRef = useRef(null)
@@ -137,6 +157,27 @@ export default function MapPage() {
       layerRef.current = li
       setLayerError(false)
     }
+    // 本次会话轨迹:换底图清空重来,传送级跳变断线,抽稀去冗余点。
+    // (在 u==null 早退之前:有底图才有轨迹点,无底图场景自然什么都不记)
+    if (p.u != null) {
+      const img = p.img
+      if (img !== trackImgRef.current) {
+        trackImgRef.current = img
+        trackSegsRef.current = []
+        trackRef.current = []
+        setTrackVer((v) => v + 1)
+      }
+      const last = trackRef.current[trackRef.current.length - 1]
+      const d = last ? Math.hypot(p.u - last.u, p.v - last.v) : Infinity
+      if (!last || d >= TRACK_MIN_STEP) {
+        if (d >= TRACK_BREAK) {
+          trackSegsRef.current.push(trackRef.current)
+          trackRef.current = []
+        }
+        trackRef.current.push({ u: p.u, v: p.v })
+        setTrackVer((v) => v + 1)
+      }
+    }
     if (p.u == null) { // 该场景无底图:无从投影,也就无从外推
       anchorRef.current = null
       dispRef.current = null
@@ -161,13 +202,20 @@ export default function MapPage() {
 
   // 地图层尺寸只跟缩放/视口走(平移与箭头位置逐帧写 transform,不在渲染里算)。
   const mapPx = (Math.min(view.vp.w, view.vp.h) || 1) * view.zoom
+  // 轨迹折线的 SVG points(每段一个):只在有新点/清空(trackVer 变)时重拼,位置推送不重算。
+  const trackSegs = useMemo(() => {
+    const all = [...trackSegsRef.current]
+    if (trackRef.current.length >= 2) all.push(trackRef.current)
+    return all.map((seg) => seg.map((q) => `${q.u.toFixed(4)},${q.v.toFixed(4)}`).join(' '))
+  }, [trackVer]) // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div className="map-page">
       {/* 无工具栏:地图占满整页(场景名/坐标不再显示,位置看箭头即可);移动端的图层抽屉入口
           作为浮动控件挂在地图左下角。 */}
       <div className={'map-layout' + (sidebarOpen ? '' : ' closed')}>
-        <LayerPanel pois={pois} wilds={wilds} paint={paint} collapsed={collapsed}
+        <LayerPanel pois={pois} wilds={wilds} paint={paint} track={{ on: trackOn, toggle: toggleTrack }}
+          collapsed={collapsed}
           onClose={() => setCollapsed(true)} onCollapseSidebar={() => setSidebarOpen(false)} />
 
         {!pos && <div className="empty">等待位置数据…(需后端正在抓包/回放,且玩家已登录并移动过)</div>}
@@ -199,6 +247,9 @@ export default function MapPage() {
                 <path d={paint.edge} />
               </svg>
             </>)}
+            {/* 本次轨迹:走过的路线(青色细线)。坐标即底图归一化 u/v,viewBox 0 0 1 1 拉伸铺满;
+                压在标记之下、涂地之上。trackVer 不变时整层跳过重渲染(见文件底)。 */}
+            {trackOn && <TrackLayer segs={trackSegs} mapPx={mapPx} />}
             {/* POI / 小窝 / 野生三层标记都拆成 memo 子组件(见文件底部):位置推送不改变任何
                 标记数据(marks 引用不变),三层整层跳过重渲染;marks 变化(开关/阈值/新数据)
                 只重渲染对应那一层。 */}
@@ -243,6 +294,18 @@ export default function MapPage() {
 // 三层都只依赖「标记数据(引用稳定) + mapPx(缩放/视口)」,与 position 推送无关:
 // 玩家移动逐包推位置 → MapPage 重渲染,但这三层的 props 引用都不变,React.memo 整层跳过,
 // 只有箭头/底图/跟随这些轻量元素参与。mapPx 随缩放/视口变化,那时三层本来就要重排,不亏。
+
+// 本次会话轨迹:SVG 折线,坐标即底图归一化 u/v(viewBox 0 0 1 1 + preserveAspectRatio:none
+// 拉伸铺满底图),描边 non-scaling-stroke 恒为屏幕 2px,不随缩放变粗。segs 是各段折线的
+// points 字符串,引用只在 trackVer 变化时更新——位置推送(引用不变)整层跳过重渲染。
+const TrackLayer = React.memo(({ segs, mapPx }) => (
+  segs.length > 0 && (
+    <svg className="map-track" viewBox="0 0 1 1" preserveAspectRatio="none"
+      style={{ width: mapPx, height: mapPx }}>
+      {segs.map((s, i) => <polyline key={i} points={s} />)}
+    </svg>
+  )
+))
 
 // POI 标记:与底图同属 .map-world(一起平移,不会相对底图抖动);尺寸恒定不随缩放变大,
 // 故位置用 left/top + translate(-50%,-50%) 定在锚点上。洞穴层的点也用底图投影,自然

@@ -7,7 +7,7 @@ import { WILD_LAYERS, MEDAL_FILTERS } from './useWildPets'
 // 而是附近实时刷出的稀有个体(见 useWildPets.js)。
 // 家园小窝不在此列:那层始终开着,不给开关也不占图例(见 useHomeNests.js)。
 // 复用宠物列表那套 .filters:桌面常驻左列,移动端为侧滑抽屉(collapsed 控制开合)。
-export default function LayerPanel({ pois, wilds, paint, collapsed, onClose, onCollapseSidebar }) {
+export default function LayerPanel({ pois, wilds, paint, track, collapsed, onClose, onCollapseSidebar }) {
   const { kinds, poiOn, togglePoi, collectOn, toggleCollect } = pois
   return (
     <>
@@ -102,6 +102,15 @@ export default function LayerPanel({ pois, wilds, paint, collapsed, onClose, onC
             <button className="map-collect-btn on" onClick={() => {
               if (window.confirm('清空本场景已涂的区域?重来一遍要重新走。')) paint.reset()
             }} disabled={!paint.available} title="重置本场景的涂色" aria-label="重置涂色">↺</button>
+          </div>
+          {/* 本次会话轨迹:走过的路线(见 MapPage 顶部注释)。与涂色不同,不落库、刷新即清。 */}
+          <div className="map-layer-row">
+            <button className={'map-layer-btn' + (track.on ? ' on' : '')}
+              onClick={track.toggle}
+              title="把本次上线走过的路线画出来(刷新页面即清空)">
+              <span className="map-track-swatch" />
+              <span className="map-layer-name">本次路线</span>
+            </button>
           </div>
         </div>
         <div className="filters-foot">
