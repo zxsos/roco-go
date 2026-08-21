@@ -63,7 +63,9 @@ export function wildTags(kinds = []) {
 
 // —— 稀有宠出现提醒 ——
 // 通知开关独立存 localStorage(与图层状态分开,不占图层版本号)。开启后,后端推来的实体
-// 本就全是稀有类别(普通宠不会推,见 internal/pipeline/wildpets.go),故新进入视野即提醒。
+// 本就全是稀有类别(普通宠不会推,见 internal/pipeline/wildpets.go),但**只有能在地图上
+// 带环显示(当前开着且命中的图层/奖牌筛选,见 wildShown)的新宠才提醒**——与 marks 过滤
+// 同一口径:画得出环的才算稀有宠,画不出环的(开关关掉/奖牌拖严后不再命中)再出现不打扰。
 const NOTIFY_KEY = 'map.wildNotify.v1'
 
 // chime 播放一段三连上行「叮咚」提示音(880 → 1174.7 → 1568 Hz),用 Web Audio 合成,
@@ -119,6 +121,17 @@ export function medalMatch(m, p, medals) {
   const t = Math.round(v * 10) / 10
   const th = Math.round(medals[m.k] * 10) / 10
   return m.dir === '>=' ? t >= th : t <= th
+}
+
+// wildShown 判定一只宠当前能否在地图上「带环显示」——marks 过滤与稀有宠提醒共用的同一
+// 口径:开关图层(kinds 标签命中且该图层开关开)或奖牌(开关开且滑块数值阈值命中)任一命中
+// 即算。与 wildRing 的描边条件完全一致:能提醒的宠必然画得出环,画不出环的必不提醒。
+export function wildShown(p, on, medals, medalOn) {
+  const kinds = p.kinds || []
+  return (
+    WILD_LAYERS.some((l) => on.has(l.k) && l.kinds.some((k) => kinds.includes(k))) ||
+    MEDAL_FILTERS.some((m) => medalOn.has(m.k) && medalMatch(m, p, medals))
+  )
 }
 
 // wildRing 把一只宠物当前「开着且命中」的类别翻成描边样式,与 marks 过滤**同一口径**:
@@ -204,10 +217,14 @@ export function useWildPets(account) {
       return next
     })
   }
-  // 新出现提醒:对比相邻两批推送,挑出「刚进视野且非灰点」的实体通知(已通知过的 id 不重复
-  // 弹;它变灰点=离开视野后从集合移除,重新出现可再提醒)。开关关闭时不做对比,但照常同步
-  // 「已见」集合——中途打开开关不会把已在地图上的宠当新出现全弹一遍。首轮(挂载后第一批
-  // 数据)只建基线不通知,否则刚进页面就把当前在场的全弹一遍。
+  // 新出现提醒:对比相邻两批推送,挑出「刚进视野、非灰点、且能在地图上带环显示」的实体
+  // 通知(已通知过的 id 不重复弹;它变灰点=离开视野后从集合移除,重新出现可再提醒)。
+  // 「带环显示」用 wildShown 判定,与 marks 过滤同一口径:只有地图上画得出环的才算稀有
+  // 宠——开关图层(kinds 命中且开关开)或奖牌(开关开且滑块阈值命中)任一命中即提醒,与
+  // 描边(wildRing)条件完全一致,画不出环的再出现不打扰。未命中的宠也照常记入「已见」
+  // 集合——中途把某类开关打开时,已在地图上的旧宠不会被当新出现补弹一遍,只有之后新出现
+  // 的才提醒。notify 关闭时不做对比,但照常同步「已见」集合,同理防补弹。首轮(挂载后
+  // 第一批数据)只建基线不通知,否则刚进页面就把当前在场的全弹一遍。
   const seenIdsRef = useRef(new Set())
   const initedRef = useRef(false)
   useEffect(() => {
@@ -222,9 +239,9 @@ export function useWildPets(account) {
     for (const p of pets) {
       if (p.stale || seenIdsRef.current.has(p.id)) continue
       seenIdsRef.current.add(p.id)
-      fireWildNotify(p)
+      if (wildShown(p, on, medals, medalOn)) fireWildNotify(p)
     }
-  }, [pets, notify])
+  }, [pets, notify, on, medals, medalOn])
 
   useEffect(() => {
     let alive = true
@@ -289,12 +306,8 @@ export function useWildPets(account) {
   // 「全部野生」图层(all 开关):数据源是 allPets(普通野生宠,后端 wildAllMark),不走
   // kinds 命中也不走奖牌阈值,style 给空对象(无描边,渲染层靠 .map-wild-all 降级样式)。
   const marks = useMemo(() => {
-    const shownKinds = new Set(WILD_LAYERS.filter((l) => on.has(l.k) && l.kinds.length).flatMap((l) => l.kinds))
-    const medalHit = (m, p) => medalMatch(m, p, medals)
     const rare = pets
-      .filter((p) =>
-        (p.kinds || []).some((k) => shownKinds.has(k)) ||
-        MEDAL_FILTERS.some((m) => medalOn.has(m.k) && medalHit(m, p)))
+      .filter((p) => wildShown(p, on, medals, medalOn))
       .map((p) => ({ ...p, style: wildRing(p, on, medals, medalOn) }))
     // 普通野生宠:all 开关打开时才加入,标记上挂 all:true 让渲染层用降级样式。
     const all = on.has('all')
