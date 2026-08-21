@@ -62,7 +62,7 @@ export default function LayerPanel({ pois, wilds, paint, collapsed, onClose }) {
             <span>奖牌筛选</span>
             <span className="muted">{wilds.open ? '▾' : '▸'}</span>
           </button>
-          {wilds.open && MEDAL_FILTERS.map(({ k, n, color, dim, dir, lo, hi }) => {
+          {wilds.open && MEDAL_FILTERS.map(({ k, n, color, dim, dir, lo, hi, step }) => {
             const num = wilds.num[k] || 0
             const gone = wilds.numStale[k] || 0
             const th = wilds.medals[k]
@@ -78,7 +78,7 @@ export default function LayerPanel({ pois, wilds, paint, collapsed, onClose }) {
                 <span className="map-wild-swatch" style={{ borderColor: color }} />
                 <span className="map-layer-name">{n}</span>
                 <span className="map-medal-val">{dir}{th}</span>
-                <input type="range" className="map-medal-range" min={lo} max={hi} step={0.5}
+                <input type="range" className="map-medal-range" min={lo} max={hi} step={step ?? 0.5}
                   value={th} onChange={(e) => wilds.setThreshold(k, Number(e.target.value))}
                   disabled={!on} aria-label={`${n}判定阈值`} />
                 <span className="muted">{num}</span>

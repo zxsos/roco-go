@@ -22,9 +22,11 @@ export const WILD_LAYERS = [
 // kinds 标签(big/small/high/low)同口径,拖动只能往更严格方向走。dim 是标记上的数值字段
 // (weightPct 体重百分位 / voice 嗓音原值),dir 是判定方向,滑块值即阈值本身;计数随阈值
 // 实时变化,与图上标记一一对应。整体收在「奖牌筛选」按钮下(见 LayerPanel)。
+// step 是滑块步进:体重百分位按十分位调(与地图显示同精度,见 MapPage 的 round1),voice
+// 是整数原值,维持原 0.5(等价于只影响相邻整数刻度),留默认即 0.5。
 export const MEDAL_FILTERS = [
-  { k: 'big', n: '大块头', dim: 'weightPct', dir: '>=', lo: 98, hi: 100, def: 98, color: '#ff8a65' },
-  { k: 'small', n: '小不点', dim: 'weightPct', dir: '<=', lo: 0, hi: 2, def: 2, color: '#4db6ac' },
+  { k: 'big', n: '大块头', dim: 'weightPct', dir: '>=', lo: 98, hi: 100, def: 98, step: 0.1, color: '#ff8a65' },
+  { k: 'small', n: '小不点', dim: 'weightPct', dir: '<=', lo: 0, hi: 2, def: 2, step: 0.1, color: '#4db6ac' },
   { k: 'high', n: '婉转声', dim: 'voice', dir: '>=', lo: 96, hi: 100, def: 96, color: '#ffb74d' },
   { k: 'low', n: '粗嗓门', dim: 'voice', dir: '<=', lo: -100, hi: -96, def: -96, color: '#aed581' },
 ]
@@ -54,10 +56,15 @@ export function wildTags(kinds = []) {
 
 // medalMatch 判定某奖牌滑块是否命中一只宠物:按标记上的数值字段(weightPct 体重百分位 /
 // voice 嗓音原值)与当前阈值比。形态范围缺失时后端不推 weightPct,无从判,不命中。
+// 数值与阈值都先取整到十分位再比,与地图显示的百分位(MapPage 的 wildTitle/资料卡、滑块
+// 值都是 round1)同口径:否则 99.6 显示成「100%」的满格个体,滑块拉到 100 时却因
+// 99.6 >= 100 为假被误筛掉;voice 本就是整数,取整到十分位无副作用。
 export function medalMatch(m, p, medals) {
   const v = p[m.dim]
   if (v == null) return false
-  return m.dir === '>=' ? v >= medals[m.k] : v <= medals[m.k]
+  const t = Math.round(v * 10) / 10
+  const th = Math.round(medals[m.k] * 10) / 10
+  return m.dir === '>=' ? t >= th : t <= th
 }
 
 // wildRing 把一只宠物当前「开着且命中」的类别翻成描边样式,与 marks 过滤**同一口径**:
@@ -137,7 +144,9 @@ export function useWildPets(account) {
 
   const setThreshold = (k, v) => {
     setMedals((prev) => {
-      const next = { ...prev, [k]: v }
+      // range 的 0.1 步进值是 0.1 的浮点倍数(如 99.60000000000001),存前取整到十分位,
+      // 保证侧栏显示与判定(medalMatch 内也 round1)拿到的都是干净的一位小数。
+      const next = { ...prev, [k]: Math.round(v * 10) / 10 }
       persist(on, next, open, medalOn)
       return next
     })
