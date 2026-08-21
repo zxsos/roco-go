@@ -51,7 +51,12 @@ export default function MapPage() {
   const onTap = useCallback((target) => {
     const gid = target.closest?.('.map-nest')?.dataset.gid
     if (gid) { setDetailGid(Number(gid)); setWildTip(null); setWildDist(null); return }
-    const wid = target.closest?.('.map-wild')?.dataset.id
+    // 普通野生宠(.map-wild-all):不弹资料卡、不算距离,点它只当点地图(拖动/关资料卡)。
+    const wildEl = target.closest?.('.map-wild')
+    if (wildEl?.classList.contains('map-wild-all')) {
+      setWildTip(null); setWildDist(null); return
+    }
+    const wid = wildEl?.dataset.id
     setWildTip((cur) => (wid ? (wid === cur ? null : wid) : null))
     // 距离:点中时刻玩家↔宠物世界坐标(厘米)的直线距离,÷100 取整米。资料卡是点击时
     // 的快照,不随玩家移动实时刷——否则位置推送会让 WildLayer 整层重渲染,得不偿失。
@@ -304,6 +309,16 @@ const WildLayer = React.memo(({ marks, mapPx, wildTip, dist }) => {
   const icons = React.useContext(IconsContext)
   return (
     <>{marks.map((p) => {
+      // 普通野生宠(「全部野生」图层):只画小头像点,无描边/标记图/资料卡;title 只给名字。
+      if (p.all) {
+        return (
+          <div key={p.id} data-id={p.id} title={p.n || '野生宠物'}
+            className={'map-wild map-wild-all' + (p.stale ? ' stale' : '')}
+            style={{ left: p.u * mapPx, top: p.v * mapPx }}>
+            {p.img ? <img src={imgURL(p.img)} alt="" draggable={false} /> : <span>🐾</span>}
+          </div>
+        )
+      }
       const tip = wildTip === p.id
       const kinds = p.kinds || []
       const mark = (kinds.includes('shiny') && kinds.includes('colorful') && icons.shinyColorful) ||
