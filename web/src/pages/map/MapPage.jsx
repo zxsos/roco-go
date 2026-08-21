@@ -34,7 +34,8 @@ export default function MapPage() {
   const [pos, setPos] = useState(null) // 最近一个移动包(工具栏文字、底图选择);箭头位置另由 anchor 逐帧算出
   const [imgError, setImgError] = useState(false)
   const [layerError, setLayerError] = useState(false)
-  const [collapsed, setCollapsed] = useState(true)  // 移动端图层抽屉(桌面侧栏常驻,此值不起作用)
+  const [collapsed, setCollapsed] = useState(true)  // 移动端图层抽屉(开合)
+  const [sidebarOpen, setSidebarOpen] = useState(true) // 桌面图层侧栏(可折叠,折叠后地图全宽)
   const sceneRef = useRef(null) // 当前底图名(换底图=换场景/等级才重置缩放/跟随)
   const layerRef = useRef(null) // 当前叠加层图名(换层仅重试层图,不动缩放)
 
@@ -49,6 +50,12 @@ export default function MapPage() {
     const wid = target.closest?.('.map-wild')?.dataset.id
     setWildTip((cur) => (wid ? (wid === cur ? null : wid) : null))
   }, [])
+
+  // 右上角 ☰:窄屏开/关图层抽屉,桌面折叠/展开图层侧栏(折叠后地图全宽)。
+  const toggleLayers = () => {
+    if (window.matchMedia('(max-width: 760px)').matches) setCollapsed((c) => !c)
+    else setSidebarOpen((o) => !o)
+  }
 
   const hasMap = !!(pos && pos.u != null && pos.img && !imgError)
   const view = usePanZoom(hasMap, onTap)
@@ -159,8 +166,9 @@ export default function MapPage() {
     <div className="map-page">
       {/* 无工具栏:地图占满整页(场景名/坐标不再显示,位置看箭头即可);移动端的图层抽屉入口
           作为浮动控件挂在地图左下角。 */}
-      <div className="map-layout">
-        <LayerPanel pois={pois} wilds={wilds} paint={paint} collapsed={collapsed} onClose={() => setCollapsed(true)} />
+      <div className={'map-layout' + (sidebarOpen ? '' : ' closed')}>
+        <LayerPanel pois={pois} wilds={wilds} paint={paint} collapsed={collapsed}
+          onClose={() => setCollapsed(true)} onCollapseSidebar={() => setSidebarOpen(false)} />
 
         {!pos && <div className="empty">等待位置数据…(需后端正在抓包/回放,且玩家已登录并移动过)</div>}
 
@@ -203,14 +211,18 @@ export default function MapPage() {
               <path d="M12 2 L20 21 L12 16 L4 21 Z" fill="var(--red)" stroke="#fff" strokeWidth="1.5" strokeLinejoin="round" />
             </svg>
           </div>
-          {/* 图层入口:仅窄屏显示(桌面侧栏常驻);带 .map-ctrl 类使点它不触发地图拖动。
-              不复用 .filter-toggle——它的 display:none 会被后定义的 .map-btn{display:flex} 盖掉。 */}
+          {/* 图层入口:窄屏显示在地图左下角(抽屉);桌面侧栏折叠后右上角的 ☰ 也可展开。
+              带 .map-ctrl 类使点它不触发地图拖动。不复用 .filter-toggle——它的 display:none
+              会被后定义的 .map-btn{display:flex} 盖掉。 */}
           <button className="map-btn map-ctrl map-layers-btn" title="图层"
             onClick={() => setCollapsed((c) => !c)}>☰</button>
+          {/* 右上角控制组:图层侧栏(桌面)/放大/缩小/回中。跟随打开后,下一帧 applyFrame
+              即把视口对准玩家。 */}
           <div className="map-ctrl">
+            <button className={'map-btn map-layers-toggle' + (sidebarOpen ? ' on' : '')} title="图层栏"
+              onClick={toggleLayers}>☰</button>
             <button className="map-btn" title="放大" onClick={() => view.zoomAround(1.4, view.vp.w / 2, view.vp.h / 2)}>＋</button>
             <button className="map-btn" title="缩小" onClick={() => view.zoomAround(1 / 1.4, view.vp.w / 2, view.vp.h / 2)}>－</button>
-            {/* 跟随打开后,下一帧 applyFrame 即把视口对准玩家 */}
             <button className={'map-btn' + (view.follow ? ' on' : '')} title="回到当前位置" onClick={() => view.setFollow(true)}>◎</button>
           </div>
         </div>
