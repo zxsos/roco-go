@@ -24,11 +24,13 @@ export const WILD_LAYERS = [
 // 实时变化,与图上标记一一对应。整体收在「奖牌筛选」按钮下(见 LayerPanel)。
 // step 是滑块步进:体重百分位按十分位调(与地图显示同精度,见 MapPage 的 round1),voice
 // 是整数原值,维持原 0.5(等价于只影响相邻整数刻度),留默认即 0.5。
+// color 同时用作侧栏色点与地图标记描边:块头类(体重)用红橙暖色、声音类用紫蓝冷色,
+// 两族互成对比,且都比早先的浅色更饱和——深色底图上更跳眼(圆环加粗与光晕见 wildRing)。
 export const MEDAL_FILTERS = [
-  { k: 'big', n: '大块头', dim: 'weightPct', dir: '>=', lo: 98, hi: 100, def: 98, step: 0.1, color: '#ff8a65' },
-  { k: 'small', n: '小不点', dim: 'weightPct', dir: '<=', lo: 0, hi: 2, def: 2, step: 0.1, color: '#4db6ac' },
-  { k: 'high', n: '婉转声', dim: 'voice', dir: '>=', lo: 96, hi: 100, def: 96, color: '#ffb74d' },
-  { k: 'low', n: '粗嗓门', dim: 'voice', dir: '<=', lo: -100, hi: -96, def: -96, color: '#aed581' },
+  { k: 'big', n: '大块头', dim: 'weightPct', dir: '>=', lo: 98, hi: 100, def: 98, step: 0.1, color: '#ff5252' },
+  { k: 'small', n: '小不点', dim: 'weightPct', dir: '<=', lo: 0, hi: 2, def: 2, step: 0.1, color: '#ff9100' },
+  { k: 'high', n: '婉转声', dim: 'voice', dir: '>=', lo: 96, hi: 100, def: 96, color: '#e040fb' },
+  { k: 'low', n: '粗嗓门', dim: 'voice', dir: '<=', lo: -100, hi: -96, def: -96, color: '#40c4ff' },
 ]
 const DEFAULT_MEDALS = Object.fromEntries(MEDAL_FILTERS.map((m) => [m.k, m.def]))
 const SWITCH_KEYS = new Set(WILD_LAYERS.map((l) => l.k))
@@ -73,6 +75,9 @@ export function medalMatch(m, p, medals) {
 //     后端按固定边界打标,前端滑块只严不宽,weightPct 98.5 拖到 99 后不该再标大块头)。
 // 最稀有的类别上主描边,其余依次向外叠外环。一只可同时命中多类(如炫彩 + 大块头 +
 // 婉转声,最多 4 层),靠 CSS 类组合会指数爆炸,故按数据算。返回空对象 = 无圈。
+// 可见度:命中奖牌(大块头/小不点/婉转声/粗嗓门)时描边加粗到 3px(普通图层仍走 CSS 默认
+// 2px),并在最外圈补一圈主色柔光(0 0 8px 1px),让奖牌个体在深色底图上更跳眼;外环起点
+// 也随加粗整体外移一格,各环间距不变。
 export function wildRing(p, on, medals, medalOn) {
   const kinds = p.kinds || []
   const layers = [
@@ -80,10 +85,19 @@ export function wildRing(p, on, medals, medalOn) {
     ...MEDAL_FILTERS.filter((m) => medalOn.has(m.k) && medalMatch(m, p, medals)),
   ]
   if (layers.length === 0) return {}
+  const medal = layers.some((l) => MEDAL_KEYS.has(l.k))
   const style = { borderColor: layers[0].color }
-  if (layers.length > 1) {
-    style.boxShadow = layers.slice(1).map((l, i) => `0 0 0 ${2 + i * 3}px ${l.color}`).join(', ')
+  const rings = []
+  let spread = medal ? 3 : 2 // 描边宽度,兼作外环起点,保持环间距均匀
+  for (const l of layers.slice(1)) {
+    rings.push(`0 0 0 ${spread}px ${l.color}`)
+    spread += 3
   }
+  if (medal) {
+    style.borderWidth = '3px'
+    rings.push(`0 0 8px 1px ${layers[0].color}`)
+  }
+  if (rings.length) style.boxShadow = rings.join(', ')
   return style
 }
 
