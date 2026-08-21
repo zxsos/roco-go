@@ -158,6 +158,8 @@
 .map-wild-tip .twt { color: var(--fg-dim); }
 .map-wild-tip .twr { color: var(--fg-dim); }
 .map-wild-tip .twc { color: var(--fg-dim); opacity: .8; }
+/* 距离行:玩家↔宠物直线距离(米)。比坐标行亮一档,是点资料卡时最关心的信息。 */
+.map-wild-tip .twd { color: var(--fg); opacity: .9; }
 .map-wild-tip .tws { color: var(--red); }
 
 /* 图层侧栏里野生宠物那几行:没有图标,用一个同色小圆点代表标记描边色(色值同样来自 JS)。 */
