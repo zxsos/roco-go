@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { getWildPets, subscribe } from '../../api'
 
 // —— 野生宠物图层(异色/炫彩 · 污染 · 奖牌四件套:大块头/小不点/婉转声/粗嗓门)——
@@ -182,21 +182,33 @@ export function useWildPets(account) {
     })
   }
 
-  // 开着的开关图层覆盖哪些后端类别;奖牌滑块按数值阈值判(标记上带 weightPct/voice)。
-  const shownKinds = new Set(WILD_LAYERS.filter((l) => on.has(l.k)).flatMap((l) => l.kinds))
-  const medalHit = (m, p) => medalMatch(m, p, medals)
-  const marks = pets.filter((p) =>
-    (p.kinds || []).some((k) => shownKinds.has(k)) ||
-    MEDAL_FILTERS.some((m) => medalOn.has(m.k) && medalHit(m, p)))
+  // marks 与计数只依赖 pets/on/medals/medalOn(位置推送不碰这几个 state),用 useMemo 缓存:
+  // 玩家移动时 position 高频推送 → MapPage 重渲染,但这里跳过全部过滤/计数重算,marks 引用
+  // 不变 → 标记层子组件(MapPage 的 WildLayer,React.memo)整层不重渲染。
+  // 过滤时**顺带把描边样式算好**挂到副本上(style):渲染层直接展开,不再每标记每渲染调
+  // wildRing(同样只在开关/阈值/宠物数据变化时算一次)。
+  const marks = useMemo(() => {
+    const shownKinds = new Set(WILD_LAYERS.filter((l) => on.has(l.k)).flatMap((l) => l.kinds))
+    const medalHit = (m, p) => medalMatch(m, p, medals)
+    return pets
+      .filter((p) =>
+        (p.kinds || []).some((k) => shownKinds.has(k)) ||
+        MEDAL_FILTERS.some((m) => medalOn.has(m.k) && medalHit(m, p)))
+      .map((p) => ({ ...p, style: wildRing(p, on, medals, medalOn) }))
+  }, [pets, on, medals, medalOn])
+
   // 图层行上的计数与地图上画出的标记一一对应:灰点(已离开视野的最后所见)也画在图上,
   // 故也计入——否则侧栏显示 0 而图上还挂着几个,只会让人以为标记出错了。
   // 另单算其中的灰点数,供侧栏悬浮说明拆开「视野内 / 已离开」(见 LayerPanel)。
-  const hit = (l, p) => l.kinds
-    ? (p.kinds || []).some((k) => l.kinds.includes(k))
-    : medalOn.has(l.k) && medalHit(l, p)
-  const count = (l, pick) => pets.filter((p) => pick(p) && hit(l, p)).length
-  const num = Object.fromEntries([...WILD_LAYERS, ...MEDAL_FILTERS].map((l) => [l.k, count(l, () => true)]))
-  const numStale = Object.fromEntries([...WILD_LAYERS, ...MEDAL_FILTERS].map((l) => [l.k, count(l, (p) => p.stale)]))
+  const [num, numStale] = useMemo(() => {
+    const hit = (l, p) => l.kinds
+      ? (p.kinds || []).some((k) => l.kinds.includes(k))
+      : medalOn.has(l.k) && medalMatch(l, p, medals)
+    const count = (l, pick) => pets.filter((p) => pick(p) && hit(l, p)).length
+    const num = Object.fromEntries([...WILD_LAYERS, ...MEDAL_FILTERS].map((l) => [l.k, count(l, () => true)]))
+    const numStale = Object.fromEntries([...WILD_LAYERS, ...MEDAL_FILTERS].map((l) => [l.k, count(l, (p) => p.stale)]))
+    return [num, numStale]
+  }, [pets, on, medals, medalOn])
 
   return { marks, num, numStale, on, toggle, medals, setThreshold, open, toggleOpen, medalOn, toggleMedal }
 }
