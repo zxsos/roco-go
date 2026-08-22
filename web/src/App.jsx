@@ -78,21 +78,27 @@ export default function App() {
       <IconsContext.Provider value={icons}>
       <div className="app">
         <header className="topbar">
-          <div className="brand">洛克助手 <span className="brand-sub">宠物统计</span></div>
+          <div className="brand"><img className="brand-logo" src="/logo.svg" alt="" draggable={false} />洛克助手 <span className="brand-sub">宠物统计</span></div>
           <nav className="topnav">{navLinks('navlink')}</nav>
-          {accounts.length > 0 && (
-            <select
-              className="select account-select"
-              value={account} onChange={(e) => switchAccount(e.target.value)}
-              title="切换账号(玩家)"
-            >
-              {accounts.map((a) => (
-                <option key={a.account} value={a.account}>
-                  {a.online ? '● ' : '○ '}{a.name} (UID:{uidOf(a.account)})
-                </option>
-              ))}
-            </select>
-          )}
+          {accounts.length > 0 && (() => {
+            const cur = accounts.find((a) => a.account === account)
+            return (
+              <div className="account-wrap">
+                {cur && <img className="account-state" src={cur.online ? '/login.svg' : '/logout.svg'} alt="" draggable={false} title={cur.online ? '在线' : '离线'} />}
+                <select
+                  className="select account-select"
+                  value={account} onChange={(e) => switchAccount(e.target.value)}
+                  title="切换账号(玩家)"
+                >
+                  {accounts.map((a) => (
+                    <option key={a.account} value={a.account}>
+                      {a.online ? '🟢 ' : '🟥 '}{a.name} (UID:{uidOf(a.account)})
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )
+          })()}
         </header>
 
         <main className="content" key={account}>
