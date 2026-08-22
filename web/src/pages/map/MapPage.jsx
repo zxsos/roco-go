@@ -321,15 +321,26 @@ const WildLayer = React.memo(({ marks, mapPx, wildTip, dist }) => {
       }
       const tip = wildTip === p.id
       const kinds = p.kinds || []
+      // 异色/炫彩是全场最稀有的类别,单独走「稀有特效」视觉(放大 + 光环 + 角标徽章)。
+      const rare = kinds.includes('shiny') || kinds.includes('colorful')
       const mark = (kinds.includes('shiny') && kinds.includes('colorful') && icons.shinyColorful) ||
         (kinds.includes('shiny') && icons.shiny) ||
         (kinds.includes('colorful') && icons.colorful)
+      const markKind = kinds.includes('shiny') && kinds.includes('colorful') ? 'shinyColorful'
+        : kinds.includes('shiny') ? 'shiny'
+        : kinds.includes('colorful') ? 'colorful'
+        : ''
       return [
         <div key={p.id} data-id={p.id} title={wildTitle(p)}
-          className={'map-wild' + (p.stale ? ' stale' : '') + (p.inject ? ' inject' : '') + (tip ? ' tip' : '')}
+          className={'map-wild' + (p.stale ? ' stale' : '') + (p.inject ? ' inject' : '') + (tip ? ' tip' : '') + (rare ? ' rare' : '')}
           style={{ left: p.u * mapPx, top: p.v * mapPx, ...p.style }}>
-          {p.img ? <img src={imgURL(p.img)} alt="" draggable={false} /> : <span>🐾</span>}
-          {mark && <img className="map-wild-mark" src={imgURL(mark)} alt="" draggable={false} />}
+          <span className="map-wild-rare-halo" />
+          {p.img ? <img className="map-wild-face" src={imgURL(p.img)} alt="" draggable={false} /> : <span className="map-wild-face-fallback">🐾</span>}
+          {rare && mark && (
+            <span className={'map-wild-mark map-wild-mark-' + markKind}>
+              <img src={imgURL(mark)} alt="" draggable={false} />
+            </span>
+          )}
         </div>,
         tip && (
           <div key={p.id + '-tip'} className="map-wild-tip"
