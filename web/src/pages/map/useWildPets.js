@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
-import { getWildPets, subscribe } from '../../api'
+import { getWildPets, subscribe, adminRevokeInject } from '../../api'
 
 // —— 野生宠物图层(异色/炫彩 · 污染 · 奖牌四件套:大块头/小不点/婉转声/粗嗓门)——
 // 与 POI 图层不同,这几类**不是固定点位**:野生宠会刷新、被别人抓走,只有走进 AOI 才知道它在。
@@ -257,8 +257,15 @@ export function useWildPets(account) {
 
   // 后端每次成员/状态变化都推全量列表(实体进出 AOI 是低频事件),直接替换即可。
   // pets = 稀有标记(异色/炫彩/污染/奖牌四件套),allPets = 普通野生宠(「全部野生」图层)。
+  // injectRevoke:后端撤销某只注入精灵时只推一个 id,从当前列表剔除该标记,避免整表替换
+  // 抖动(尤其是管理员主动撤销后立即清掉那只)。
   useEffect(() => subscribe((m) => {
     if (m.type !== 'wildpets') return
+    if (m.data.injectRevoke) {
+      const id = m.data.injectRevoke
+      setPets((prev) => prev.filter((p) => p.id !== id))
+      return
+    }
     setPets(m.data.pets || [])
     setAllPets(m.data.allPets || [])
   }), [account])
@@ -331,5 +338,5 @@ export function useWildPets(account) {
     return [num, numStale]
   }, [pets, allPets, on, medals, medalOn])
 
-  return { marks, num, numStale, on, toggle, medals, setThreshold, open, toggleOpen, medalOn, toggleMedal, notify, toggleNotify }
+  return { marks, num, numStale, on, toggle, medals, setThreshold, open, toggleOpen, medalOn, toggleMedal, notify, toggleNotify, revokeInject: (id) => adminRevokeInject(account, id) }
 }
