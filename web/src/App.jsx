@@ -127,7 +127,7 @@ export default function App() {
       <IconsContext.Provider value={icons}>
       <div className="app">
         <header className="topbar">
-          <div className="brand"><img className="brand-logo" src="/logo.svg" alt="" draggable={false} />小洛克的妙妙工具 <span className="brand-sub">宠物统计</span></div>
+          <div className="brand"><img className="brand-logo" src="/logo.svg" alt="" draggable={false} />洛克妙妙屋 <span className="brand-sub">宠物统计</span></div>
           <nav className="topnav">{navLinks('navlink')}</nav>
           {fullscreen.supported && (
             <button type="button" className={'topbar-fs' + (fullscreen.isFull ? ' on' : '')}
