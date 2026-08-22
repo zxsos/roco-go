@@ -16,14 +16,7 @@
 }
 .navlink.active { background: var(--bg-3); color: var(--fg); }
 .navlink:hover { color: var(--fg); }
-.account-switch { margin-left: auto; display: flex; align-items: center; gap: 6px; }
-.account-select { max-width: 220px; }
-.account-delete {
-  width: 30px; height: 30px; flex: none; display: grid; place-items: center;
-  font-size: 13px; line-height: 1; border-radius: 8px; cursor: pointer;
-  color: var(--fg-dim); background: var(--bg-3); border: 1px solid var(--line);
-}
-.account-delete:hover { color: #fff; background: var(--red); border-color: var(--red); }
+.account-select { margin-left: auto; max-width: 220px; }
 
 /* ---- 底部 tab(移动) ---- */
 .bottomnav { display: none; }

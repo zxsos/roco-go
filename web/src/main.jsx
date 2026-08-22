@@ -8,7 +8,6 @@ import PetDetail from './pages/PetDetail'
 import Debug from './pages/Debug'
 import MapPage from './pages/map/MapPage'
 import EggList from './pages/eggs/EggList'
-import Admin from './pages/Admin'
 // 样式按「基础 → 壳 → 共用面板/部件 → 各页」顺序引入(同名选择器的层叠顺序有意义)。
 import './styles/base.css'
 import './styles/shell.css'
@@ -20,7 +19,6 @@ import './styles/eggs.css'
 import './styles/detail.css'
 import './styles/map.css'
 import './styles/debug.css'
-import './styles/admin.css'
 
 createRoot(document.getElementById('root')).render(
   <React.StrictMode>
@@ -34,7 +32,6 @@ createRoot(document.getElementById('root')).render(
           <Route path="eggs" element={<EggList />} />
           <Route path="map" element={<MapPage />} />
           <Route path="debug" element={<Debug />} />
-          <Route path="admin" element={<Admin />} />
         </Route>
       </Routes>
     </HashRouter>

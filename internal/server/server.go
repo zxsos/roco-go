@@ -38,9 +38,6 @@ type Server struct {
 	onlineMu sync.Mutex           // 保护 lastSeen
 	lastSeen map[string]int64     // 账号 -> 最近活跃 Unix 秒(pipeline 上报,/api/accounts 据此标在线)
 
-	adminMu    sync.Mutex // 保护 adminToken
-	adminToken string     // 管理员登录令牌(内存态,重启后需重新登录;见 admin.go)
-
 	paint paintState // 涂地覆盖位图(自带锁,见 paint.go)
 }
 
@@ -119,12 +116,6 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("GET /api/evolution", s.handleEvolution)
 	s.mux.HandleFunc("GET /api/pet-page", s.handlePetPage)
 	s.mux.HandleFunc("GET /api/accounts", s.handleAccounts)
-	s.mux.HandleFunc("DELETE /api/accounts/{account}", s.handleDeleteAccount)
-	s.mux.HandleFunc("GET /api/admin/status", s.handleAdminStatus)
-	s.mux.HandleFunc("POST /api/admin/setup", s.handleAdminSetup)
-	s.mux.HandleFunc("POST /api/admin/login", s.handleAdminLogin)
-	s.mux.HandleFunc("POST /api/admin/logout", s.handleAdminLogout)
-	s.mux.HandleFunc("GET /api/admin/users", s.handleAdminUsers)
 	s.mux.HandleFunc("GET /api/position", s.handlePosition)
 	s.mux.HandleFunc("GET /api/pois", s.handlePois)
 	s.mux.HandleFunc("GET /api/wildpets", s.handleWildPets)

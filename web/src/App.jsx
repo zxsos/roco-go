@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
-import { getAccounts, getCurrentAccount, setCurrentAccount, getIcons, deleteAccount } from './api'
+import { getAccounts, getCurrentAccount, setCurrentAccount, getIcons } from './api'
 import { AccountContext, IconsContext } from './context'
 import { dropBoxFilter } from './pages/pet-list/filters'
 
@@ -65,25 +65,6 @@ export default function App() {
     setAccount(a)
   }
 
-  // 删除当前账号的「登录记录」(仅表面信息):后端删 accounts 表一行 + 清内存在线/位置现场,
-  // 宠物/事件等抓包数据保留;账号从下拉消失,玩家下次登录抓包时重新出现。
-  const onDeleteAccount = async () => {
-    if (!account) return
-    const cur = accounts.find((a) => a.account === account)
-    if (!window.confirm(
-      `删除「${cur ? cur.name + ' (UID:' + uidOf(account) + ')' : account}」的登录记录？\n` +
-      '仅移除账号列表中的表面信息,已抓取的宠物/事件数据全部保留,该玩家下次登录会重新出现。',
-    )) return
-    try {
-      await deleteAccount(account)
-      const list = await getAccounts().catch(() => [])
-      const next = list && list.length ? list[0] : null
-      setAccounts(list || [])
-      if (next) { setCurrentAccount(next.account); setAccount(next.account) }
-      else { setCurrentAccount(''); setAccount('') }
-    } catch (e) { alert(e.message || '删除失败') }
-  }
-
   const navLinks = (base) => NAV.map((n) => (
     <NavLink key={n.to} to={n.to} onDoubleClick={onNavDoubleClick(n.to)}
       className={({ isActive }) => base + (isActive ? ' active' : '')}>
@@ -100,21 +81,17 @@ export default function App() {
           <div className="brand">洛克助手 <span className="brand-sub">宠物统计</span></div>
           <nav className="topnav">{navLinks('navlink')}</nav>
           {accounts.length > 0 && (
-            <div className="account-switch">
-              <select
-                className="select account-select"
-                value={account} onChange={(e) => switchAccount(e.target.value)}
-                title="切换账号(玩家)"
-              >
-                {accounts.map((a) => (
-                  <option key={a.account} value={a.account}>
-                    {a.online ? '● ' : '○ '}{a.name} (UID:{uidOf(a.account)})
-                  </option>
-                ))}
-              </select>
-              <button className="account-delete" title="删除当前账号登录(仅移除表面记录,已抓取数据保留)"
-                onClick={onDeleteAccount}>✕</button>
-            </div>
+            <select
+              className="select account-select"
+              value={account} onChange={(e) => switchAccount(e.target.value)}
+              title="切换账号(玩家)"
+            >
+              {accounts.map((a) => (
+                <option key={a.account} value={a.account}>
+                  {a.online ? '● ' : '○ '}{a.name} (UID:{uidOf(a.account)})
+                </option>
+              ))}
+            </select>
           )}
         </header>
 

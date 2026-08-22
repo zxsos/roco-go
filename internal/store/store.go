@@ -193,14 +193,6 @@ CREATE TABLE IF NOT EXISTS paint (
   w INTEGER, h INTEGER, cells BLOB, updated_at INTEGER,
   PRIMARY KEY(account, res, layer)
 );
-
--- 管理员面板:单行(id=1)。pass_hash 是 PBKDF2-HMAC-SHA256 哈希(盐hex$哈希hex,见 server/admin.go),
--- 首启经 Web 面板设置,登录验证用。登录令牌只在服务端内存,重启后需重新登录。
-CREATE TABLE IF NOT EXISTS admin (
-  id INTEGER PRIMARY KEY CHECK(id=1),
-  pass_hash TEXT NOT NULL,
-  created_at INTEGER NOT NULL
-);
 `)
 	return err
 }

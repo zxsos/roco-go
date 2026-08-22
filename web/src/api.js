@@ -78,58 +78,6 @@ export const getIcons = () => getJSON('/api/icons')
 // getAccounts 返回已知账号列表 [{account,name,petCount}](账号切换下拉用)。
 export const getAccounts = () => getJSON('/api/accounts')
 
-// deleteAccount 删除某账号的「登录记录」(仅表面信息):账号从下拉消失,
-// 宠物/事件等抓包数据保留,玩家下次登录抓包时重新出现。
-export async function deleteAccount(acc) {
-  const r = await fetch('/api/accounts/' + encodeURIComponent(acc), { method: 'DELETE' })
-  if (!r.ok) throw new Error('删除失败')
-  return r.json()
-}
-
-// —— 管理员面板 ——
-
-// 管理员令牌:首启设置/登录成功后由服务端签发,存 localStorage;服务重启后令牌失效需重新登录。
-let adminToken = localStorage.getItem('admin_token') || ''
-export function getAdminToken() { return adminToken }
-export function setAdminToken(t) {
-  adminToken = t || ''
-  if (adminToken) localStorage.setItem('admin_token', adminToken)
-  else localStorage.removeItem('admin_token')
-}
-
-const adminHeaders = () => (adminToken ? { Authorization: 'Bearer ' + adminToken } : {})
-
-// getAdminStatus 返回管理员密码是否已配置({configured})。
-export const getAdminStatus = () => getJSON('/api/admin/status', { configured: false })
-
-// postAdmin 发密码类请求(setup/login),成功返回 {token};非 2xx 抛后端文本错误。
-async function postAdmin(url, password) {
-  const r = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ password }),
-  })
-  const text = await r.text()
-  if (!r.ok) throw new Error(text || '请求失败')
-  try { return JSON.parse(text) } catch { return {} }
-}
-
-export const adminSetup = (password) => postAdmin('/api/admin/setup', password)
-export const adminLogin = (password) => postAdmin('/api/admin/login', password)
-
-// adminLogout 使令牌失效;未登录时静默。
-export async function adminLogout() {
-  try { await fetch('/api/admin/logout', { method: 'POST', headers: adminHeaders() }) } catch { /* 忽略 */ }
-}
-
-// getAdminUsers 返回各玩家使用情况(需管理员令牌):
-//   [{account,name,petCount,eventCount,sessionCount,updatedAt,firstSeen,online}]
-export async function getAdminUsers() {
-  const r = await fetch('/api/admin/users', { headers: adminHeaders() })
-  if (!r.ok) throw new Error('未授权或会话过期')
-  return r.json()
-}
-
 // getPois 返回某场景(scene_res_cfg_id)的大地图 POI 图层:
 //   {kinds:[{k,n,icon,on,num}], pois:[{k,u,v,n}]}——u,v 是底图归一化坐标(后端已投影,同玩家位置)。
 // 场景无底图时两者皆空。
