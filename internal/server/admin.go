@@ -31,7 +31,7 @@ func hashAdminPassword(pw string) (string, error) {
 	if _, err := rand.Read(salt); err != nil {
 		return "", err
 	}
-	sum, err := pbkdf2.Key(sha256.New, []byte(pw), salt, adminIter, 32)
+	sum, err := pbkdf2.Key(sha256.New, pw, salt, adminIter, 32)
 	if err != nil {
 		return "", err
 	}
@@ -58,7 +58,7 @@ func verifyAdminPassword(pw, stored string) bool {
 	if err != nil {
 		return false
 	}
-	got, err := pbkdf2.Key(sha256.New, []byte(pw), salt, iter, len(want))
+	got, err := pbkdf2.Key(sha256.New, pw, salt, iter, len(want))
 	if err != nil {
 		return false
 	}
