@@ -179,7 +179,13 @@ export async function postJSON(url, body) {
     try {
       const e = await r.json()
       if (e && e.error) msg = e.error
-    } catch { /* ignore */ }
+    } catch {
+      // 后端 http.Error 返回 text/plain(非 JSON),兜底读文本显示具体原因
+      try {
+        const t = (await r.text()).trim()
+        if (t) msg = t
+      } catch { /* ignore */ }
+    }
     throw new Error(msg)
   }
   return r.json()
