@@ -324,7 +324,7 @@ const WildLayer = React.memo(({ marks, mapPx, wildTip, dist }) => {
           <div key={p.id} data-id={p.id} title={p.n || '野生宠物'}
             className={'map-wild map-wild-all' + (p.stale ? ' stale' : '')}
             style={{ left: p.u * mapPx, top: p.v * mapPx }}>
-            {p.img ? <img src={imgURL(p.img)} alt="" draggable={false} /> : <span>🐾</span>}
+            {p.img ? <img className="map-wild-face" src={imgURL(p.img)} alt="" draggable={false} /> : <span className="map-wild-face-fallback">🐾</span>}
           </div>
         )
       }
