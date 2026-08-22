@@ -115,6 +115,10 @@ export function useMapEngine(account, opts = {}) {
     const tick = () => {
       applyFrame()
       const a = anchorRef.current
+      // 锚点尚未就绪(尚未收到位置包):applyFrame 已判空 return,这里同样跳过静止判定,
+      // 续跑 RAF 等 applyPos 写入锚点。否则 const dt = ... - a.t0 直接抛 TypeError,RAF 链断掉,
+      // 之后 rafRef.current?.() 重启 tick 又抛——整个 RAF 永远起不来,地图不渲染,页面黑屏。
+      if (!a) { raf = requestAnimationFrame(tick); return }
       // 静止判定:decay 已饱和(误差收敛完毕,dt 超过 SMOOTH_CUTOFF)、且锚点无速度也无轨迹回放。
       // 满足这三条后画面值不再随 dt 变化,继续跑 RAF 只是无谓计算 + 字符串比较,且亚像素边界
       // 抖动可能被放大。此时停 RAF,等 applyPos 写新锚点后经 rafRef 重启。
