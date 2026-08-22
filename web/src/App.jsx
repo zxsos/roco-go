@@ -35,21 +35,21 @@ export default function App() {
   // 截图防泄(反向):默认隐藏(打 data-blur),只有窗口真正聚焦 + 鼠标在窗口内 + 页面
   // 可见,三者都满足时才显示。窗口失焦/鼠标移出/切 tab 任一发生即恢复隐藏。
   // 平时看不到 UID/昵称,只有用户主动盯着页面看时才显示——窗口焦点本身就是显示开关。
+  const inWindowRef = useRef(true) // 鼠标是否在窗口内(必须在组件顶层声明,不能在 effect 里调 hook)
   useEffect(() => {
     const root = document.documentElement
     const apply = () => root.setAttribute('data-blur', '')
     const clear = () => root.removeAttribute('data-blur')
     // 三重判定的"显示"条件:窗口聚焦 + 鼠标在窗口内 + 页面可见
     const hasFocus = () => document.hasFocus() && !document.hidden
-    const inWindow = useRef(true) // 鼠标是否在窗口内
     const recheck = () => {
-      if (hasFocus() && inWindow.current) clear()
+      if (hasFocus() && inWindowRef.current) clear()
       else apply()
     }
     const onBlur = () => recheck()
     const onFocus = () => recheck()
-    const onLeave = (e) => { if (e.relatedTarget === null) { inWindow.current = false; recheck() } }
-    const onEnter = () => { inWindow.current = true; recheck() }
+    const onLeave = (e) => { if (e.relatedTarget === null) { inWindowRef.current = false; recheck() } }
+    const onEnter = () => { inWindowRef.current = true; recheck() }
     const onVis = () => recheck()
     window.addEventListener('blur', onBlur)
     window.addEventListener('focus', onFocus)
