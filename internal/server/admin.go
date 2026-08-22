@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -259,6 +260,44 @@ func (s *Server) handleAdminWildPetOptions(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	writeJSON(w, map[string]any{"options": s.db.WildPetOptions()})
+}
+
+// handleAdminListInjects 列出当前全部注入中的精灵(管理面板撤销用)。
+// 只读 injects 内存态,不落盘;玩家换场景或靠近 10 米 10 秒后会自动消失,列表随之减少。
+func (s *Server) handleAdminListInjects(w http.ResponseWriter, r *http.Request) {
+	if !s.requireAdmin(w, r) {
+		return
+	}
+	s.injectMu.Lock()
+	out := make([]map[string]any, 0)
+	for acc, list := range s.injects {
+		for _, e := range list {
+			name, _ := e.mark["n"].(string)
+			kinds, _ := e.mark["kinds"].([]string)
+			out = append(out, map[string]any{
+				"account":  acc,
+				"id":       e.id,
+				"name":     name,
+				"kinds":    kinds,
+				"sceneRes": e.sceneRes,
+				"created":  e.created.Unix(),
+			})
+		}
+	}
+	s.injectMu.Unlock()
+	// 按账号、投放时间排序,方便管理面板分组查看。
+	sort.Slice(out, func(i, j int) bool {
+		a, b := out[i], out[j]
+		aa, _ := a["account"].(string)
+		bb, _ := b["account"].(string)
+		if aa != bb {
+			return aa < bb
+		}
+		ta, _ := a["created"].(int64)
+		tb, _ := b["created"].(int64)
+		return ta < tb
+	})
+	writeJSON(w, map[string]any{"injects": out})
 }
 
 // injectEntry 是一只已注入的稀有野生精灵(管理员投放,有生命周期)。

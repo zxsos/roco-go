@@ -2,7 +2,8 @@ import React, { useEffect, useState } from 'react'
 import {
   getAdminStatus, adminSetup, adminLogin, adminLogout,
   getAdminToken, setAdminToken, adminRules, adminSetRule, adminDeleteRule,
-  adminStats, adminWildPetOptions, adminInjectWild, getAccounts,
+  adminStats, adminWildPetOptions, adminInjectWild, adminListInjects, adminRevokeInject,
+  getAccounts,
 } from '../api'
 import AdminCharts from './AdminCharts'
 
@@ -31,6 +32,7 @@ export default function Admin() {
   const [injOffset, setInjOffset] = useState(30)
   const [injErr, setInjErr] = useState('')
   const [injMsg, setInjMsg] = useState('')
+  const [injects, setInjects] = useState(null)  // 当前注入中的精灵列表(管理面板撤销)
 
   useEffect(() => {
     getAdminStatus().then((s) => {
@@ -47,6 +49,7 @@ export default function Admin() {
     loadStats()
     loadWildOptions()
     loadAccounts()
+    loadInjects()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authed])
 
@@ -85,8 +88,26 @@ export default function Admin() {
     try {
       const res = await adminInjectWild(account, Number(injBase), injKind, Number(injOffset) || 30)
       setInjMsg('已投放:' + (res.id || '') + '(u=' + (res.u != null ? res.u.toFixed(3) : '') + ')')
+      loadInjects()
     } catch (err) {
       setInjErr(err.message || '投放失败')
+    }
+  }
+
+  // 注入精灵是后端内存态(不落盘):玩家换场景或靠近 10 米 10 秒后自动消失。
+  const loadInjects = () => {
+    adminListInjects().then((d) => setInjects(d.injects || []))
+      .catch(() => {})
+  }
+
+  const revokeInject = async (account, id) => {
+    setInjErr('')
+    try {
+      await adminRevokeInject(account, id)
+      setInjMsg('已撤销注入:' + id)
+      loadInjects()
+    } catch (err) {
+      setInjErr(err.message || '撤销失败')
     }
   }
 
@@ -141,6 +162,7 @@ export default function Admin() {
     setWildOptions(null)
     setAccounts([])
     setInjAccount('')
+    setInjects(null)
   }
 
   if (loading) return <div className="admin-page"><p className="admin-hint">加载中…</p></div>
@@ -239,6 +261,21 @@ export default function Admin() {
         </form>
         {injErr && <p className="admin-error">{injErr}</p>}
         {injMsg && <p className="admin-hint" style={{ color: 'var(--green, #4caf50)' }}>{injMsg}</p>}
+        {injects && injects.length > 0 && (
+          <div className="admin-inject-list">
+            <h4>当前注入中({injects.length})</h4>
+            <ul>
+              {injects.map((it) => (
+                <li key={it.account + ':' + it.id}>
+                  <span className="admin-inject-name">{it.name}</span>
+                  <span className="admin-inject-kind">{(it.kinds || []).join('/') || '普通'}</span>
+                  <span className="muted admin-inject-scene">{it.sceneRes || '无底图'}</span>
+                  <button className="btn ghost" onClick={() => revokeInject(it.account, it.id)}>撤销</button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
       </div>
 
       <div className="admin-card admin-rules">

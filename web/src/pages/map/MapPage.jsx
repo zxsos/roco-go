@@ -229,7 +229,7 @@ export default function MapPage() {
                 只重渲染对应那一层。 */}
             <PoiLayer marks={pois.marks} mapPx={mapPx} />
             <NestLayer marks={home.marks} mapPx={mapPx} />
-            <WildLayer marks={wilds.marks} mapPx={mapPx} wildTip={wildTip} dist={wildDist} onRevoke={wilds.revokeInject} />
+            <WildLayer marks={wilds.marks} mapPx={mapPx} wildTip={wildTip} dist={wildDist} />
           </div>
           <div className="map-arrow" ref={arrowRef}>
             <svg viewBox="0 0 24 24" width="30" height="30">
@@ -305,7 +305,7 @@ const NestLayer = React.memo(({ marks, mapPx }) => (
 // 桌面 hover 有 title 悬浮;触屏没有 hover,点一下弹资料卡(wildTip),点中放大提亮。
 // wildTip 是点选状态:只在它变化时(以及 marks/mapPx/dist 变化时)重渲染这一层。
 // dist 是点击时算好的距离快照(标量),位置推送不改它,故本层仍不受高频位置推送打扰。
-const WildLayer = React.memo(({ marks, mapPx, wildTip, dist, onRevoke }) => {
+const WildLayer = React.memo(({ marks, mapPx, wildTip, dist }) => {
   const icons = React.useContext(IconsContext)
   return (
     <>{marks.map((p) => {
@@ -340,9 +340,6 @@ const WildLayer = React.memo(({ marks, mapPx, wildTip, dist, onRevoke }) => {
             <div className="twc">X {p.x} · Y {p.y} · Z {p.z}</div>
             <div className="twd">距离 {dist != null ? dist : '-'} 米</div>
             {p.stale && <div className="tws">已离开视野</div>}
-            {p.inject && onRevoke && (
-              <button className="map-wild-revoke" onClick={() => onRevoke(p.id)}>撤销注入</button>
-            )}
           </div>
         ),
       ]

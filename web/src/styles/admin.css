@@ -102,3 +102,19 @@
   .admin-inject-form { grid-template-columns: 1fr 1fr; }
   .admin-inject-form .btn { grid-column: span 2; }
 }
+
+/* —— 当前注入列表(管理面板撤销) —— */
+.admin-inject-list { display: flex; flex-direction: column; gap: 6px; margin-top: 4px; }
+.admin-inject-list h4 { margin: 4px 0 0; font-size: 13px; color: var(--fg-dim); }
+.admin-inject-list ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.admin-inject-list li {
+  display: flex; align-items: center; gap: 10px;
+  background: var(--bg-2); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px;
+}
+.admin-inject-name { font-size: 13px; color: var(--fg); }
+.admin-inject-kind {
+  flex: none; font-size: 11px; color: var(--fg-dim);
+  border: 1px solid var(--line); border-radius: 4px; padding: 1px 6px;
+}
+.admin-inject-scene { flex: 1; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.admin-inject-list .btn.ghost { margin-left: auto; }

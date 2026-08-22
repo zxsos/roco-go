@@ -262,3 +262,10 @@ export function adminRevokeInject(account, id) {
     return r.json()
   })
 }
+
+// adminListInjects 列出当前全部注入中的精灵(管理面板撤销用)。
+// 返回 {injects:[{account,id,name,kinds,sceneRes,created}]};玩家换场景或靠近 10 米 10 秒后自动消失,列表随之减少。
+export const adminListInjects = () => adminFetch('/api/admin/injects').then(async (r) => {
+  if (!r.ok) throw new Error('拉取注入列表失败(' + r.status + ')')
+  return r.json()
+})

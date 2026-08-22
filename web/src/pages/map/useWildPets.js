@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
-import { getWildPets, subscribe, adminRevokeInject } from '../../api'
+import { getWildPets, subscribe } from '../../api'
 
 // —— 野生宠物图层(异色/炫彩 · 污染 · 奖牌四件套:大块头/小不点/婉转声/粗嗓门)——
 // 与 POI 图层不同,这几类**不是固定点位**:野生宠会刷新、被别人抓走,只有走进 AOI 才知道它在。
@@ -338,5 +338,5 @@ export function useWildPets(account) {
     return [num, numStale]
   }, [pets, allPets, on, medals, medalOn])
 
-  return { marks, num, numStale, on, toggle, medals, setThreshold, open, toggleOpen, medalOn, toggleMedal, notify, toggleNotify, revokeInject: (id) => adminRevokeInject(account, id) }
+  return { marks, num, numStale, on, toggle, medals, setThreshold, open, toggleOpen, medalOn, toggleMedal, notify, toggleNotify }
 }
