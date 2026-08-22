@@ -4,6 +4,7 @@
 package socks5
 
 import (
+	"context"
 	"errors"
 	"io"
 	"log"
@@ -11,6 +12,7 @@ import (
 	"net/netip"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -123,6 +125,16 @@ func allowed(addr net.Addr, allow []netip.Prefix) bool {
 	return false
 }
 
+// dialer 复用，拨号超时与 keep-alive 在此统一控制。
+var dialer = func() *net.Dialer {
+	d := &net.Dialer{
+		Timeout: 10 * time.Second,
+		// 保持 TCP keepalive，游戏长连接空闲断开更早被发现。
+		KeepAlive: 30 * time.Second,
+	}
+	return d
+}()
+
 // handle 处理单个客户端连接:握手(含可选认证) → 拨号上游 → 双向转发。
 func handle(c net.Conn, user, pass string) {
 	defer c.Close()
@@ -131,13 +143,31 @@ func handle(c net.Conn, user, pass string) {
 		log.Printf("socks5: %s 握手失败: %v", c.RemoteAddr(), err)
 		return
 	}
-	up, err := net.DialTimeout("tcp", target, 10*time.Second)
+	// 先写成功回复再拨号会让客户端空等一个 RTT；这里先拨号，成功后才回复。
+	// 拨号用 context 以便后续可扩展取消。
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	up, err := dialer.DialContext(ctx, "tcp", target)
 	if err != nil {
 		writeReply(c, repConnRefused) // 回复失败,客户端据此断开
 		log.Printf("socks5: 连接 %s 失败: %v", target, err)
 		return
 	}
 	defer up.Close()
+
+	// 禁用 Nagle 算法:游戏流量多为小包(指令/心跳),Nagle 会攒包增加延迟。
+	// 同时增大 socket 缓冲区,减少 syscall 次数。
+	if tc, ok := up.(*net.TCPConn); ok {
+		_ = tc.SetNoDelay(true)
+		_ = tc.SetReadBuffer(64 * 1024)
+		_ = tc.SetWriteBuffer(64 * 1024)
+	}
+	if tc, ok := c.(*net.TCPConn); ok {
+		_ = tc.SetNoDelay(true)
+		_ = tc.SetReadBuffer(64 * 1024)
+		_ = tc.SetWriteBuffer(64 * 1024)
+	}
+
 	if err := writeReply(c, repSuccess); err != nil {
 		return
 	}
@@ -269,11 +299,23 @@ func writeReply(c net.Conn, rep byte) error {
 }
 
 // relay 双向转发,任一端结束即关闭双方连接。
+// 用 sync.WaitGroup 确保两个 goroutine 都退出后再返回;
+// 任一方向 io.Copy 返回立即 Close 对端,触发其 io.Copy 也立即返回,
+// 避免一端已断开另一端仍阻塞在读上增加尾延迟。
 func relay(a, b net.Conn) {
-	done := make(chan struct{}, 1)
-	go func() { io.Copy(b, a); done <- struct{}{} }()
-	go func() { io.Copy(a, b); done <- struct{}{} }()
-	<-done
-	a.Close()
-	b.Close()
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		io.Copy(b, a)
+		// a→b 方向结束,关闭 b 让 b→a 的 io.Copy 尽快返回
+		b.Close()
+	}()
+	go func() {
+		defer wg.Done()
+		io.Copy(a, b)
+		// b→a 方向结束,关闭 a 让 a→b 的 io.Copy 尽快返回
+		a.Close()
+	}()
+	wg.Wait()
 }
