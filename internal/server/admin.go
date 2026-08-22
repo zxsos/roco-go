@@ -31,7 +31,10 @@ func hashAdminPassword(pw string) (string, error) {
 	if _, err := rand.Read(salt); err != nil {
 		return "", err
 	}
-	sum := pbkdf2.Key([]byte(pw), salt, adminIter, 32, sha256.New)
+	sum, err := pbkdf2.Key(sha256.New, []byte(pw), salt, adminIter, 32)
+	if err != nil {
+		return "", err
+	}
 	return fmt.Sprintf("pbkdf2$%d$%s$%s", adminIter,
 		base64.RawStdEncoding.EncodeToString(salt),
 		base64.RawStdEncoding.EncodeToString(sum)), nil
@@ -55,7 +58,10 @@ func verifyAdminPassword(pw, stored string) bool {
 	if err != nil {
 		return false
 	}
-	got := pbkdf2.Key([]byte(pw), salt, iter, len(want), sha256.New)
+	got, err := pbkdf2.Key(sha256.New, []byte(pw), salt, iter, len(want))
+	if err != nil {
+		return false
+	}
 	return subtle.ConstantTimeCompare(got, want) == 1
 }
 
