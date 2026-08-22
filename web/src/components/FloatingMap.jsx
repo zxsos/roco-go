@@ -17,11 +17,11 @@ import { pipSupported, setFloatState } from '../pages/map/floatState'
 // videoPiPSupported:检测 video requestPictureInPicture 是否可用(Android Chrome 等)。
 // 注意:PiP API 仅在安全上下文(HTTPS/localhost)真正可用。非安全上下文下
 //   pictureInPictureEnabled 仍可能是 true(feature detection 不拦),但实际调
-//   requestPictureInPicture() 会 reject 或进 PiP 后黑屏。所以这里加 isSecureContext 判断。
+//   requestPictureInPicture() 会 reject 或进 PiP 后黑屏。这里不预判 isSecureContext——
+//   而是让按钮显示出来,点击时若失败弹窗告知用户原因(需要 HTTPS),比无声隐藏友好。
 const videoPiPSupported = typeof document !== 'undefined'
   && 'pictureInPictureEnabled' in document
   && document.pictureInPictureEnabled
-  && (typeof window !== 'undefined' ? window.isSecureContext : true)
 
 // PIP_AUTO_KEY:记录用户是否偏好"开浮窗即自动进入系统画中画"(video-pip 模式)。
 // Android 上每次都要用户手势触发 requestPictureInPicture,但首次授权后,之后可自动进。
@@ -116,7 +116,7 @@ function copyStylesInto(targetDoc) {
 // - video-pip 模式:渲染 MapCanvasViz(canvas)到页内底部小窗 + 隐藏 video,用户点按钮进系统 PiP。
 function FloatingContent({ onClose, floatMode }) {
   const account = useContext(AccountContext)
-  const engine = useMapEngine(account, { floating: true })
+  const engine = useMapEngine(account)
   const [layersOpen, setLayersOpen] = useState(false)
   // video-pip 专属
   const canvasRef = useRef(null)
@@ -125,7 +125,8 @@ function FloatingContent({ onClose, floatMode }) {
   const [pipError, setPipError] = useState('')
 
   // video-pip:canvas → captureStream → video.srcObject → play。
-  // 非安全上下文(非 HTTPS/非 localhost)下不创建 video 元素,此 effect 提前返回。
+  // 非安全上下文(非 HTTPS/非 localhost)下提前返回:captureStream 在 HTTP 下也可能抛错,
+  // 不让它覆盖 pipError(留给 enterPiP 给出针对的 HTTPS 警告)。
   useEffect(() => {
     if (floatMode !== 'video-pip') return
     if (typeof window !== 'undefined' && !window.isSecureContext) return
@@ -186,7 +187,12 @@ function FloatingContent({ onClose, floatMode }) {
       try { localStorage.setItem(PIP_AUTO_KEY, '1') } catch {}
     } catch (e) {
       setPipActive(false)
-      setPipError(e?.message || '进入画中画失败')
+      // 非安全上下文(HTTP 非 localhost)是 PiP 黑屏/失败的最常见原因,给针对性提示;
+      // 其他异常(用户取消、Android 版本太低等)原样显示 message。
+      const insecure = typeof window !== 'undefined' && !window.isSecureContext
+      setPipError(insecure
+        ? `系统画中画需要 HTTPS 访问(当前 ${location && location.protocol + '//' + location.host} 不是安全上下文)。请用 HTTPS 或 localhost 访问,或换桌面浏览器(支持 documentPiP)。`
+        : (e?.message || '进入画中画失败'))
     }
   }, [])
 
@@ -195,7 +201,7 @@ function FloatingContent({ onClose, floatMode }) {
       <div className="map-float-title">
         <span className="map-float-title-ic">🗺️</span>
         <span className="map-float-title-text">实时地图浮窗</span>
-        {floatMode === 'video-pip' && window.isSecureContext && (
+        {floatMode === 'video-pip' && (
           <button className={'map-float-btn map-float-pip-btn' + (pipActive ? ' on' : '')}
             title={pipActive ? '已在系统画中画(点此恢复页内预览)' : '进入系统画中画(可移出浏览器、置顶)'}
             onClick={(e) => { e.stopPropagation(); pipActive ? document.exitPictureInPicture?.() : enterPiP() }}>
@@ -288,10 +294,8 @@ function MapCanvasViz({ engine, canvasRef, videoRef, pipActive, pipError, onEnte
   return (
     <div className="map-canvas-vp" ref={vpRef}>
       <canvas ref={canvasRef} className="map-canvas-el" />
-      {window.isSecureContext && (
-        <video ref={videoRef} playsInline muted autoPlay className="map-canvas-video" />
-      )}
-      {!pipActive && window.isSecureContext && (
+      <video ref={videoRef} playsInline muted autoPlay className="map-canvas-video" />
+      {!pipActive && (
         <div className="map-canvas-pip-hint">
           <div className="map-canvas-pip-hint-text">点下方按钮把地图悬浮到系统顶层</div>
           <button className="btn primary map-canvas-pip-btn" onClick={onEnterPip}>

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback, useLayoutEffect } from 'react'
+import React, { useState, useEffect, useRef, useCallback, useLayoutEffect, useMemo } from 'react'
 import { subscribe, getPosition } from '../../api'
 import { IconsContext } from '../../context'
 import { imgURL } from '../../components/icons'
@@ -23,9 +23,7 @@ export function wildTitle(p) {
 
 // useMapEngine 抽离自 MapPage:地图引擎内核——位置/外推/RAF/视图状态 + 图层数据订阅。
 // 浮窗与主页面共用此 hook,各自渲染外壳(MapViz),省一份逻辑拷贝。
-// floating 标记当前是否运行在浮窗模式(预留:PiP 关闭回调、视口尺寸取自浮窗容器等)。
-export function useMapEngine(account, opts = {}) {
-  const { floating = false } = opts
+export function useMapEngine(account) {
   const [pos, setPos] = useState(null)
   const [imgError, setImgError] = useState(false)
   const [layerError, setLayerError] = useState(false)
@@ -202,7 +200,6 @@ export function useMapEngine(account, opts = {}) {
     view, worldRef, arrowRef, applyFrame,
     pois, wilds, home, paint,
     detailGid, setDetailGid, wildTip, setWildTip, wildDist, setWildDist, onTap,
-    floating,
     // canvas PiP 用:暴露当前帧的渲染参数(供 renderToCanvas 画到外部 canvas)
     // 这些 ref 在 applyFrame 里每帧更新,canvas 渲染循环直接读,不触发 React 重渲染。
     frameStateRef: dispRef, // { u, v, heading } 当前玩家显示位置
