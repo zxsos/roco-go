@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react'
 import {
   getAdminStatus, adminSetup, adminLogin, adminLogout,
   getAdminToken, setAdminToken, adminRules, adminSetRule, adminDeleteRule,
-  adminStats, adminWildPetOptions, adminInjectWild,
+  adminStats, adminWildPetOptions, adminInjectWild, getAccounts,
 } from '../api'
 import AdminCharts from './AdminCharts'
 
@@ -24,6 +24,7 @@ export default function Admin() {
   const [statsErr, setStatsErr] = useState('')
   // 投放稀有野生精灵
   const [wildOptions, setWildOptions] = useState(null)
+  const [accounts, setAccounts] = useState([])
   const [injAccount, setInjAccount] = useState('')
   const [injBase, setInjBase] = useState('')
   const [injKind, setInjKind] = useState('shiny')
@@ -45,6 +46,7 @@ export default function Admin() {
     loadRules()
     loadStats()
     loadWildOptions()
+    loadAccounts()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authed])
 
@@ -63,6 +65,16 @@ export default function Admin() {
   const loadWildOptions = () => {
     adminWildPetOptions().then((d) => setWildOptions(d.options || []))
       .catch(() => {})
+  }
+
+  const loadAccounts = () => {
+    getAccounts().then((list) => {
+      const l = list || []
+      setAccounts(l)
+      // 默认选中在线玩家(有实时位置才可投放);无在线则退回最近活跃的第一个。
+      setInjAccount((prev) => (prev && l.some((a) => a.account === prev)
+        ? prev : (l.find((a) => a.online) || l[0] || {}).account || ''))
+    }).catch(() => {})
   }
 
   const injectWild = async (e) => {
@@ -127,6 +139,8 @@ export default function Admin() {
     setRules(null)
     setStats(null)
     setWildOptions(null)
+    setAccounts([])
+    setInjAccount('')
   }
 
   if (loading) return <div className="admin-page"><p className="admin-hint">加载中…</p></div>
@@ -180,26 +194,38 @@ export default function Admin() {
       <div className="admin-card admin-rules">
         <h3>投放稀有野生精灵</h3>
         <p className="admin-hint">
-          向指定成员的实时地图注入一只稀有野生精灵(异色 / 炫彩)。
+          向下拉选定的成员实时地图注入一只稀有野生精灵(异色 / 炫彩)。
           位置取该成员最近一次缓存位置,按当前场景投影到附近 30 米处;仅影响前端地图显示,
-          不修改真实流量。成员需在「有底图的场景」中且有缓存位置才能投放成功。
+          不修改真实流量。成员需在「有底图的场景」中且有缓存位置才能投放成功;异色只列有异色形态的精灵。
         </p>
         <form onSubmit={injectWild} className="admin-inject-form">
-          <input
-            className="input" type="text" placeholder="目标账号(如 UID:10001)" value={injAccount}
-            onChange={(e) => setInjAccount(e.target.value)}
-          />
+          <select
+            className="select" value={injAccount} onChange={(e) => setInjAccount(e.target.value)}
+            title="选择投放目标玩家(需在线且有缓存位置)"
+          >
+            <option value="">选择目标玩家</option>
+            {accounts.map((a) => (
+              <option key={a.account} value={a.account}>
+                {a.online ? '● ' : '○ '}{a.name} (UID:{(a.account || '').replace(/^UID:/, '')})
+              </option>
+            ))}
+          </select>
           <select
             className="select" value={injBase} onChange={(e) => setInjBase(e.target.value)}
           >
             <option value="">选择精灵形态</option>
-            {wildOptions && wildOptions.map((o) => (
-              <option key={o.base} value={o.base}>
-                {o.name}(#{o.book})
-              </option>
-            ))}
+            {wildOptions && wildOptions
+              .filter((o) => injKind !== 'shiny' || o.shiny) // 异色只列有异色形态的精灵
+              .map((o) => (
+                <option key={o.base} value={o.base}>
+                  {o.name}(#{o.book})
+                </option>
+              ))}
           </select>
-          <select className="select" value={injKind} onChange={(e) => setInjKind(e.target.value)}>
+          <select
+            className="select" value={injKind}
+            onChange={(e) => { setInjKind(e.target.value); setInjBase('') }}
+          >
             <option value="shiny">异色</option>
             <option value="colorful">炫彩</option>
           </select>

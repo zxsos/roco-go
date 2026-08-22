@@ -345,6 +345,12 @@ func (s *Server) handleAdminInjectWild(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "unknown petbase", 400)
 		return
 	}
+	// 异色投放要求该形态确有可用的异色小头像,否则 mutation 标了异色但头像仍是普通,
+	// 前端看起来像「异色没生效」。前端下拉已过滤,这里兜底再校验一次。
+	if req.Kind == "shiny" && !s.db.HasShinyImage(req.Base) {
+		http.Error(w, "该形态没有异色形态,无法投放异色", 400)
+		return
+	}
 	mutation := int32(0)
 	if req.Kind == "shiny" {
 		mutation = 1 // scene.MutationShiny
