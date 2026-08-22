@@ -559,7 +559,16 @@
 /* MapCanvasViz(video-pip 页内预览的 canvas + 隐藏 video + 进入 PiP 提示) */
 .map-canvas-vp { position: relative; flex: 1; overflow: hidden; background: #0b0e13; }
 .map-canvas-el { width: 100%; height: 100%; display: block; }
-.map-canvas-video { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+.map-canvas-video {
+  /* 给 video 真实尺寸,但移出视口。
+     Android Chrome 的 PiP 会取 video 渲染区域作为初始帧,
+     用 1px/opacity:0 会进 PiP 但显示黑屏。这里保持 240x240 真实尺寸 + 视口外定位,
+     既不挡界面,又让 PiP 拿到非空帧。 */
+  position: fixed; left: -9999px; top: -9999px;
+  width: 240px; height: 240px;
+  pointer-events: none;
+  background: #0b0e13;
+}
 .map-canvas-pip-hint {
   position: absolute; left: 0; right: 0; bottom: 0;
   display: flex; flex-direction: column; align-items: center; gap: 8px;

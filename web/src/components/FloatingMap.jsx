@@ -15,9 +15,13 @@ import { pipSupported, setFloatState } from '../pages/map/floatState'
 // 复用同一条 SSE 连接(全局单例),复用同套图层数据 hook(各自 useMapEngine 实例)。
 
 // videoPiPSupported:检测 video requestPictureInPicture 是否可用(Android Chrome 等)。
+// 注意:PiP API 仅在安全上下文(HTTPS/localhost)真正可用。非安全上下文下
+//   pictureInPictureEnabled 仍可能是 true(feature detection 不拦),但实际调
+//   requestPictureInPicture() 会 reject 或进 PiP 后黑屏。所以这里加 isSecureContext 判断。
 const videoPiPSupported = typeof document !== 'undefined'
   && 'pictureInPictureEnabled' in document
   && document.pictureInPictureEnabled
+  && (typeof window !== 'undefined' ? window.isSecureContext : true)
 
 // PIP_AUTO_KEY:记录用户是否偏好"开浮窗即自动进入系统画中画"(video-pip 模式)。
 // Android 上每次都要用户手势触发 requestPictureInPicture,但首次授权后,之后可自动进。
@@ -85,8 +89,12 @@ export default function FloatingMap() {
     <div className="map-float-unsupported">
       <div className="map-float-unsupported-card">
         <div className="map-float-unsupported-ic">🚫</div>
-        <div className="map-float-unsupported-text">当前浏览器不支持地图浮窗</div>
-        <div className="muted">桌面用 Chrome/Edge/Firefox,Android 用 Chrome 可开系统画中画。iOS 暂不支持。</div>
+        <div className="map-float-unsupported-text">当前环境不支持地图浮窗</div>
+        <div className="muted">
+          系统画中画要求 HTTPS 或 localhost 访问
+          (当前 {typeof location !== 'undefined' ? location.protocol + '//' + location.host : '—'} 不是安全上下文)。
+          桌面 Chrome/Edge/Firefox 或 Android Chrome 走 HTTPS 即可启用;iOS 暂不支持。
+        </div>
         <button className="btn primary" onClick={close}>关闭</button>
       </div>
     </div>,
@@ -117,8 +125,10 @@ function FloatingContent({ onClose, floatMode }) {
   const [pipError, setPipError] = useState('')
 
   // video-pip:canvas → captureStream → video.srcObject → play。
+  // 非安全上下文(非 HTTPS/非 localhost)下不创建 video 元素,此 effect 提前返回。
   useEffect(() => {
     if (floatMode !== 'video-pip') return
+    if (typeof window !== 'undefined' && !window.isSecureContext) return
     const cv = canvasRef.current, vd = videoRef.current
     if (!cv || !vd) return
     cv.width = 480; cv.height = 480
@@ -143,12 +153,33 @@ function FloatingContent({ onClose, floatMode }) {
     }
   }, [floatMode])
 
-  // enterPiP:用户手势触发进入系统画中画(移动端必须手势)。成功后记住偏好,下次自动进。
+  // enterPiP:用户手势触发进入系统画中画(移动端必须手势)。
+  // 黑屏根因修复:Android Chrome 的 PiP 取 video 渲染区域作为初始帧,
+  //   1) video 必须有真实可见尺寸(不能 display:none / 1px);
+  //   2) video 必须真正 playing 且 readyState>=2;
+  //   3) canvas 必须已画过有效帧(captureStream 才有非空流)。
+  //   所以这里:先等 readyState,再 requestFrame 一帧,最后才 requestPictureInPicture。
   const enterPiP = useCallback(async () => {
     const vd = videoRef.current
+    const cv = canvasRef.current
     if (!vd) return
     try {
+      vd.muted = true
       await vd.play()
+      // 等 video 拿到首帧数据(HAVE_CURRENT_DATA 及以上)
+      if (vd.readyState < 2) {
+        await new Promise((res) => {
+          const t = setTimeout(res, 2000)
+          vd.addEventListener('loadeddata', () => { clearTimeout(t); res() }, { once: true })
+        })
+      }
+      // 强制 canvas 立刻画一帧并让 captureStream 取帧,避免 PiP 初始黑屏
+      if (cv && typeof cv.captureStream === 'function') {
+        try {
+          const track = vd.srcObject && vd.srcObject.getVideoTracks()[0]
+          if (track && typeof track.requestFrame === 'function') track.requestFrame()
+        } catch {}
+      }
       await vd.requestPictureInPicture()
       setPipActive(true)
       setPipError('')
@@ -164,7 +195,7 @@ function FloatingContent({ onClose, floatMode }) {
       <div className="map-float-title">
         <span className="map-float-title-ic">🗺️</span>
         <span className="map-float-title-text">实时地图浮窗</span>
-        {floatMode === 'video-pip' && (
+        {floatMode === 'video-pip' && window.isSecureContext && (
           <button className={'map-float-btn map-float-pip-btn' + (pipActive ? ' on' : '')}
             title={pipActive ? '已在系统画中画(点此恢复页内预览)' : '进入系统画中画(可移出浏览器、置顶)'}
             onClick={(e) => { e.stopPropagation(); pipActive ? document.exitPictureInPicture?.() : enterPiP() }}>
@@ -257,8 +288,10 @@ function MapCanvasViz({ engine, canvasRef, videoRef, pipActive, pipError, onEnte
   return (
     <div className="map-canvas-vp" ref={vpRef}>
       <canvas ref={canvasRef} className="map-canvas-el" />
-      <video ref={videoRef} playsInline muted autoPlay className="map-canvas-video" />
-      {!pipActive && (
+      {window.isSecureContext && (
+        <video ref={videoRef} playsInline muted autoPlay className="map-canvas-video" />
+      )}
+      {!pipActive && window.isSecureContext && (
         <div className="map-canvas-pip-hint">
           <div className="map-canvas-pip-hint-text">点下方按钮把地图悬浮到系统顶层</div>
           <button className="btn primary map-canvas-pip-btn" onClick={onEnterPip}>
