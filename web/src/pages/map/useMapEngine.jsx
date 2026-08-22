@@ -212,9 +212,9 @@ export function useMapEngine(account) {
   }
 }
 
-// MapViz 地图本体渲染:从 .map-vp 到标记层、控制按钮,主页面与浮窗共用。
+// MapViz 地图本体渲染:从 .map-vp 到标记层、控制按钮。
 // engine 由 useMapEngine 产出(内部持有 sceneRef/layerRef/anchorRef 等,这里只读 pos)。
-export function MapViz({ engine, onOpenFloat, floatMode, sidebarOpen, onToggleLayers }) {
+export function MapViz({ engine, sidebarOpen, onToggleLayers }) {
   const { pos, hasMap, imgError, layerError, setImgError, setLayerError,
     view, worldRef, arrowRef, pois, wilds, home, paint,
     detailGid, setDetailGid, wildTip, setWildDist, setWildTip, wildDist, onTap,
@@ -270,24 +270,13 @@ export function MapViz({ engine, onOpenFloat, floatMode, sidebarOpen, onToggleLa
               <path d="M12 2 L20 21 L12 16 L4 21 Z" fill="var(--red)" stroke="#fff" strokeWidth="1.5" strokeLinejoin="round" />
             </svg>
           </div>
-          {!floatMode && (
-            <div className="map-ctrl">
-              <button className="map-btn map-float-open" title="开浮窗(置顶小窗)"
-                onClick={onOpenFloat}>◰</button>
-              <button className={'map-btn map-layers-toggle' + (sidebarOpen ? ' on' : '')} title="图层栏"
-                onClick={onToggleLayers}>☰</button>
-              <button className="map-btn" title="放大" onClick={() => view.zoomAround(1.4, view.vp.w / 2, view.vp.h / 2)}>＋</button>
-              <button className="map-btn" title="缩小" onClick={() => view.zoomAround(1 / 1.4, view.vp.w / 2, view.vp.h / 2)}>－</button>
-              <button className={'map-btn' + (view.follow ? ' on' : '')} title="回到当前位置" onClick={() => view.setFollow(true)}>◎</button>
-            </div>
-          )}
-          {floatMode && (
-            <div className="map-ctrl">
-              <button className="map-btn" title="放大" onClick={() => view.zoomAround(1.4, view.vp.w / 2, view.vp.h / 2)}>＋</button>
-              <button className="map-btn" title="缩小" onClick={() => view.zoomAround(1 / 1.4, view.vp.w / 2, view.vp.h / 2)}>－</button>
-              <button className={'map-btn' + (view.follow ? ' on' : '')} title="回到当前位置" onClick={() => view.setFollow(true)}>◎</button>
-            </div>
-          )}
+          <div className="map-ctrl">
+            <button className={'map-btn map-layers-toggle' + (sidebarOpen ? ' on' : '')} title="图层栏"
+              onClick={onToggleLayers}>☰</button>
+            <button className="map-btn" title="放大" onClick={() => view.zoomAround(1.4, view.vp.w / 2, view.vp.h / 2)}>＋</button>
+            <button className="map-btn" title="缩小" onClick={() => view.zoomAround(1 / 1.4, view.vp.w / 2, view.vp.h / 2)}>－</button>
+            <button className={'map-btn' + (view.follow ? ' on' : '')} title="回到当前位置" onClick={() => view.setFollow(true)}>◎</button>
+          </div>
         </div>
       ) : (
         <div className="map-nomap">

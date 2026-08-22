@@ -4,7 +4,6 @@ import { getAccounts, getCurrentAccount, setCurrentAccount, getIcons } from './a
 import { AccountContext, IconsContext } from './context'
 import { useFullscreen } from './hooks/useFullscreen'
 import { PinDialog } from './components/PinDialog'
-import FloatingHost from './components/FloatingHost'
 import { dropBoxFilter } from './pages/pet-list/filters'
 
 const NAV = [
@@ -180,9 +179,6 @@ export default function App() {
         </main>
 
         <nav className="bottomnav">{navLinks('tab')}</nav>
-
-        {/* 全局浮窗挂载点:不走路由,切页面不卸载;位于两个 Provider 内部拿到 account/icons */}
-        <FloatingHost />
       </div>
       {pinDialog && (
         <PinDialog
