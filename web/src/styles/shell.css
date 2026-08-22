@@ -11,7 +11,6 @@
 }
 .brand { display: flex; align-items: center; gap: 7px; font-weight: 700; font-size: 16px; }
 .brand-logo { width: 22px; height: 22px; border-radius: 6px; flex: none; }
-.brand-sub { color: var(--fg-dim); font-weight: 400; font-size: 12px; margin-left: 4px; }
 .topnav { display: flex; gap: 4px; }
 .navlink {
   display: flex; align-items: center; gap: 6px; padding: 7px 14px; border-radius: var(--radius); color: var(--fg-dim);
@@ -82,10 +81,9 @@
 .account-del-btn { color: var(--fg-dim); }
 .account-del-btn:hover { color: var(--red); border-color: var(--red); }
 
-/* ---- 截图防泄:窗口失焦时模糊顶栏敏感文字(昵称、UID、品牌副标题) ----
+/* ---- 截图防泄:窗口失焦时模糊顶栏敏感文字(昵称、UID) ----
    html[data-blur] 由 App.jsx 监听 window blur/visibilitychange 打上。
    account-item-name/uid 也在内,确保展开下拉时同样模糊。 */
-html[data-blur] .brand-sub,
 html[data-blur] .account-trigger-name,
 html[data-blur] .account-item-name,
 html[data-blur] .account-item-uid {
@@ -94,14 +92,14 @@ html[data-blur] .account-item-uid {
   user-select: none;
 }
 /* 聚焦回窗口时平滑恢复 */
-.brand-sub, .account-trigger-name, .account-item-name, .account-item-uid {
+.account-trigger-name, .account-item-name, .account-item-uid {
   transition: filter .12s ease;
 }
 
 /* ---- 底部 tab(移动) ---- */
 .bottomnav { display: none; }
 
-.content { flex: 1; padding: 16px; }
+.content { flex: 1; padding: 16px; min-width: 0; }
 
 @media (max-width: 760px) {
   .topnav { display: none; }
