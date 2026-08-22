@@ -34,18 +34,15 @@ export default function App() {
 
   // 截图防泄(反向):默认隐藏(打 data-blur),只有窗口真正聚焦 + 鼠标在窗口内 + 页面
   // 可见,三者都满足时才显示。窗口失焦/鼠标移出/切 tab 任一发生即恢复隐藏。
-  // 仍保留手动开关,但语义反转:点了"常显"强制持续显示(取消遮罩),再点恢复默认隐藏。
-  // 反向触发比原来更严:平时看不到 UID/昵称,只有用户主动盯着页面看时才显示。
-  const [showLocked, setShowLocked] = useState(false) // 手动锁定为"持续显示"
+  // 平时看不到 UID/昵称,只有用户主动盯着页面看时才显示——窗口焦点本身就是显示开关。
   useEffect(() => {
     const root = document.documentElement
     const apply = () => root.setAttribute('data-blur', '')
-    const clear = () => { if (!showLocked) root.removeAttribute('data-blur') }
+    const clear = () => root.removeAttribute('data-blur')
     // 三重判定的"显示"条件:窗口聚焦 + 鼠标在窗口内 + 页面可见
     const hasFocus = () => document.hasFocus() && !document.hidden
     const inWindow = useRef(true) // 鼠标是否在窗口内
     const recheck = () => {
-      if (showLocked) { clear(); return }
       if (hasFocus() && inWindow.current) clear()
       else apply()
     }
@@ -60,8 +57,7 @@ export default function App() {
     document.addEventListener('mouseenter', onEnter)
     document.addEventListener('visibilitychange', onVis)
     // 初次挂载:默认隐藏
-    if (showLocked) clear()
-    else apply()
+    apply()
     return () => {
       window.removeEventListener('blur', onBlur)
       window.removeEventListener('focus', onFocus)
@@ -69,7 +65,7 @@ export default function App() {
       document.removeEventListener('mouseenter', onEnter)
       document.removeEventListener('visibilitychange', onVis)
     }
-  }, [showLocked])
+  }, [])
 
   // 全局固定图标只随游戏版本变,拉一次即可。
   useEffect(() => { getIcons().then((d) => setIcons(d || { stat: {} })).catch(() => {}) }, [])
@@ -158,11 +154,6 @@ export default function App() {
               {fullscreen.isFull ? '退出全屏' : '全屏'}
             </button>
           )}
-          <button type="button" className={'topbar-fs' + (showLocked ? ' on' : '')}
-            onClick={() => setShowLocked((v) => !v)}
-            title={showLocked ? '取消常显(恢复默认:失焦即隐藏昵称/UID)' : '常显(忽略失焦,强制显示昵称/UID)'}>
-            {showLocked ? '常显中' : '常显'}
-          </button>
           {accounts.length > 0 && (() => {
             const cur = accounts.find((a) => a.account === account)
             return (
