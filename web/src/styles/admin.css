@@ -1,0 +1,30 @@
+/* 管理员面板:首启设置密码/登录卡片 + 使用情况表;顶部账号切换的删除登录按钮。 */
+
+/* ---- 首启设置 / 登录卡片 ---- */
+.admin-login { display: flex; justify-content: center; padding: 8vh 16px 0; }
+.admin-card {
+  width: 100%; max-width: 380px; background: var(--bg-1);
+  border: 1px solid var(--line); border-radius: 12px; padding: 22px;
+  display: flex; flex-direction: column; gap: 12px; box-shadow: var(--shadow);
+}
+.admin-card h3 { margin: 0; font-size: 16px; }
+.admin-card p { margin: 0; font-size: 13px; line-height: 1.7; }
+.admin-form { display: flex; flex-direction: column; gap: 10px; }
+.admin-form .btn { padding: 9px 12px; }
+.admin-err { color: var(--red); font-size: 13px; }
+
+/* ---- 使用情况表 ---- */
+.admin-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.admin-table th, .admin-table td {
+  padding: 9px 12px; border-bottom: 1px solid var(--line); text-align: left; white-space: nowrap;
+}
+.admin-table th { color: var(--fg-dim); font-weight: 600; font-size: 12px; }
+.admin-table tr:last-child td { border-bottom: none; }
+.online { font-size: 13px; }
+.online.on { color: var(--green); }
+.online.off { color: var(--fg-dim); }
+
+/* 移动端:管理表隐藏部分列,保留核心信息 */
+@media (max-width: 760px) {
+  .admin-table th:nth-child(n+7), .admin-table td:nth-child(n+7) { display: none; }
+}
