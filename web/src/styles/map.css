@@ -370,6 +370,24 @@
   font-size: 13px; line-height: 1; color: #ffc107;
   text-shadow: 0 0 6px rgba(255, 193, 7, .55);
 }
+/* 双牌子滑块行:缩进 + 更小字号,金橙淡底延续双牌组的视觉归属。与上面 4 条单牌滑块
+   视觉区分(单牌用默认底色 + accent 轨道),让用户一眼看出"这是双牌专用阈值"。 */
+.map-medal-dual-sub {
+  margin: 2px 0 2px 24px; padding: 3px 10px 3px 8px;
+  border-radius: 8px; background: rgba(255, 193, 7, .03);
+  font-size: 12px; opacity: .92;
+}
+.map-medal-dual-sub .map-wild-swatch { width: 9px; height: 9px; }
+.map-medal-dual-sub .map-medal-val { color: #ffc107; opacity: .85; }
+/* 双牌轨道用金橙,与单牌的 accent 蓝区分;滑块拇指也金橙。 */
+.map-medal-dual-range { accent-color: #ffc107; }
+.map-medal-dual-range::-webkit-slider-thumb {
+  background: #ffc107; border-color: rgba(255, 193, 7, .4);
+}
+.map-medal-dual-range::-moz-range-thumb {
+  background: #ffc107; border-color: rgba(255, 193, 7, .4);
+}
+.map-medal-dual-sub:has(input:disabled) { opacity: .4; }
 
 /* 图层开关(左侧栏内):整行一个,图标 + 名称 + 点数;可收集图层的行右侧再挂一个收集模式小开关。
    图标同样只定高不定宽(见上)。 */
