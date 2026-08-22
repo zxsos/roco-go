@@ -104,8 +104,11 @@ export function useMapEngine(account, opts = {}) {
     const world = `translate3d(${left}px, ${top}px, 0)`
     const arrow = `translate3d(${ax}px, ${ay}px, 0) translate(-50%,-50%) rotate(${heading + 90}deg)`
     const last = lastFrameRef.current
-    if (last && last.world === world && last.arrow === arrow) return
-    lastFrameRef.current = { world, arrow }
+    // DOM 节点变了(浮窗开关后 MapViz 重挂,worldRef/arrowRef 指向新节点)→ 强制重写,
+    // 否则旧 lastFrameRef 的字符串与新算出的相同会跳过写入,新 DOM 没设 transform 停在左上角。
+    if (last && last.world === world && last.arrow === arrow
+      && last.wNode === worldRef.current && last.aNode === arrowRef.current) return
+    lastFrameRef.current = { world, arrow, wNode: worldRef.current, aNode: arrowRef.current }
     worldRef.current.style.transform = world
     if (arrowRef.current) arrowRef.current.style.transform = arrow
   }, [stRef, focusRef])
@@ -196,6 +199,12 @@ export function useMapEngine(account, opts = {}) {
     pois, wilds, home, paint,
     detailGid, setDetailGid, wildTip, setWildTip, wildDist, setWildDist, onTap,
     floating,
+    // canvas PiP 用:暴露当前帧的渲染参数(供 renderToCanvas 画到外部 canvas)
+    // 这些 ref 在 applyFrame 里每帧更新,canvas 渲染循环直接读,不触发 React 重渲染。
+    frameStateRef: dispRef, // { u, v, heading } 当前玩家显示位置
+    stRef, // { zoom, follow, vp } 视图状态
+    focusRef, // { u, v } 视口中心对应的地图坐标
+    sceneRef, layerRef, // 当前场景底图名/层图名
   }
 }
 
