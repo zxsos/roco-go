@@ -182,8 +182,9 @@ sudo systemctl start rocom
 sudo systemctl status rocom
 journalctl -u rocom -f           # 看日志
 
-# 4. 后续更新二进制(make release 后重跑同一命令,数据不动)
-sudo ./scripts/deploy.sh
+# 4. 后续更新(服务器上已装 go)
+#    git pull + go build + 重启,数据不动
+sudo ./scripts/deploy.sh --build
 
 # 备份数据库(热备,不锁库)
 sudo ./scripts/deploy.sh --backup

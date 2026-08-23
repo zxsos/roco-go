@@ -7,7 +7,8 @@
 # 宠物/事件/涂地等历史统计原样保留。
 #
 # 用法:
-#   sudo ./deploy.sh                  # 首次安装或更新二进制(自动判断)
+#   sudo ./deploy.sh --build        # 服务器上 git pull + go build + 部署(日常更新用这个)
+#   sudo ./deploy.sh                # 首次安装或更新已有二进制(自动找 dist/ 或当前目录)
 #   sudo ./deploy.sh --binary /tmp/rocom-capture  # 指定二进制路径
 #   sudo ./deploy.sh --archive x.tar  # 从 tar 包安装(内含 rocom-capture 单文件)
 #   sudo ./deploy.sh --stop           # 仅停止服务(不删除数据)
@@ -52,6 +53,7 @@ MIGRATE_SRC=""
 PURGE=0
 while [[ $# -gt 0 ]]; do
     case "$1" in
+        --build)    ACTION="build"; shift ;;
         --archive)  ARCHIVE="$2"; ACTION="install"; shift 2 ;;
         --binary)   BINARY="$2"; ACTION="install"; shift 2 ;;
         --stop)     ACTION="stop"; shift ;;
@@ -59,7 +61,7 @@ while [[ $# -gt 0 ]]; do
         --migrate)  ACTION="migrate"; MIGRATE_SRC="$2"; shift 2 ;;
         --uninstall) ACTION="uninstall"; shift ;;
         --purge)    PURGE=1; shift ;;
-        -h|--help)  sed -n '2,22p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+        -h|--help)  sed -n '2,24p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
         *) echo "未知参数: $1" >&2; exit 1 ;;
     esac
 done
@@ -184,6 +186,31 @@ EOF
 
 # ---- 主流程 ----
 case "$ACTION" in
+    build)
+        # 在服务器上 git pull + go build + 部署一条龙。
+        # 前端产物(internal/server/web)已提交在仓库里,go build 时 embed 进二进制,
+        # 服务器上不需要 npm/node。
+        # 依赖:go(已装)、git(拉代码)。不需要 zig(那是交叉编译用的)。
+        REPO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+        echo "==> 拉取最新代码 ($REPO_DIR)"
+        cd "$REPO_DIR"
+        git pull --ff-only
+
+        # 确认 go 可用
+        if ! command -v go >/dev/null 2>&1; then
+            echo "错误: 未找到 go,请先安装 Go。" >&2
+            exit 1
+        fi
+
+        echo "==> 编译 (go build,前端已 embed)"
+        CGO_ENABLED=1 go build -trimpath -o "$BIN_NAME" ./cmd/rocom-capture
+        echo "    产物: $REPO_DIR/$BIN_NAME ($(du -h "$BIN_NAME" | cut -f1))"
+
+        # 编译完,设置 BINARY 让 install 分支用这个二进制
+        BINARY="$REPO_DIR/$BIN_NAME"
+        ACTION="install"
+        ;&  # fall through 到 install
+
     install)
         SRC_BIN="$(find_binary)"
         mkdir -p "$INSTALL_DIR" "$DATA_DIR" "$BACKUP_DIR"
