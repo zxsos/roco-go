@@ -14,7 +14,7 @@
 #   sudo ./deploy.sh --uninstall      # 卸载程序(保留数据;加 --purge 同时删数据)
 #
 # 环境变量(在调用前 export,或写入 /etc/rocom.env):
-#   ROCOM_IFACE       抓包网卡(必填,如 eth0 / br-lan)
+#   ROCOM_IFACE       抓包网卡(默认 eth0,如 eth0 / br-lan)
 #   ROCOM_PORT        游戏端口(默认 8195)
 #   ROCOM_ADDR        Web 监听地址(默认 :4939)
 #   ROCOM_TLS         启用 HTTPS(设 1 启用)
@@ -146,8 +146,8 @@ write_env() {
     fi
     cat > "$ENV_FILE" <<EOF
 # rocom-capture 运行参数(改后执行: systemctl restart rocom)
-# 抓包网卡(必填)
-ROCOM_IFACE=
+# 抓包网卡(默认 eth0)
+ROCOM_IFACE=eth0
 # 游戏端口(默认 8195)
 ROCOM_PORT=8195
 # Web 监听地址(默认 :4939)
