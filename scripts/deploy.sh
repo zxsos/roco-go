@@ -209,8 +209,9 @@ EOF
 case "$ACTION" in
     build)
         # 在服务器上 git pull + go build + 部署一条龙。
-        # 前端产物(internal/server/web)已提交在仓库里,go build 时 embed 进二进制,
-        # 服务器上不需要 npm/node。
+        # 前端产物(internal/server/web)已提交在仓库里,go build 时 embed 进二进制。
+        # 若 web/ 源码比产物新(改了前端但忘 build),会自动调 npm run build 刷新产物
+        # (需服务器装 node/npm;未装则报错提示本机 build)。
         # 依赖:go(已装)、git(拉代码)。不需要 zig(那是交叉编译用的)。
         REPO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
         echo "==> 拉取最新代码 ($REPO_DIR)"
@@ -232,7 +233,57 @@ case "$ACTION" in
             exit 1
         fi
 
-        echo "==> 编译 (go build,前端已 embed)"
+        # 前端构建:对比 web/ 与 internal/server/web/ 两个目录的最近改动提交,
+        # 若 web/ 的提交晚于产物目录,说明前端源码改了但产物没同步,自动 npm run build。
+        # (用 git log 比对提交而非 mtime——git pull 后所有文件 mtime 都被刷新,mtime 不可靠)
+        FRONTEND_OUT="$REPO_DIR/internal/server/web"
+        NEED_FRONTEND=0
+        if [[ -d "$REPO_DIR/web" && -f "$FRONTEND_OUT/index.html" ]]; then
+            WEB_COMMIT="$(git -C "$REPO_DIR" log -1 --format=%H -- web/ 2>/dev/null || true)"
+            OUT_COMMIT="$(git -C "$REPO_DIR" log -1 --format=%H -- internal/server/web/ 2>/dev/null || true)"
+            if [[ -n "$WEB_COMMIT" && -n "$OUT_COMMIT" && "$WEB_COMMIT" != "$OUT_COMMIT" ]]; then
+                # web/ 提交是否晚于产物提交(是 web/ 的祖先吗?是则产物已包含此次前端改动)
+                if ! git -C "$REPO_DIR" merge-base --is-ancestor "$WEB_COMMIT" "$OUT_COMMIT" 2>/dev/null; then
+                    NEED_FRONTEND=1
+                fi
+            fi
+        fi
+        if [[ "$NEED_FRONTEND" -eq 1 ]]; then
+            echo "==> 检测到前端源码比产物新,构建前端..."
+            # 找 npm/node(sudo 同样可能不在 secure_path 里)
+            if ! command -v npm >/dev/null 2>&1; then
+                NPM_DIRS=(/usr/local/bin /usr/bin "$HOME/.local/bin")
+                # 官方二进制包常装在 /usr/local/node-v*/bin(版本号目录)
+                for d in /usr/local/node-*/bin; do
+                    [[ -d "$d" ]] && NPM_DIRS+=("$d")
+                done
+                if [[ -n "${SUDO_USER:-}" ]]; then
+                    SUDO_HOME="$(getent passwd "$SUDO_USER" | cut -d: -f6)"
+                    NPM_DIRS+=("$SUDO_HOME/.local/bin")
+                    for d in "$SUDO_HOME"/.local/node-*/bin "$SUDO_HOME"/node-*/bin; do
+                        [[ -d "$d" ]] && NPM_DIRS+=("$d")
+                    done
+                    # nvm: ~/.nvm/versions/node/<ver>/bin
+                    if [[ -d "$SUDO_HOME/.nvm/versions/node" ]]; then
+                        NVM_NODE="$(ls "$SUDO_HOME/.nvm/versions/node" 2>/dev/null | tail -1)"
+                        [[ -n "$NVM_NODE" ]] && NPM_DIRS+=("$SUDO_HOME/.nvm/versions/node/$NVM_NODE/bin")
+                    fi
+                fi
+                for d in "${NPM_DIRS[@]}"; do
+                    if [[ -x "$d/npm" ]]; then export PATH="$PATH:$d"; break; fi
+                done
+            fi
+            if ! command -v npm >/dev/null 2>&1; then
+                echo "错误: 检测到前端源码有更新但服务器未装 node/npm。" >&2
+                echo "       请在本机执行 npm run build 提交产物,或服务器装 node 后重试。" >&2
+                exit 1
+            fi
+            (cd "$REPO_DIR/web" && npm install && npm run build)
+        else
+            echo "==> 前端产物已最新(源码无更新),跳过构建"
+        fi
+
+        echo "==> 编译 (go build,前端 embed)"
         CGO_ENABLED=1 go build -trimpath -o "$BIN_NAME" ./cmd/rocom-capture
         echo "    产物: $REPO_DIR/$BIN_NAME ($(du -h "$BIN_NAME" | cut -f1))"
 
