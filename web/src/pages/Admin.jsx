@@ -82,22 +82,25 @@ export default function Admin() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authed])
 
+  // 仅 401(令牌失效/未登录)才视为会话失效踢回登录页;其余错误(404/500/网络)只展示,不打断面板。
+  const kickIfUnauthed = (err) => { if (err.status === 401) setAuthed(false) }
+
   const loadRules = () => {
     setRuleErr('')
     adminRules().then((d) => setRules(d.rules || []))
-      .catch((err) => { setRuleErr(err.message); setAuthed(false) })
+      .catch((err) => { setRuleErr(err.message); kickIfUnauthed(err) })
   }
 
   const loadStats = () => {
     setStatsErr('')
     adminStats().then(setStats)
-      .catch((err) => { setStatsErr(err.message); setAuthed(false) })
+      .catch((err) => { setStatsErr(err.message); kickIfUnauthed(err) })
   }
 
   const loadPlaySessions = () => {
     setPlayErr('')
     adminPlaySessions(playAccount).then(setPlays)
-      .catch((err) => { setPlayErr(err.message); setAuthed(false) })
+      .catch((err) => { setPlayErr(err.message); kickIfUnauthed(err) })
   }
 
   const loadWildOptions = () => {
