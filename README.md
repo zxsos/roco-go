@@ -172,7 +172,11 @@ sudo ./rocom-capture -iface eth0 -socks5-addr :1080 -skip-self-ip=false \
 # 2. 首次安装(自动写 systemd service 与 /etc/rocom.env 配置模板)
 sudo ./scripts/deploy.sh
 
-# 3. 编辑配置填入网卡等参数,然后启动
+# 2b. 或从手动部署迁移(已有旧库在跑,想切到 systemd 管理)
+#     自动停旧进程、搬库与证书到 /var/lib/rocom、从旧启动参数生成 env
+sudo ./scripts/deploy.sh --migrate /root/roco
+
+# 3. 编辑配置填入网卡等参数,然后启动(非 --migrate 时需要)
 sudo vim /etc/rocom.env          # 至少填 ROCOM_IFACE=eth0
 sudo systemctl start rocom
 sudo systemctl status rocom

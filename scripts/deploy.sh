@@ -11,6 +11,7 @@
 #   sudo ./deploy.sh --archive x.tar  # 从 tar 包安装(内含 rocom-capture 单文件)
 #   sudo ./deploy.sh --stop           # 仅停止服务(不删除数据)
 #   sudo ./deploy.sh --backup         # 备份数据库到 /var/lib/rocom/backup/
+#   sudo ./deploy.sh --migrate /root/roco  # 从旧目录迁移数据并安装(首次从手动部署切到 systemd)
 #   sudo ./deploy.sh --uninstall      # 卸载程序(保留数据;加 --purge 同时删数据)
 #
 # 环境变量(在调用前 export,或写入 /etc/rocom.env):
@@ -45,12 +46,14 @@ esac
 # ---- 参数 ----
 ACTION="install"
 ARCHIVE=""
+MIGRATE_SRC=""
 PURGE=0
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --archive)  ARCHIVE="$2"; ACTION="install"; shift 2 ;;
         --stop)     ACTION="stop"; shift ;;
         --backup)   ACTION="backup"; shift ;;
+        --migrate)  ACTION="migrate"; MIGRATE_SRC="$2"; shift 2 ;;
         --uninstall) ACTION="uninstall"; shift ;;
         --purge)    PURGE=1; shift ;;
         -h|--help)  sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
@@ -207,6 +210,135 @@ case "$ACTION" in
     stop)
         systemctl stop "$SERVICE_NAME" 2>/dev/null || true
         echo "服务已停止(数据保留在 $DATA_DIR)"
+        ;;
+
+    migrate)
+        # 从手动部署(rocom-capture 直接跑在工作目录、库在工作目录下)迁移到 systemd 管理。
+        # 会:停旧进程 → 搬库与证书 → 识别旧启动参数生成 env → 安装二进制 → 启动服务。
+        SRC_DIR="$MIGRATE_SRC"
+        if [[ -z "$SRC_DIR" || ! -d "$SRC_DIR" ]]; then
+            echo "用法: sudo ./deploy.sh --migrate <旧程序目录>" >&2
+            echo "示例: sudo ./deploy.sh --migrate /root/roco" >&2
+            exit 1
+        fi
+        OLD_DB="$SRC_DIR/rocom.db"
+        if [[ ! -f "$OLD_DB" ]]; then
+            echo "错误: 未找到旧库 $OLD_DB" >&2
+            exit 1
+        fi
+
+        # 如果旧进程在跑,从 ps 提取启动参数自动生成 env
+        ENV_AUTO=0
+        OLD_PID="$(pgrep -f "$SRC_DIR/$BIN_NAME" | head -1 || true)"
+        if [[ -n "$OLD_PID" ]]; then
+            OLD_ARGS="$(tr '\0' ' ' < /proc/$OLD_PID/cmdline 2>/dev/null || true)"
+            echo "检测到旧进程 (PID $OLD_PID),提取启动参数..."
+            echo "  $OLD_ARGS"
+        else
+            OLD_ARGS=""
+            echo "未检测到运行中的旧进程,使用默认 env 模板"
+        fi
+
+        # 停旧进程(不管有没有 systemd 都停)
+        if systemctl is-active --quiet "$SERVICE_NAME" 2>/dev/null; then
+            systemctl stop "$SERVICE_NAME"
+        fi
+        pkill -f "$SRC_DIR/$BIN_NAME" 2>/dev/null || true
+        sleep 1
+
+        # 搬数据
+        mkdir -p "$DATA_DIR" "$BACKUP_DIR"
+        echo "迁移数据库: $OLD_DB → $DATA_DIR/rocom.db"
+        cp -f "$OLD_DB" "$DATA_DIR/rocom.db"
+        # WAL/shm 一起搬(存在则搬)
+        for ext in -wal -shm; do
+            if [[ -f "$OLD_DB$ext" ]]; then
+                cp -f "$OLD_DB$ext" "$DATA_DIR/rocom.db$ext"
+            fi
+        done
+        # 证书(存在则搬)
+        for f in rocom-cert.pem rocom-key.pem; do
+            if [[ -f "$SRC_DIR/$f" ]]; then
+                cp -f "$SRC_DIR/$f" "$DATA_DIR/$f"
+                echo "迁移证书: $SRC_DIR/$f → $DATA_DIR/$f"
+            fi
+        done
+
+        # 从旧启动参数解析出 env(仅当旧进程在跑时)
+        if [[ -n "$OLD_ARGS" ]]; then
+            # 临时清空 env,逐个解析填充
+            ROCOM_IFACE="" ROCOM_PORT="" ROCOM_ADDR="" ROCOM_TLS=""
+            ROCOM_SOCKS5_ADDR="" ROCOM_SOCKS5_ALLOW="" ROCOM_SOCKS5_USER="" ROCOM_SOCKS5_PASS=""
+            ROCOM_SKIP_SELF_IP="" ROCOM_EXTRA=""
+
+            # 用空格切,遍历 -key value 对
+            set -- $OLD_ARGS
+            while [[ $# -gt 0 ]]; do
+                case "$1" in
+                    -iface)         ROCOM_IFACE="$2"; shift 2 ;;
+                    -port)          ROCOM_PORT="$2"; shift 2 ;;
+                    -addr)          ROCOM_ADDR="$2"; shift 2 ;;
+                    -tls)           ROCOM_TLS=1; shift ;;
+                    -socks5-addr)   ROCOM_SOCKS5_ADDR="$2"; shift 2 ;;
+                    -socks5-allow)  ROCOM_SOCKS5_ALLOW="$2"; shift 2 ;;
+                    -socks5-user)   ROCOM_SOCKS5_USER="$2"; shift 2 ;;
+                    -socks5-pass)   ROCOM_SOCKS5_PASS="$2"; shift 2 ;;
+                    -skip-self-ip)  ROCOM_SKIP_SELF_IP="$2"; shift 2 ;;
+                    -db|-cert|-key|rocom-capture|sudo) shift ;;
+                    -socks5-max-conns) shift 2 ;;  # systemd service 用默认值
+                    *) shift ;;
+                esac
+            done
+
+            # 写 env(覆盖,因为是从旧进程提取的)
+            cat > "$ENV_FILE" <<EOF
+# rocom-capture 运行参数(由 deploy.sh --migrate 从旧进程自动生成)
+# 抓包网卡
+ROCOM_IFACE=${ROCOM_IFACE:-eth0}
+# 游戏端口
+ROCOM_PORT=${ROCOM_PORT:-8195}
+# Web 监听地址
+ROCOM_ADDR=${ROCOM_ADDR:-:4939}
+# 启用 HTTPS(1=启用)
+ROCOM_TLS=${ROCOM_TLS:-}
+# SOCKS5 代理(留空=不启用)
+ROCOM_SOCKS5_ADDR=${ROCOM_SOCKS5_ADDR:-}
+ROCOM_SOCKS5_ALLOW=${ROCOM_SOCKS5_ALLOW:-}
+ROCOM_SOCKS5_USER=${ROCOM_SOCKS5_USER:-}
+ROCOM_SOCKS5_PASS=${ROCOM_SOCKS5_PASS:-}
+ROCOM_SKIP_SELF_IP=${ROCOM_SKIP_SELF_IP:-false}
+# 其他透传参数
+ROCOM_EXTRA=
+EOF
+            chmod 600 "$ENV_FILE"
+            ENV_AUTO=1
+            echo "已从旧进程参数生成 $ENV_FILE"
+        fi
+
+        # 安装二进制
+        SRC_BIN="$(find_binary)"
+        mkdir -p "$INSTALL_DIR"
+        echo "安装二进制: $SRC_BIN → $INSTALL_DIR/$BIN_NAME"
+        cp -f "$SRC_BIN" "$INSTALL_DIR/$BIN_NAME"
+        chmod +x "$INSTALL_DIR/$BIN_NAME"
+
+        write_service
+        if [[ "$ENV_AUTO" -eq 0 ]]; then
+            write_env  # 没从旧进程提取到参数,用默认模板
+        fi
+
+        systemctl daemon-reload
+        systemctl enable "$SERVICE_NAME" 2>/dev/null || true
+
+        echo "启动服务..."
+        systemctl restart "$SERVICE_NAME"
+        sleep 1
+        systemctl status "$SERVICE_NAME" --no-pager || true
+        echo ""
+        echo "==> 迁移完成。"
+        echo "    旧目录 $SRC_DIR 可在确认无误后手动删除:"
+        echo "      rm -rf $SRC_DIR"
+        echo "    数据已迁移到 $DATA_DIR,日志: journalctl -u rocom -f"
         ;;
 
     backup)
