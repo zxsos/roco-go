@@ -8,6 +8,7 @@
 #
 # 用法:
 #   sudo ./deploy.sh                  # 首次安装或更新二进制(自动判断)
+#   sudo ./deploy.sh --binary /tmp/rocom-capture  # 指定二进制路径
 #   sudo ./deploy.sh --archive x.tar  # 从 tar 包安装(内含 rocom-capture 单文件)
 #   sudo ./deploy.sh --stop           # 仅停止服务(不删除数据)
 #   sudo ./deploy.sh --backup         # 备份数据库到 /var/lib/rocom/backup/
@@ -46,17 +47,19 @@ esac
 # ---- 参数 ----
 ACTION="install"
 ARCHIVE=""
+BINARY=""
 MIGRATE_SRC=""
 PURGE=0
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --archive)  ARCHIVE="$2"; ACTION="install"; shift 2 ;;
+        --binary)   BINARY="$2"; ACTION="install"; shift 2 ;;
         --stop)     ACTION="stop"; shift ;;
         --backup)   ACTION="backup"; shift ;;
         --migrate)  ACTION="migrate"; MIGRATE_SRC="$2"; shift 2 ;;
         --uninstall) ACTION="uninstall"; shift ;;
         --purge)    PURGE=1; shift ;;
-        -h|--help)  sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+        -h|--help)  sed -n '2,22p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
         *) echo "未知参数: $1" >&2; exit 1 ;;
     esac
 done
@@ -69,7 +72,16 @@ fi
 
 # ---- 确定二进制来源 ----
 find_binary() {
-    # 1) --archive 指定的 tar 包
+    # 1) --binary 直接指定路径
+    if [[ -n "$BINARY" ]]; then
+        if [[ ! -f "$BINARY" ]]; then
+            echo "错误: --binary 指定的文件不存在: $BINARY" >&2
+            exit 1
+        fi
+        echo "$BINARY"
+        return
+    fi
+    # 2) --archive 指定的 tar 包
     if [[ -n "$ARCHIVE" ]]; then
         local tmp; tmp="$(mktemp -d)"
         tar -xf "$ARCHIVE" -C "$tmp"
