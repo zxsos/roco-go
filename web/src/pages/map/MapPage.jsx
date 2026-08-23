@@ -27,6 +27,10 @@ export default function MapPage() {
           sidebarOpen={sidebarOpen}
           onToggleLayers={toggleLayers} />
       </div>
+      {/* 移动端图层抽屉入口:浮在页面左下角,独立于地图加载状态(地图未加载时也能打开图层栏)。
+          桌面端由 CSS display:none 隐藏——桌面用右上角 ☰ 控制侧栏。 */}
+      <button className="map-btn map-layers-btn" title="图层" aria-label="图层"
+        onClick={toggleLayers}>☰</button>
     </div>
   )
 }

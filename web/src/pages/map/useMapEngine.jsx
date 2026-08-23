@@ -286,8 +286,6 @@ export function MapViz({ engine, sidebarOpen, onToggleLayers }) {
               <path d="M12 2 L20 21 L12 16 L4 21 Z" fill="var(--red)" stroke="#fff" strokeWidth="1.5" strokeLinejoin="round" />
             </svg>
           </div>
-          <button className="map-btn map-ctrl map-layers-btn" title="图层"
-            onClick={onToggleLayers}>☰</button>
           <div className="map-ctrl">
             <button className={'map-btn map-layers-toggle' + (sidebarOpen ? ' on' : '')} title="图层栏"
               onClick={onToggleLayers}>☰</button>
