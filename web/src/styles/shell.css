@@ -97,6 +97,7 @@
    注意:hover 在触屏上首次 tap 后会"粘住",但 useReveal 的 .reveal 会覆盖它,
    且松手移除 .reveal 后只要不再 tap,hover 粘性不会持续——实测可接受。 */
 @media (hover: hover) {
+  .brand:hover .privacy,
   .account-trigger:hover .privacy,
   .account-item:hover .privacy,
   .privacy:hover { filter: none; }
