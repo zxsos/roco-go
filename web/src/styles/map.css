@@ -128,17 +128,10 @@
 }
 .map-btn:active { transform: translateY(0) scale(.94); }
 .map-btn.on { color: var(--accent); border-color: var(--accent); background: rgba(76, 141, 255, .14); }
-/* 图层抽屉入口(移动端):浮在 .map-page 左下角(不在 .map-vp 内,独立于地图加载状态,
-   地图未就绪时也能打开图层栏)。必须写在 .map-btn 之后,否则被其 display:flex 盖掉。
-   position:absolute/fixed 需显式声明——.map-btn 未自带 position。z-index 盖在地图之上。 */
-.map-layers-btn {
-  display: none; position: absolute; left: 10px; bottom: 10px; z-index: 20;
-}
-/* 右上角控制组里的 ☰(图层侧栏开关):移动端隐藏——抽屉入口已在左下角,避免重复 */
+.map-btn:disabled { opacity: .4; cursor: default; }
+.map-btn:disabled:hover { transform: none; border-color: var(--line); color: var(--fg-dim); background: rgba(28, 34, 48, .82); box-shadow: none; }
+/* 右上角控制组里的 ☰(图层侧栏开关):桌面折叠/展开侧栏,移动端开/关图层抽屉 */
 .map-layers-toggle { display: flex; }
-@media (max-width: 760px) {
-  .map-layers-toggle { display: none; }
-}
 
 /* POI 标记(炼金釜/魔力之源/…):在 .map-world 内按底图归一化坐标定位,尺寸恒定不随缩放变大,
    故用 translate(-50%,-50%) 把图标中心对准锚点。
@@ -437,10 +430,9 @@
 }
 .map-layer-btn.on > .muted { background: rgba(76, 141, 255, .22); color: var(--accent); }
 
-/* 窄屏:图层栏收进侧滑抽屉(同宠物列表的筛选),地图占满整宽,左下角浮出图层入口。 */
+/* 窄屏:图层栏收进侧滑抽屉(同宠物列表的筛选),地图占满整宽。 */
 @media (max-width: 760px) {
   .map-layout { grid-template-columns: 1fr; }
-  .map-layers-btn { display: flex; }
 }
 
 /* 「等待位置数据」空状态:配合地图整页布局,给一个柔和的渐入与轻微呼吸。 */
