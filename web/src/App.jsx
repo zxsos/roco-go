@@ -3,7 +3,6 @@ import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import { getAccounts, getCurrentAccount, setCurrentAccount, getIcons } from './api'
 import { AccountContext, IconsContext } from './context'
 import { useFullscreen } from './hooks/useFullscreen'
-import { useReveal } from './hooks/useReveal'
 import { PinDialog } from './components/PinDialog'
 import { dropBoxFilter } from './pages/pet-list/filters'
 
@@ -33,10 +32,15 @@ export default function App() {
     if (location.pathname === to) window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
-  // 截图防泄(常驻模糊 + 按需揭示):敏感文字(顶栏昵称/UID)默认模糊,鼠标悬停(桌面)
-  // 或长按(触屏≥400ms)才揭示。不依赖任何窗口焦点/鼠标进出事件——那些在触屏上不可靠
-  // (tap 合成 mouseenter 且无 mouseleave 恢复),且截图/录屏根本不触发 DOM 事件。
-  // 桌面揭示走 CSS :hover,触屏揭示由 useReveal hook 管(见 AccountSelect/AccountItem)。
+  // 截图防泄(全局开关):点击顶栏品牌名「洛克妙妙屋」切换。默认开启——敏感文字
+  // (昵称/UID)常驻模糊,点击品牌名解除全部,再点恢复。不依赖任何窗口焦点/鼠标/触屏事件,
+  // 手机电脑行为一致,截图/录屏/投屏都不触发 DOM 事件故默认即保护最可靠。
+  // 状态打在 <html data-privacy> 上,CSS 据此模糊 .privacy 元素;品牌名本身遮罩开启时变暗。
+  const [privacyOn, setPrivacyOn] = useState(true)
+  useEffect(() => {
+    document.documentElement.toggleAttribute('data-privacy', privacyOn)
+  }, [privacyOn])
+  const togglePrivacy = () => setPrivacyOn((v) => !v)
 
   // 全局固定图标只随游戏版本变,拉一次即可。
   useEffect(() => { getIcons().then((d) => setIcons(d || { stat: {} })).catch(() => {}) }, [])
@@ -116,7 +120,10 @@ export default function App() {
       <IconsContext.Provider value={icons}>
       <div className="app">
         <header className="topbar">
-          <div className="brand"><img className="brand-logo" src="/logo.svg" alt="" draggable={false} />洛克妙妙屋</div>
+          <button type="button" className={'brand' + (privacyOn ? ' privacy-on' : '')}
+            onClick={togglePrivacy} title={privacyOn ? '点击解除遮罩' : '点击开启遮罩'}>
+            <img className="brand-logo" src="/logo.svg" alt="" draggable={false} /><span className="privacy">洛克妙妙屋</span>
+          </button>
           <nav className="topnav">{navLinks('navlink')}</nav>
           {fullscreen.supported && (
             <button type="button" className={'topbar-fs' + (fullscreen.isFull ? ' on' : '')}
@@ -186,8 +193,6 @@ function AccountSelect({ accounts, current, onChange, uidOf, onManagePin, onDele
   const [hi, setHi] = useState(0) // 高亮项索引(键盘 ↑↓ 移动)
   const rootRef = useRef(null)
   const listRef = useRef(null)
-  // 顶栏当前账号名/UID 的触屏长按揭示(桌面靠 :hover,见 CSS)
-  const trigReveal = useReveal()
 
   // 点外部关闭
   useEffect(() => {
@@ -255,9 +260,6 @@ function AccountSelect({ accounts, current, onChange, uidOf, onManagePin, onDele
         type="button"
         className={'select account-select account-trigger' + (open ? ' open' : '')}
         onClick={() => setOpen((o) => !o)}
-        onTouchStart={trigReveal.press}
-        onTouchEnd={trigReveal.release}
-        onTouchCancel={trigReveal.release}
         title="切换账号(玩家)"
         aria-haspopup="listbox"
         aria-expanded={open}
@@ -266,7 +268,7 @@ function AccountSelect({ accounts, current, onChange, uidOf, onManagePin, onDele
           <img className="account-state" src={current.online ? '/login.svg' : '/logout.svg'}
             alt="" draggable={false} title={current.online ? '在线' : '离线'} />
         )}
-        <span className={'privacy account-trigger-name' + (trigReveal.revealed ? ' reveal' : '')}>
+        <span className="privacy account-trigger-name">
           {current ? `${current.name} (UID:${uidOf(current.account)})` : '选择账号…'}
         </span>
         {current?.hasPin && <span className="account-pin-mark" title="已设 PIN 保护">🔒</span>}
@@ -304,10 +306,8 @@ function AccountSelect({ accounts, current, onChange, uidOf, onManagePin, onDele
   )
 }
 
-// AccountItem 下拉里的单条账号:自持 useReveal,触屏长按揭示昵称/UID(桌面 :hover)。
-// 从 AccountSelect 抽出,因为 hook 不能在 .map 回调里直接调。
+// AccountItem 下拉里的单条账号。
 function AccountItem({ account, cur, hi, uidOf, onChoose, onHover }) {
-  const r = useReveal()
   return (
     <li
       role="option"
@@ -315,15 +315,12 @@ function AccountItem({ account, cur, hi, uidOf, onChoose, onHover }) {
       className={'account-item' + (cur ? ' cur' : '') + (hi ? ' hi' : '')}
       onMouseDown={(e) => { e.preventDefault(); onChoose() }}
       onMouseEnter={onHover}
-      onTouchStart={r.press}
-      onTouchEnd={r.release}
-      onTouchCancel={r.release}
     >
       <img className="account-state" src={account.online ? '/login.svg' : '/logout.svg'}
         alt="" draggable={false} title={account.online ? '在线' : '离线'} />
-      <span className={'privacy account-item-name' + (r.revealed ? ' reveal' : '')}>{account.name}</span>
+      <span className="privacy account-item-name">{account.name}</span>
       {account.hasPin && <span className="account-item-pin" title="已设 PIN">🔒</span>}
-      <span className={'muted privacy account-item-uid' + (r.revealed ? ' reveal' : '')}>UID:{uidOf(account.account)}</span>
+      <span className="muted privacy account-item-uid">UID:{uidOf(account.account)}</span>
     </li>
   )
 }

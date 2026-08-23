@@ -9,7 +9,7 @@
   padding: 10px 16px; background: rgba(22, 27, 34, .92); backdrop-filter: blur(10px);
   border-bottom: 1px solid var(--line);
 }
-.brand { display: flex; align-items: center; gap: 7px; font-weight: 700; font-size: 16px; }
+.brand { display: flex; align-items: center; gap: 7px; font-weight: 700; font-size: 16px; font: inherit; cursor: pointer; background: none; border: none; padding: 0; transition: color .15s ease; }
 .brand-logo { width: 22px; height: 22px; border-radius: 6px; flex: none; }
 .topnav { display: flex; gap: 4px; }
 .navlink {
@@ -81,28 +81,17 @@
 .account-del-btn { color: var(--fg-dim); }
 .account-del-btn:hover { color: var(--red); border-color: var(--red); }
 
-/* ---- 截图防泄(常驻模糊 + 按需揭示)----
-   .privacy 默认模糊敏感文字(昵称、UID),无论桌面还是触屏都常驻——截图/录屏/投屏
-   不触发任何 DOM 事件,故不依赖窗口焦点/鼠标进出,默认就模糊最可靠。
-   揭示方式:桌面靠 :hover(纯 CSS);触屏(hover:none)无 hover,由 useReveal hook
-   在长按≥400ms 后给元素加 .reveal 类,松手移除。两套互不干扰。 */
-.privacy {
+/* ---- 截图防泄(全局开关)----
+   点击顶栏品牌名「洛克妙妙屋」切换:默认开启(html 有 data-privacy 属性),
+   敏感文字(.privacy:昵称/UID)常驻模糊;点击品牌名解除全部,再点恢复。
+   不依赖任何窗口焦点/鼠标/触屏事件——截图/录屏/投屏不触发 DOM 事件,默认即保护最可靠。
+   品牌名遮罩开启时变暗,作为当前模式的视觉提示。 */
+html[data-privacy] .privacy {
   filter: blur(5px);
   transition: filter .12s ease;
   user-select: none;
-  /* 触屏长按时禁止系统选择菜单/长按菜单弹出 */
-  -webkit-touch-callout: none;
 }
-/* 桌面:hover 整个元素即揭示(也覆盖其内的 .privacy 子元素)。
-   注意:hover 在触屏上首次 tap 后会"粘住",但 useReveal 的 .reveal 会覆盖它,
-   且松手移除 .reveal 后只要不再 tap,hover 粘性不会持续——实测可接受。 */
-@media (hover: hover) {
-  .account-trigger:hover .privacy,
-  .account-item:hover .privacy,
-  .privacy:hover { filter: none; }
-}
-/* 触屏长按揭示(useReveal 加 .reveal);桌面若有 .reveal 也一并揭示(便于键盘聚焦等) */
-.privacy.reveal { filter: none; }
+html[data-privacy] .brand { color: var(--fg-dim); }
 
 /* ---- 底部 tab(移动) ---- */
 .bottomnav { display: none; }
