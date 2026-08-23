@@ -240,6 +240,16 @@ export const adminStats = () => adminFetch('/api/admin/stats').then(async (r) =>
   return r.json()
 })
 
+// adminPlaySessions 游玩记录:{sessions:[{account,name,loginTime,logoutTime,duration,online}],
+// summary:{online,todaySessions,todayDuration,daily:[{day,sessions,duration}]}}。
+// account=账号过滤(空=全部);limit=明细条数(默认200)。
+export const adminPlaySessions = (account = '', limit = 200) =>
+  adminFetch('/api/admin/play-sessions?account=' + encodeURIComponent(account) + '&limit=' + limit)
+    .then(async (r) => {
+      if (!r.ok) throw new Error('拉取游玩记录失败(' + r.status + ')')
+      return r.json()
+    })
+
 // adminWildPetOptions 可投放的野生宠物形态:{options:[{base,name,book}]}。
 export const adminWildPetOptions = () => adminFetch('/api/admin/wild-pets').then(async (r) => {
   if (!r.ok) throw new Error('拉取形态列表失败(' + r.status + ')')
