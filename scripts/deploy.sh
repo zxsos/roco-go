@@ -196,7 +196,16 @@ case "$ACTION" in
         cd "$REPO_DIR"
         git pull --ff-only
 
-        # 确认 go 可用
+        # 确认 go 可用:sudo 的 secure_path 可能不含 go 的安装路径,
+        # 从常见位置(/usr/local/go/bin、$HOME/go/bin、原用户 PATH)自动补找。
+        if ! command -v go >/dev/null 2>&1; then
+            for d in /usr/local/go/bin /usr/lib/go/bin "$HOME/go/bin" "${SUDO_USER:+$(getent passwd "$SUDO_USER" | cut -d: -f6)/go/bin}"; do
+                if [[ -x "$d/go" ]]; then
+                    export PATH="$PATH:$d"
+                    break
+                fi
+            done
+        fi
         if ! command -v go >/dev/null 2>&1; then
             echo "错误: 未找到 go,请先安装 Go。" >&2
             exit 1
