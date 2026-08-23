@@ -31,6 +31,7 @@ set -euo pipefail
 
 # ---- 目录约定 ----
 INSTALL_DIR="/opt/rocom"
+RUN_SCRIPT="$INSTALL_DIR/run.sh"
 DATA_DIR="/var/lib/rocom"
 BACKUP_DIR="$DATA_DIR/backup"
 SERVICE_NAME="rocom"
@@ -114,7 +115,37 @@ find_binary() {
 
 # ---- 生成 systemd service 文件 ----
 write_service() {
-    cat > "$SERVICE_FILE" <<'EOF'
+    # 启动脚本:systemd 的 ExecStart 不支持 ${VAR:+...} 条件展开,
+    # 参数组装放在 bash 脚本里做(通过 systemctl edit 或改 /etc/rocom.env 调整参数)。
+    cat > "$RUN_SCRIPT" <<'EOF'
+#!/usr/bin/env bash
+# 由 deploy.sh 生成,勿手改;参数调整请编辑 /etc/rocom.env
+BIN=/opt/rocom/rocom-capture
+args=(
+  -db /var/lib/rocom/rocom.db
+  -cert /var/lib/rocom/rocom-cert.pem
+  -key /var/lib/rocom/rocom-key.pem
+)
+[[ -n "${ROCOM_IFACE:-}" ]] && args+=(-iface "$ROCOM_IFACE")
+[[ -n "${ROCOM_PORT:-}" ]] && args+=(-port "$ROCOM_PORT")
+[[ -n "${ROCOM_ADDR:-}" ]] && args+=(-addr "$ROCOM_ADDR")
+[[ -n "${ROCOM_TLS:-}" ]] && args+=(-tls)
+if [[ -n "${ROCOM_SOCKS5_ADDR:-}" ]]; then
+  args+=(-socks5-addr "$ROCOM_SOCKS5_ADDR")
+  args+=(-skip-self-ip "${ROCOM_SKIP_SELF_IP:-false}")
+fi
+[[ -n "${ROCOM_SOCKS5_ALLOW:-}" ]] && args+=(-socks5-allow "$ROCOM_SOCKS5_ALLOW")
+if [[ -n "${ROCOM_SOCKS5_USER:-}" ]]; then
+  args+=(-socks5-user "$ROCOM_SOCKS5_USER")
+  [[ -n "${ROCOM_SOCKS5_PASS:-}" ]] && args+=(-socks5-pass "$ROCOM_SOCKS5_PASS")
+fi
+# ROCOM_EXTRA 按空格拆分透传(可含多个 flag)
+read -r -a extra <<< "${ROCOM_EXTRA:-}"
+args+=("${extra[@]}")
+exec "$BIN" "${args[@]}"
+EOF
+    chmod +x "$RUN_SCRIPT"
+    cat > "$SERVICE_FILE" <<EOF
 [Unit]
 Description=rocom-capture (游戏流量抓包与统计)
 After=network-online.target
@@ -125,18 +156,7 @@ Type=simple
 # 环境变量从 /etc/rocom.env 读取(IFACE / SOCKS5 等,见 deploy.sh 注释)
 EnvironmentFile=-/etc/rocom.env
 # 数据库与证书放在 /var/lib/rocom 下,更新二进制不动数据
-ExecStart=/opt/rocom/rocom-capture \
-    -db /var/lib/rocom/rocom.db \
-    -cert /var/lib/rocom/rocom-cert.pem \
-    -key /var/lib/rocom/rocom-key.pem \
-    -iface ${ROCOM_IFACE} \
-    -port ${ROCOM_PORT:-8195} \
-    -addr ${ROCOM_ADDR:-:4939} \
-    ${ROCOM_TLS:+-tls} \
-    ${ROCOM_SOCKS5_ADDR:+-socks5-addr ${ROCOM_SOCKS5_ADDR} -skip-self-ip=${ROCOM_SKIP_SELF_IP:-false}} \
-    ${ROCOM_SOCKS5_ALLOW:+-socks5-allow ${ROCOM_SOCKS5_ALLOW}} \
-    ${ROCOM_SOCKS5_USER:+-socks5-user ${ROCOM_SOCKS5_USER} -socks5-pass ${ROCOM_SOCKS5_PASS}} \
-    ${ROCOM_EXTRA}
+ExecStart=$RUN_SCRIPT
 # 抓包需要 root(afpacket);如用 pcap 模式可改为专用用户
 User=root
 # 崩溃自动重启
@@ -152,7 +172,7 @@ SyslogIdentifier=rocom
 [Install]
 WantedBy=multi-user.target
 EOF
-    echo "已写入 $SERVICE_FILE"
+    echo "已写入 $SERVICE_FILE 与 $RUN_SCRIPT"
 }
 
 # ---- 生成环境变量文件 ----
