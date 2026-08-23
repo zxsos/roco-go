@@ -33,11 +33,10 @@ export default function App() {
     if (location.pathname === to) window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
-  // 截图防泄(常驻模糊 + 按需揭示):敏感文字(顶栏品牌名/昵称/UID)默认模糊,鼠标悬停(桌面)
+  // 截图防泄(常驻模糊 + 按需揭示):敏感文字(顶栏昵称/UID)默认模糊,鼠标悬停(桌面)
   // 或长按(触屏≥400ms)才揭示。不依赖任何窗口焦点/鼠标进出事件——那些在触屏上不可靠
   // (tap 合成 mouseenter 且无 mouseleave 恢复),且截图/录屏根本不触发 DOM 事件。
   // 桌面揭示走 CSS :hover,触屏揭示由 useReveal hook 管(见 AccountSelect/AccountItem)。
-  const brandReveal = useReveal()
 
   // 全局固定图标只随游戏版本变,拉一次即可。
   useEffect(() => { getIcons().then((d) => setIcons(d || { stat: {} })).catch(() => {}) }, [])
@@ -117,7 +116,7 @@ export default function App() {
       <IconsContext.Provider value={icons}>
       <div className="app">
         <header className="topbar">
-          <div className="brand"><img className="brand-logo" src="/logo.svg" alt="" draggable={false} /><span className={'privacy' + (brandReveal.revealed ? ' reveal' : '')} onTouchStart={brandReveal.press} onTouchEnd={brandReveal.release} onTouchCancel={brandReveal.release}>洛克妙妙屋</span></div>
+          <div className="brand"><img className="brand-logo" src="/logo.svg" alt="" draggable={false} />洛克妙妙屋</div>
           <nav className="topnav">{navLinks('navlink')}</nav>
           {fullscreen.supported && (
             <button type="button" className={'topbar-fs' + (fullscreen.isFull ? ' on' : '')}
