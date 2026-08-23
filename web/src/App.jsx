@@ -1,8 +1,9 @@
-import React, { useEffect, useState, useRef, useMemo } from 'react'
+import React, { useEffect, useState } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import { getAccounts, getCurrentAccount, setCurrentAccount, getIcons } from './api'
 import { AccountContext, IconsContext } from './context'
 import { useFullscreen } from './hooks/useFullscreen'
+import { useReveal } from './hooks/useReveal'
 import { PinDialog } from './components/PinDialog'
 import { dropBoxFilter } from './pages/pet-list/filters'
 
@@ -32,44 +33,10 @@ export default function App() {
     if (location.pathname === to) window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
-  // 截图防泄(反向):默认隐藏(打 data-blur),只有窗口真正聚焦 + 鼠标在窗口内 + 页面
-  // 可见,三者都满足时才显示。窗口失焦/鼠标移出/切 tab 任一发生即恢复隐藏。
-  // 平时看不到 UID/昵称,只有用户主动盯着页面看时才显示——窗口焦点本身就是显示开关。
-  // 注意:触屏(hover: none)没有"鼠标移出窗口"概念,且每次 tap 都会合成 mouseenter,
-  // 若对触屏也维护鼠标进出判定,会点一次就清掉遮罩且再无 mouseleave 恢复(遮罩永久失效),
-  // 故该判定只对 hover 设备(桌面鼠标/触控板)启用;触屏仅靠窗口焦点与页面可见性。
-  const inWindowRef = useRef(true) // 鼠标是否在窗口内(仅 hover 设备有意义;必须在组件顶层声明,不能在 effect 里调 hook)
-  useEffect(() => {
-    const root = document.documentElement
-    const apply = () => root.setAttribute('data-blur', '')
-    const clear = () => root.removeAttribute('data-blur')
-    const hoverable = window.matchMedia && window.matchMedia('(hover: hover)').matches
-    // 三重判定的"显示"条件:窗口聚焦 + 鼠标在窗口内 + 页面可见
-    const hasFocus = () => document.hasFocus() && !document.hidden
-    const recheck = () => {
-      if (hasFocus() && inWindowRef.current) clear()
-      else apply()
-    }
-    const onBlur = () => recheck()
-    const onFocus = () => recheck()
-    const onLeave = (e) => { if (hoverable && e.relatedTarget === null) { inWindowRef.current = false; recheck() } }
-    const onEnter = () => { if (hoverable) { inWindowRef.current = true; recheck() } }
-    const onVis = () => recheck()
-    window.addEventListener('blur', onBlur)
-    window.addEventListener('focus', onFocus)
-    document.addEventListener('mouseleave', onLeave)
-    document.addEventListener('mouseenter', onEnter)
-    document.addEventListener('visibilitychange', onVis)
-    // 初次挂载:默认隐藏
-    apply()
-    return () => {
-      window.removeEventListener('blur', onBlur)
-      window.removeEventListener('focus', onFocus)
-      document.removeEventListener('mouseleave', onLeave)
-      document.removeEventListener('mouseenter', onEnter)
-      document.removeEventListener('visibilitychange', onVis)
-    }
-  }, [])
+  // 截图防泄(常驻模糊 + 按需揭示):敏感文字(顶栏昵称/UID)默认模糊,鼠标悬停(桌面)
+  // 或长按(触屏≥400ms)才揭示。不依赖任何窗口焦点/鼠标进出事件——那些在触屏上不可靠
+  // (tap 合成 mouseenter 且无 mouseleave 恢复),且截图/录屏根本不触发 DOM 事件。
+  // 桌面揭示走 CSS :hover,触屏揭示由 useReveal hook 管(见 AccountSelect/AccountItem)。
 
   // 全局固定图标只随游戏版本变,拉一次即可。
   useEffect(() => { getIcons().then((d) => setIcons(d || { stat: {} })).catch(() => {}) }, [])
@@ -219,6 +186,8 @@ function AccountSelect({ accounts, current, onChange, uidOf, onManagePin, onDele
   const [hi, setHi] = useState(0) // 高亮项索引(键盘 ↑↓ 移动)
   const rootRef = useRef(null)
   const listRef = useRef(null)
+  // 顶栏当前账号名/UID 的触屏长按揭示(桌面靠 :hover,见 CSS)
+  const trigReveal = useReveal()
 
   // 点外部关闭
   useEffect(() => {
@@ -286,6 +255,9 @@ function AccountSelect({ accounts, current, onChange, uidOf, onManagePin, onDele
         type="button"
         className={'select account-select account-trigger' + (open ? ' open' : '')}
         onClick={() => setOpen((o) => !o)}
+        onTouchStart={trigReveal.press}
+        onTouchEnd={trigReveal.release}
+        onTouchCancel={trigReveal.release}
         title="切换账号(玩家)"
         aria-haspopup="listbox"
         aria-expanded={open}
@@ -294,7 +266,7 @@ function AccountSelect({ accounts, current, onChange, uidOf, onManagePin, onDele
           <img className="account-state" src={current.online ? '/login.svg' : '/logout.svg'}
             alt="" draggable={false} title={current.online ? '在线' : '离线'} />
         )}
-        <span className="account-trigger-name">
+        <span className={'privacy account-trigger-name' + (trigReveal.revealed ? ' reveal' : '')}>
           {current ? `${current.name} (UID:${uidOf(current.account)})` : '选择账号…'}
         </span>
         {current?.hasPin && <span className="account-pin-mark" title="已设 PIN 保护">🔒</span>}
@@ -303,24 +275,15 @@ function AccountSelect({ accounts, current, onChange, uidOf, onManagePin, onDele
       {open && (
         <ul className="account-dropdown" ref={listRef} role="listbox">
           {accounts.map((a, i) => (
-            <li
+            <AccountItem
               key={a.account}
-              role="option"
-              aria-selected={current && a.account === current.account}
-              className={
-                'account-item' +
-                (current && a.account === current.account ? ' cur' : '') +
-                (i === hi ? ' hi' : '')
-              }
-              onMouseDown={(e) => { e.preventDefault(); choose(a) }}
-              onMouseEnter={() => setHi(i)}
-            >
-              <img className="account-state" src={a.online ? '/login.svg' : '/logout.svg'}
-                alt="" draggable={false} title={a.online ? '在线' : '离线'} />
-              <span className="account-item-name">{a.name}</span>
-              {a.hasPin && <span className="account-item-pin" title="已设 PIN">🔒</span>}
-              <span className="muted account-item-uid">UID:{uidOf(a.account)}</span>
-            </li>
+              account={a}
+              cur={current && a.account === current.account}
+              hi={i === hi}
+              uidOf={uidOf}
+              onChoose={() => choose(a)}
+              onHover={() => setHi(i)}
+            />
           ))}
           {/* 当前账号的 PIN 管理 + 删除入口 */}
           {current && (
@@ -338,5 +301,29 @@ function AccountSelect({ accounts, current, onChange, uidOf, onManagePin, onDele
         </ul>
       )}
     </div>
+  )
+}
+
+// AccountItem 下拉里的单条账号:自持 useReveal,触屏长按揭示昵称/UID(桌面 :hover)。
+// 从 AccountSelect 抽出,因为 hook 不能在 .map 回调里直接调。
+function AccountItem({ account, cur, hi, uidOf, onChoose, onHover }) {
+  const r = useReveal()
+  return (
+    <li
+      role="option"
+      aria-selected={cur}
+      className={'account-item' + (cur ? ' cur' : '') + (hi ? ' hi' : '')}
+      onMouseDown={(e) => { e.preventDefault(); onChoose() }}
+      onMouseEnter={onHover}
+      onTouchStart={r.press}
+      onTouchEnd={r.release}
+      onTouchCancel={r.release}
+    >
+      <img className="account-state" src={account.online ? '/login.svg' : '/logout.svg'}
+        alt="" draggable={false} title={account.online ? '在线' : '离线'} />
+      <span className={'privacy account-item-name' + (r.revealed ? ' reveal' : '')}>{account.name}</span>
+      {account.hasPin && <span className="account-item-pin" title="已设 PIN">🔒</span>}
+      <span className={'muted privacy account-item-uid' + (r.revealed ? ' reveal' : '')}>UID:{uidOf(account.account)}</span>
+    </li>
   )
 }

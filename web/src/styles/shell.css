@@ -81,20 +81,28 @@
 .account-del-btn { color: var(--fg-dim); }
 .account-del-btn:hover { color: var(--red); border-color: var(--red); }
 
-/* ---- 截图防泄:窗口失焦时模糊顶栏敏感文字(昵称、UID) ----
-   html[data-blur] 由 App.jsx 监听 window blur/visibilitychange 打上。
-   account-item-name/uid 也在内,确保展开下拉时同样模糊。 */
-html[data-blur] .account-trigger-name,
-html[data-blur] .account-item-name,
-html[data-blur] .account-item-uid {
+/* ---- 截图防泄(常驻模糊 + 按需揭示)----
+   .privacy 默认模糊敏感文字(昵称、UID),无论桌面还是触屏都常驻——截图/录屏/投屏
+   不触发任何 DOM 事件,故不依赖窗口焦点/鼠标进出,默认就模糊最可靠。
+   揭示方式:桌面靠 :hover(纯 CSS);触屏(hover:none)无 hover,由 useReveal hook
+   在长按≥400ms 后给元素加 .reveal 类,松手移除。两套互不干扰。 */
+.privacy {
   filter: blur(5px);
   transition: filter .12s ease;
   user-select: none;
+  /* 触屏长按时禁止系统选择菜单/长按菜单弹出 */
+  -webkit-touch-callout: none;
 }
-/* 聚焦回窗口时平滑恢复 */
-.account-trigger-name, .account-item-name, .account-item-uid {
-  transition: filter .12s ease;
+/* 桌面:hover 整个元素即揭示(也覆盖其内的 .privacy 子元素)。
+   注意:hover 在触屏上首次 tap 后会"粘住",但 useReveal 的 .reveal 会覆盖它,
+   且松手移除 .reveal 后只要不再 tap,hover 粘性不会持续——实测可接受。 */
+@media (hover: hover) {
+  .account-trigger:hover .privacy,
+  .account-item:hover .privacy,
+  .privacy:hover { filter: none; }
 }
+/* 触屏长按揭示(useReveal 加 .reveal);桌面若有 .reveal 也一并揭示(便于键盘聚焦等) */
+.privacy.reveal { filter: none; }
 
 /* ---- 底部 tab(移动) ---- */
 .bottomnav { display: none; }
