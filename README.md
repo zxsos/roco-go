@@ -167,24 +167,19 @@ sudo ./rocom-capture -iface eth0 -socks5-addr :1080 -skip-self-ip=false \
 `scripts/deploy.sh` 自动完成「程序装 `/opt/rocom/`、数据放 `/var/lib/rocom/`、systemd 托管」:
 
 ```bash
-# 1. 构建(make release 出 dist/rocom-capture-linux-<arch>)
+# 服务器上已装 go 时的标准流程(首次和更新都用这一条):
+#    git pull + go build + 部署,数据不动
+sudo ./scripts/deploy.sh --build
 
-# 2. 首次安装(自动写 systemd service 与 /etc/rocom.env 配置模板)
-sudo ./scripts/deploy.sh
-
-# 2b. 或从手动部署迁移(已有旧库在跑,想切到 systemd 管理)
-#     自动停旧进程、搬库与证书到 /var/lib/rocom、从旧启动参数生成 env
-sudo ./scripts/deploy.sh --migrate /root/roco
-
-# 3. 编辑配置填入网卡等参数,然后启动(非 --migrate 时需要)
-sudo vim /etc/rocom.env          # 至少填 ROCOM_IFACE=eth0
-sudo systemctl start rocom
+# 首次跑完后编辑配置填入 socks5 等参数,然后启动
+sudo vim /etc/rocom.env          # 填 ROCOM_SOCKS5_ADDR / USER / PASS 等
+sudo systemctl restart rocom
 sudo systemctl status rocom
 journalctl -u rocom -f           # 看日志
 
-# 4. 后续更新(服务器上已装 go)
-#    git pull + go build + 重启,数据不动
-sudo ./scripts/deploy.sh --build
+# 从手动部署迁移(已有旧库在跑,想切到 systemd 管理)
+#    自动停旧进程、搬库与证书到 /var/lib/rocom、从旧启动参数生成 env
+sudo ./scripts/deploy.sh --migrate /root/roco
 
 # 备份数据库(热备,不锁库)
 sudo ./scripts/deploy.sh --backup
