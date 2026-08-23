@@ -132,7 +132,8 @@ args=(
 [[ -n "${ROCOM_TLS:-}" ]] && args+=(-tls)
 if [[ -n "${ROCOM_SOCKS5_ADDR:-}" ]]; then
   args+=(-socks5-addr "$ROCOM_SOCKS5_ADDR")
-  args+=(-skip-self-ip "${ROCOM_SKIP_SELF_IP:-false}")
+  # Go flag.Bool 不接受空格分开的 true/false,必须用 =false 形式
+  args+=(-skip-self-ip="${ROCOM_SKIP_SELF_IP:-false}")
 fi
 [[ -n "${ROCOM_SOCKS5_ALLOW:-}" ]] && args+=(-socks5-allow "$ROCOM_SOCKS5_ALLOW")
 if [[ -n "${ROCOM_SOCKS5_USER:-}" ]]; then
