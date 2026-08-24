@@ -31,9 +31,30 @@ type flowerItem struct {
 	MedalIcon string `json:"medalIcon"` // 奖牌小图 /img/<此路径>
 }
 
+// flowerKey 定位一只花种:同种花种可同时存在多只,游戏内按血量序号区分。
+type flowerKey struct {
+	id    uint32
+	blood uint32
+}
+
 // onBossNpcInfo 处理 s2c 0x0375 花种 BOSS 分组:只把 flower_npcs(花灵,普通+特殊)渲染到花种页。
 // world_leader_npcs(世界 BOSS)与 legendary_npcs(传说 NPC)与花种无关,解析时不取。
+// 游戏内每次打开面板都会整组重发:基础字段以新下发为准,但已点过的 0x0338 详情
+// 按 (id,blood) 从旧分组里保留,避免整组刷新把查看状态冲掉。
 func (p *Pipeline) onBossNpcInfo(m capture.Message, acc string) {
+	// 先读旧分组,收集已点过(有 0x0338 详情)的项。
+	prev := make(map[flowerKey]flowerItem)
+	if raw := p.srv.GetLastFlowers(acc); raw != nil {
+		if payload, ok := raw.(map[string]any); ok {
+			if items, ok := payload["flowers"].([]flowerItem); ok {
+				for _, it := range items {
+					if it.Detail {
+						prev[flowerKey{it.ID, it.Blood}] = it
+					}
+				}
+			}
+		}
+	}
 	items := make([]flowerItem, 0, 23)
 	for _, b := range scene.ParseBossNpcInfoRsp(m.AppBody) {
 		it := flowerItem{
@@ -49,6 +70,18 @@ func (p *Pipeline) onBossNpcInfo(m capture.Message, acc string) {
 			it.Name = base.Name
 		}
 		it.Img = p.db.PetImageByBase(b.PetBaseID, false).Head
+		// 合并旧详情:面板整组重发不丢已点过的 0x0338 查看状态。
+		if old, ok := prev[flowerKey{it.ID, it.Blood}]; ok {
+			it.Detail = old.Detail
+			it.Lv = old.Lv
+			it.GlassType = old.GlassType
+			it.Glass = old.Glass
+			it.BindName = old.BindName
+			it.BindImg = old.BindImg
+			it.BindEvo = old.BindEvo
+			it.MedalName = old.MedalName
+			it.MedalIcon = old.MedalIcon
+		}
 		items = append(items, it)
 	}
 	// 顺序稳定:特殊花种(7 星)在前,普通花种按血量序号升序。
@@ -65,7 +98,7 @@ func (p *Pipeline) onBossNpcInfo(m capture.Message, acc string) {
 
 // onTeamBattleInfo 处理 s2c 0x0338(点击地图花种的详情回包):
 // 按 npc_cfg_id+blood 匹配到已有卡片,合并等级/炫彩/绑定宠物/奖牌等详情后重新广播。
-// 面板 0x0375 整组重发会覆盖详情,玩家需再次点击对应花种刷新。
+// 面板 0x0375 整组重发时 onBossNpcInfo 会从旧分组保留详情,玩家无需再次点击。
 func (p *Pipeline) onTeamBattleInfo(m capture.Message, acc string) {
 	d, ok := scene.ParseTeamBattleInfoQueryRsp(m.AppBody)
 	if !ok {
