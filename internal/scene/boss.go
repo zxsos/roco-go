@@ -114,11 +114,11 @@ func ParseTeamBattleInfoQueryRsp(body []byte) (TeamBattleInfo, bool) {
 	}
 	wire.ScanFields(info, func(num protowire.Number, typ protowire.Type, val []byte, v uint64) {
 		if num == 32 && typ == protowire.BytesType { // battle_npc_glass_info(GlassInfo)
-			wire.ScanFields(val, func(n protowire.Number, t protowire.Type, _ []byte, gv uint64) {
+			wire.ScanFields(val, func(fn protowire.Number, t protowire.Type, _ []byte, gv uint64) {
 				if t != protowire.VarintType {
 					return
 				}
-				switch n {
+				switch fn {
 				case 1:
 					n.GlassType = int32(gv)
 				case 2:
