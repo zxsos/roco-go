@@ -202,6 +202,12 @@ func (p *Pipeline) onTeamBattleInfo(m capture.Message, acc string) {
 	if !ok {
 		return
 	}
+	// 兜底锚点:玩家点花种查看详情必发 0x0338(c2s 0x034E 不一定触发),
+	// 记录最近查看详情的 npc_logic_id,供捕捉成功后 clearFlowerDetail 清理。
+	if d.NpcLogicID != 0 {
+		p.acct(acc).lastFlowerLogicID = d.NpcLogicID
+		log.Printf("[debug] %s 0x0338 详情 npc_logic_id=%d → lastFlowerLogicID", acc, d.NpcLogicID)
+	}
 	raw := p.srv.GetLastFlowers(acc)
 	if raw == nil {
 		return // 还没收到过面板分组,无从合并
