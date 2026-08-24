@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { getWildPets, subscribe } from '../../api'
+import { chime } from '../../utils/audio'
 
 // —— 野生宠物图层(异色/炫彩 · 污染 · 奖牌四件套:大块头/小不点/婉转声/粗嗓门)——
 // 与 POI 图层不同,这几类**不是固定点位**:野生宠会刷新、被别人抓走,只有走进 AOI 才知道它在。
@@ -93,31 +94,6 @@ const NOTIFY_KEY = 'map.wildNotify.v1'
 // 单牌/污染等不响。异色/炫彩因最高优先级不受此限——勾选后仍照常提醒。独立持久化,默认关
 // (=所有带环稀有宠都提醒,保持原行为)。
 const NOTIFY_DUAL_ONLY_KEY = 'map.wildNotifyDualOnly.v1'
-
-// chime 播放一段三连上行「叮咚」提示音(880 → 1174.7 → 1568 Hz),用 Web Audio 合成,
-// 不依赖音频资源文件。AudioContext 需在用户手势后创建,开关点击即手势;失败(无设备/被
-// 拦截)时静默跳过,不影响系统通知。
-function chime() {
-  try {
-    const AC = window.AudioContext || window.webkitAudioContext
-    if (!AC) return
-    const ctx = chime.ctx || (chime.ctx = new AC())
-    if (ctx.state === 'suspended') ctx.resume()
-    const now = ctx.currentTime
-    for (const [f, t] of [[880, 0], [1174.66, 0.12], [1567.98, 0.24]]) {
-      const osc = ctx.createOscillator()
-      const g = ctx.createGain()
-      osc.type = 'sine'
-      osc.frequency.value = f
-      g.gain.setValueAtTime(0.001, now + t)
-      g.gain.exponentialRampToValueAtTime(0.28, now + t + 0.02)
-      g.gain.exponentialRampToValueAtTime(0.001, now + t + 0.3)
-      osc.connect(g).connect(ctx.destination)
-      osc.start(now + t)
-      osc.stop(now + t + 0.35)
-    }
-  } catch { /* 音频不可用:只弹系统通知 */ }
-}
 
 // fireWildNotify 弹一条系统通知:标题 = 名字 + 类别标签(与资料卡同口径,见 wildTags),
 // 正文 = 等级 / 体重百分位 / 坐标;tag 用实体 id,浏览器同 id 自动去重。点击通知聚焦页面。
