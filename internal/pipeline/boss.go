@@ -1,6 +1,8 @@
 package pipeline
 
 import (
+	"fmt"
+	"log"
 	"sort"
 
 	"github.com/whoisnian/rocom-capture/internal/capture"
@@ -122,6 +124,9 @@ func (p *Pipeline) onBossNpcInfo(m capture.Message, acc string) {
 func (p *Pipeline) onSelectFlowerSeedBoss(m capture.Message, acc string) {
 	if logicID := scene.ParseSelectFlowerSeedBossReq(m.AppBody); logicID != 0 {
 		p.acct(acc).lastFlowerLogicID = logicID
+		log.Printf("[debug] %s 0x0846 选中花种 npc_logic_id=%d", acc, logicID)
+	} else {
+		log.Printf("[debug] %s 0x0846 解析 npc_logic_id=0", acc)
 	}
 }
 
@@ -130,19 +135,23 @@ func (p *Pipeline) onSelectFlowerSeedBoss(m capture.Message, acc string) {
 // 定位用最近一次 c2s 0x0846 选中的 npc_logic_id;清空详情字段后广播,前端恢复「未查看」。
 func (p *Pipeline) clearFlowerDetail(acc string) {
 	logicID := p.acct(acc).lastFlowerLogicID
+	log.Printf("[debug] %s clearFlowerDetail 进入: lastFlowerLogicID=%d", acc, logicID)
 	if logicID == 0 {
 		return
 	}
 	raw := p.srv.GetLastFlowers(acc)
 	if raw == nil {
+		log.Printf("[debug] %s clearFlowerDetail 无 flowers 缓存", acc)
 		return
 	}
 	payload, ok := raw.(map[string]any)
 	if !ok {
+		log.Printf("[debug] %s clearFlowerDetail 缓存类型断言失败", acc)
 		return
 	}
 	items, ok := payload["flowers"].([]flowerItem)
 	if !ok {
+		log.Printf("[debug] %s clearFlowerDetail flowers 断言失败", acc)
 		return
 	}
 	// 复制一份再改,避免直接动 server 缓存里的共享切片。
@@ -166,11 +175,22 @@ func (p *Pipeline) clearFlowerDetail(acc string) {
 		break
 	}
 	if !updated {
+		log.Printf("[debug] %s clearFlowerDetail 未匹配 NpcLogicID=%d(缓存卡片: %v)", acc, logicID, flowerLogicIDs(items))
 		return
 	}
+	log.Printf("[debug] %s clearFlowerDetail 已清详情 npc_logic_id=%d", acc, logicID)
 	payload = map[string]any{"account": acc, "flowers": items}
 	p.srv.SetLastFlowers(acc, payload)
 	p.srv.Hub().Broadcast("flowers", acc, payload)
+}
+
+// flowerLogicIDs 列出缓存里全部花种的 (NpcLogicID,ID,blood,detail),仅供临时 debug 日志对比。
+func flowerLogicIDs(items []flowerItem) []string {
+	out := make([]string, 0, len(items))
+	for _, f := range items {
+		out = append(out, fmt.Sprintf("{logic=%d,id=%d,blood=%d,detail=%v}", f.NpcLogicID, f.ID, f.Blood, f.Detail))
+	}
+	return out
 }
 
 // onTeamBattleInfo 处理 s2c 0x0338(点击地图花种的详情回包):

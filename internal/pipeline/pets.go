@@ -152,12 +152,15 @@ func (p *Pipeline) applyLayouts(m capture.Message, sc *store.Scoped, acc string)
 func (p *Pipeline) applyNewPet(m capture.Message, sc *store.Scoped, acc string) {
 	pd := pet.FindNewPet(m.AppBody)
 	if pd == nil {
+		log.Printf("[debug] %s applyNewPet opcode=0x%04x 未找到新宠物", acc, m.Opcode)
 		return
 	}
 	// PLAYER_SYNC_NOTIFY/BATTLE_FINISH_NOTIFY 是通用通知通道(理论上可能携带对手/旧快照),
 	// 额外用 add_time 时近性(相对本包时间)守卫,仅认刚捕获的宠物。
 	if (m.Opcode == pet.OpPlayerSyncNotify || m.Opcode == pet.OpBattleFinishNotify) &&
 		int64(pd.GetAddTime()) < m.Time.Unix()-grace {
+		log.Printf("[debug] %s applyNewPet opcode=0x%04x gid=%d add_time=%d 过旧被守卫拦截",
+			acc, m.Opcode, pd.GetGid(), pd.GetAddTime())
 		return
 	}
 	pp := pet.ToPet(pd, p.db)
@@ -179,13 +182,18 @@ func (p *Pipeline) applyNewPet(m capture.Message, sc *store.Scoped, acc string) 
 		// 花种(稀兽)战斗内捕捉(catch_way=4,实测内嵌于 BATTLE_FINISH_NOTIFY 的 goods_reward 下发):
 		// 捕捉后该花种重生为新个体,清掉其 0x0338 详情,需玩家重新点击查看。
 		if pd.GetCatchWay() == 4 {
+			log.Printf("[debug] %s applyNewPet 新宠 gid=%d catch_way=4 → clearFlowerDetail", acc, pp.Gid)
 			p.clearFlowerDetail(acc)
+		} else {
+			log.Printf("[debug] %s applyNewPet 新宠 gid=%d catch_way=%d 非花种,跳过清详情", acc, pp.Gid, pd.GetCatchWay())
 		}
 		ev := &store.Event{Time: m.Time.Unix(), SubKind: catchWayName(pd, acc), Gid: pp.Gid, Pet: pp}
 		if sc.AddEvent(ev) == nil {
 			logEvent(acc, ev)
 			p.srv.Hub().Broadcast("event", acc, ev)
 		}
+	} else {
+		log.Printf("[debug] %s applyNewPet 重复下发 gid=%d 已存在,isNew=false,catch_way=%d", acc, pp.Gid, pd.GetCatchWay())
 	}
 }
 
