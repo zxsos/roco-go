@@ -39,6 +39,8 @@ func (p *Pipeline) handleScene(m capture.Message, acc string) bool {
 		p.onMove(m, acc)
 	case m.Direction == gcp.S2C && m.Opcode == scene.OpQueryBossNpcInfoRsp:
 		p.onBossNpcInfo(m, acc)
+	case m.Direction == gcp.S2C && m.Opcode == scene.OpTeamBattleInfoQueryRsp:
+		p.onTeamBattleInfo(m, acc)
 	default:
 		return false
 	}

@@ -36,3 +36,36 @@
   overflow: hidden;
 }
 .flower-star { color: var(--gold); letter-spacing: 1px; }
+
+/* 活动结束倒计时:等宽数字避免每秒跳动;已结束变危险色 */
+.flower-left {
+  font-size: 12px; color: var(--fg-dim);
+  font-variant-numeric: tabular-nums;
+}
+.flower-left.ended { color: var(--red); font-weight: 600; }
+
+/* 已选状态徽标:你已选(强调)/ 已被选(中性)/ 未选(弱化虚线) */
+.flower-tag {
+  font-size: 11px; font-weight: 600; padding: 0 8px; border-radius: 999px;
+  line-height: 1.8; white-space: nowrap;
+}
+.flower-mine { background: var(--accent-soft); color: var(--accent); border: 1px solid var(--accent); }
+.flower-taken { background: var(--bg-3); color: var(--fg-dim); border: 1px solid var(--line); }
+.flower-free { background: transparent; color: var(--fg-dim); border: 1px dashed var(--line); }
+
+/* 0x0338 详情行:点过地图花种后出现,等级/炫彩/绑定宠物/奖牌小胶囊 */
+.flower-detail {
+  display: flex; flex-wrap: wrap; gap: 4px; margin-top: 2px;
+}
+.flower-chip {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: 11px; line-height: 1.7; padding: 0 7px; border-radius: 999px;
+  background: var(--bg-3); color: var(--fg); border: 1px solid var(--line);
+  white-space: nowrap; max-width: 100%;
+}
+.flower-chip-img { width: 14px; height: 14px; border-radius: 50%; object-fit: cover; flex: none; }
+.flower-glass {
+  color: var(--accent); border-color: var(--accent); background: var(--accent-soft);
+  font-weight: 600;
+}
+.flower-bind, .flower-medal { color: var(--fg-dim); }

@@ -91,6 +91,17 @@ func (s *Server) SetLastFlowers(account string, payload any) {
 	s.posMu.Unlock()
 }
 
+// GetLastFlowers 返回某账号最近一次花种分组(与 SetLastFlowers 对应);无记录返回 nil。
+// 供管线在收到 0x0338 详情时读取当前分组以合并字段。
+func (s *Server) GetLastFlowers(account string) any {
+	if account == "" {
+		return nil
+	}
+	s.posMu.Lock()
+	defer s.posMu.Unlock()
+	return s.lastFlowers[account]
+}
+
 // handleFlowers 返回当前账号最近一次花种(花灵)BOSS 分组;无记录(尚未收到 0x0375)返回 null。
 func (s *Server) handleFlowers(w http.ResponseWriter, r *http.Request) {
 	s.posMu.Lock()
