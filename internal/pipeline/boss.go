@@ -14,7 +14,9 @@ type flowerItem struct {
 	Name        string `json:"name"`        // 守护宠物名(petbase,未知时为空)
 	Img         string `json:"img"`         // 守护宠物头像 /img/<此路径>(未知时为空,前端回退)
 	Star        uint32 `json:"star"`        // 星级(普通花灵 5,特殊花灵 7)
-	Blood       uint32 `json:"blood"`       // 血量序号(游戏内按此区分同种花种)
+	Blood       uint32 `json:"blood"`       // 血脉 id(PET_BLOOD_CONF.blood,1-24)
+	BloodName   string `json:"bloodName"`   // 血脉中文短名(普通/草/火…;未知时为空)
+	BloodIcon   string `json:"bloodIcon"`   // 血脉主图标 /img/<此路径>(未知时为空)
 	NpcLogicID  uint64 `json:"npcLogicId"`  // NPC 逻辑 id(每只花种唯一;详情合并按此匹配)
 	EndTs       uint64 `json:"endTs"`       // 活动结束 Unix 秒(0=未设置)
 	SpecSeedID  uint32 `json:"specSeedId"`  // 特殊花种种子 id(0=普通花种)
@@ -32,7 +34,7 @@ type flowerItem struct {
 	MedalIcon string `json:"medalIcon"` // 奖牌小图 /img/<此路径>
 }
 
-// flowerKey 兜底定位一只花种:同种花种可同时存在多只,游戏内按血量序号区分。
+// flowerKey 兜底定位一只花种:同种花种可同时存在多只,游戏内按血脉区分。
 // 优先用 npc_logic_id(每只花种唯一)匹配,旧分组里没有时才退回此键。
 type flowerKey struct {
 	id    uint32
@@ -78,6 +80,8 @@ func (p *Pipeline) onBossNpcInfo(m capture.Message, acc string) {
 		if base, ok := p.db.PetBase(b.PetBaseID); ok {
 			it.Name = base.Name
 		}
+		it.BloodName = p.db.BloodName(b.Blood)
+		it.BloodIcon = p.db.BloodIcon(b.Blood)
 		it.Img = p.db.PetImageByBase(b.PetBaseID, false).Head
 		// 合并旧详情:面板整组重发不丢已点过的 0x0338 查看状态。
 		var old flowerItem
@@ -101,7 +105,7 @@ func (p *Pipeline) onBossNpcInfo(m capture.Message, acc string) {
 		}
 		items = append(items, it)
 	}
-	// 顺序稳定:特殊花种(7 星)在前,普通花种按血量序号升序。
+	// 顺序稳定:特殊花种(7 星)在前,普通花种按血脉 id 升序。
 	sort.Slice(items, func(i, j int) bool {
 		if items[i].Star != items[j].Star {
 			return items[i].Star > items[j].Star
@@ -109,6 +113,62 @@ func (p *Pipeline) onBossNpcInfo(m capture.Message, acc string) {
 		return items[i].Blood < items[j].Blood
 	})
 	payload := map[string]any{"account": acc, "flowers": items}
+	p.srv.SetLastFlowers(acc, payload)
+	p.srv.Hub().Broadcast("flowers", acc, payload)
+}
+
+// onSelectFlowerSeedBoss 记录 c2s 0x0846 选中的花种 npc_logic_id:
+// 玩家点某朵花进战斗时发出,作为捕捉成功(0x0160 catch_way=4)后清理详情的定位锚点。
+func (p *Pipeline) onSelectFlowerSeedBoss(m capture.Message, acc string) {
+	if logicID := scene.ParseSelectFlowerSeedBossReq(m.AppBody); logicID != 0 {
+		p.acct(acc).lastFlowerLogicID = logicID
+	}
+}
+
+// clearFlowerDetail 花种精灵捕捉成功(catch_way=4)后清理对应花种的 0x0338 详情:
+// 捕捉后该花种重生为新的个体,旧详情(等级/炫彩/绑定/奖牌)不再有效,需玩家重新点击查看。
+// 定位用最近一次 c2s 0x0846 选中的 npc_logic_id;清空详情字段后广播,前端恢复「未查看」。
+func (p *Pipeline) clearFlowerDetail(acc string) {
+	logicID := p.acct(acc).lastFlowerLogicID
+	if logicID == 0 {
+		return
+	}
+	raw := p.srv.GetLastFlowers(acc)
+	if raw == nil {
+		return
+	}
+	payload, ok := raw.(map[string]any)
+	if !ok {
+		return
+	}
+	items, ok := payload["flowers"].([]flowerItem)
+	if !ok {
+		return
+	}
+	// 复制一份再改,避免直接动 server 缓存里的共享切片。
+	items = append([]flowerItem(nil), items...)
+	updated := false
+	for i := range items {
+		f := &items[i]
+		if f.NpcLogicID != logicID {
+			continue
+		}
+		f.Detail = false
+		f.Lv = 0
+		f.GlassType = 0
+		f.Glass = ""
+		f.BindName = ""
+		f.BindImg = ""
+		f.BindEvo = 0
+		f.MedalName = ""
+		f.MedalIcon = ""
+		updated = true
+		break
+	}
+	if !updated {
+		return
+	}
+	payload = map[string]any{"account": acc, "flowers": items}
 	p.srv.SetLastFlowers(acc, payload)
 	p.srv.Hub().Broadcast("flowers", acc, payload)
 }

@@ -33,9 +33,6 @@ export default function Flowers() {
     return () => clearInterval(id)
   }, [])
 
-  // 当前账号 user_id:判断「我选的」花种(account 形如 "UID:<user_id>")。
-  const myUid = useMemo(() => Number((account || '').replace(/^UID:/, '') || 0), [account])
-
   const flowers = useMemo(() => (data && data.flowers) || [], [data])
   const specials = flowers.filter((f) => f.specSeedId > 0)
   const normals = flowers.filter((f) => !(f.specSeedId > 0))
@@ -56,14 +53,14 @@ export default function Flowers() {
             <section className="flowers-group">
               <h4 className="flowers-group-t">特殊花种(7 星)</h4>
               <div className="flower-grid">
-                {specials.map((f) => <FlowerCard key={flowerKey(f)} f={f} myUid={myUid} now={now} />)}
+                {specials.map((f) => <FlowerCard key={flowerKey(f)} f={f} now={now} />)}
               </div>
             </section>
           )}
           <section className="flowers-group">
             <h4 className="flowers-group-t">普通花种</h4>
             <div className="flower-grid">
-              {normals.map((f) => <FlowerCard key={flowerKey(f)} f={f} myUid={myUid} now={now} />)}
+              {normals.map((f) => <FlowerCard key={flowerKey(f)} f={f} now={now} />)}
             </div>
           </section>
         </>
@@ -90,17 +87,23 @@ function fmtLeft(endTs, nowMs) {
   return { ended: false, text: d > 0 ? `剩 ${d} 天 ${hh}:${mm}:${ss}` : `剩 ${hh}:${mm}:${ss}` }
 }
 
-function FlowerCard({ f, myUid, now }) {
+function FlowerCard({ f, now }) {
   const icons = useContext(IconsContext)
   const stars = (f.star || 0) > 0 ? '★'.repeat(f.star) : ''
-  // 已选状态:0=未选;等于当前账号=我选的;其他=被他人选走(不直接露他人 UID,只给 title 备查)。
-  const mine = f.ownerUserId > 0 && f.ownerUserId === myUid
-  const taken = f.ownerUserId > 0 && !mine
   const left = fmtLeft(f.endTs, now)
   // 详情字段:点过地图花种后由 0x0338 合并进来;未点过全空(普通花种绑定/奖牌恒为空)。
   const hasDetail = f.detail || f.lv > 0 || f.glass || f.bindName || f.medalName
+  // 查看状态:已点过(=有 0x0338 详情)的花种——
+  // 有炫彩(普通/隐藏)高亮;无炫彩置灰表示已查看;捕捉后(详情被清)恢复默认。
+  const colorful = f.detail && (f.glassType === 1 || f.glassType === 2)
   return (
-    <div className={'flower-card' + (f.specSeedId > 0 ? ' flower-special' : '')}>
+    <div
+      className={
+        'flower-card' +
+        (f.specSeedId > 0 ? ' flower-special' : '') +
+        (colorful ? ' flower-card-colorful' : f.detail ? ' flower-card-viewed' : '')
+      }
+    >
       {/* 右上角标记:已点过(=有 0x0338 详情)才显示——
           炫彩用游戏图标,普通炫彩粉紫 / 隐藏炫彩金色;无炫彩标「普通」 */}
       {f.detail && (
@@ -126,7 +129,10 @@ function FlowerCard({ f, myUid, now }) {
         <div className="flower-name" title={f.name}>{f.name || '未知花灵'}</div>
         <div className="flower-meta">
           {stars && <span className="flower-star" title={`${f.star} 星`}>{stars}</span>}
-          <span className="muted">血量 {f.blood || '-'}</span>
+          <span className="flower-blood" title={'血脉 ' + (f.bloodName || f.blood)}>
+            {f.bloodIcon && <ImgAvatar src={f.bloodIcon} alt={f.bloodName || ''} className="flower-blood-ic" />}
+            {f.bloodName || f.blood || '-'}
+          </span>
         </div>
         <div className="flower-meta">
           {left ? (
@@ -157,15 +163,6 @@ function FlowerCard({ f, myUid, now }) {
             )}
           </div>
         )}
-        <div className="flower-meta">
-          {mine ? (
-            <span className="flower-tag flower-mine" title="我已选择这朵花种">你已选</span>
-          ) : taken ? (
-            <span className="flower-tag flower-taken" title="已被其他玩家选择">已被选</span>
-          ) : (
-            <span className="flower-tag flower-free">未选</span>
-          )}
-        </div>
       </div>
     </div>
   )

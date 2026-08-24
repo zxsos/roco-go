@@ -41,6 +41,8 @@ func (p *Pipeline) handleScene(m capture.Message, acc string) bool {
 		p.onBossNpcInfo(m, acc)
 	case m.Direction == gcp.S2C && m.Opcode == scene.OpTeamBattleInfoQueryRsp:
 		p.onTeamBattleInfo(m, acc)
+	case m.Direction == gcp.C2S && m.Opcode == scene.OpSelectTeamBattleFlowerSeedReq:
+		p.onSelectFlowerSeedBoss(m, acc)
 	default:
 		return false
 	}

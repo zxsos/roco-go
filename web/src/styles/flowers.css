@@ -43,6 +43,22 @@
 .flower-card:hover { border-color: var(--accent); }
 .flower-card.flower-special { border-color: var(--gold); }
 
+/* 查看状态:已点过(=有 0x0338 详情)——无炫彩置灰(已查看);
+   有炫彩(普通/隐藏)粉紫高亮;捕捉后详情被清,恢复默认状态 */
+.flower-card-viewed {
+  opacity: .62; filter: grayscale(.85) contrast(.92);
+  background: var(--bg-2); border-color: var(--line);
+}
+.flower-card-viewed:hover { filter: grayscale(.55) contrast(.95); border-color: var(--fg-dim); }
+.flower-card-colorful {
+  border-color: #ffb6e0;
+  box-shadow: 0 0 10px rgba(255, 182, 224, .45), var(--shadow-sm);
+}
+.flower-card-colorful.flower-special {
+  border-color: var(--gold);
+  box-shadow: 0 0 12px rgba(255, 215, 110, .5), var(--shadow-sm);
+}
+
 .flower-img {
   width: 56px; height: 56px; border-radius: 50%; object-fit: cover; flex: none;
 }
@@ -57,6 +73,8 @@
   overflow: hidden;
 }
 .flower-star { color: var(--gold); letter-spacing: 1px; }
+.flower-blood { display: inline-flex; align-items: center; gap: 3px; color: var(--fg-dim); }
+.flower-blood-ic { width: 14px; height: 14px; object-fit: contain; }
 
 /* 活动结束倒计时:等宽数字避免每秒跳动;已结束变危险色 */
 .flower-left {
@@ -64,15 +82,6 @@
   font-variant-numeric: tabular-nums;
 }
 .flower-left.ended { color: var(--red); font-weight: 600; }
-
-/* 已选状态徽标:你已选(强调)/ 已被选(中性)/ 未选(弱化虚线) */
-.flower-tag {
-  font-size: 11px; font-weight: 600; padding: 0 8px; border-radius: 999px;
-  line-height: 1.8; white-space: nowrap;
-}
-.flower-mine { background: var(--accent-soft); color: var(--accent); border: 1px solid var(--accent); }
-.flower-taken { background: var(--bg-3); color: var(--fg-dim); border: 1px solid var(--line); }
-.flower-free { background: transparent; color: var(--fg-dim); border: 1px dashed var(--line); }
 
 /* 0x0338 详情行:点过地图花种后出现,等级/炫彩/绑定宠物/奖牌小胶囊 */
 .flower-detail {
