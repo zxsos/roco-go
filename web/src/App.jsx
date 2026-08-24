@@ -151,7 +151,8 @@ export default function App() {
             <button type="button" className={'topbar-fs' + (fullscreen.isFull ? ' on' : '')}
               onClick={fullscreen.toggle}
               title={fullscreen.isFull ? '退出网页全屏' : '网页全屏'}>
-              {fullscreen.isFull ? '退出全屏' : '全屏'}
+              <span className="topbar-fs-icon">{fullscreen.isFull ? '⤢' : '⛶'}</span>
+              <span className="topbar-fs-text">{fullscreen.isFull ? '退出全屏' : '全屏'}</span>
             </button>
           )}
           <button type="button" className="topbar-fs"

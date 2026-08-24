@@ -100,10 +100,11 @@ html[data-privacy] .brand { color: var(--fg-dim); }
 
 @media (max-width: 760px) {
   .topnav { display: none; }
-  /* 移动端顶栏:收紧间距,给内容(账号选择器)更多横向空间;全屏/隐私按钮缩成纯图标 */
-  .topbar { gap: 10px; padding: 8px 12px; }
-  .brand { font-size: 15px; }
-  .topbar-fs { padding: 6px 9px; }
+  /* 移动端顶栏:收紧间距,给内容(账号选择器)更多横向空间;全屏/主题按钮缩成纯图标(隐藏文字) */
+  .topbar { gap: 8px; padding: 8px 12px; }
+  .brand { font-size: 15px; max-width: 30vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .topbar-fs { padding: 6px 8px; }
+  .topbar-fs-text { display: none; }
   .bottomnav {
     display: flex; position: sticky; bottom: 0; z-index: 30;
     background: var(--bar-bg); backdrop-filter: blur(10px);
