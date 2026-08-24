@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { getWildPets, subscribe } from '../../api'
-import { chime } from '../../utils/audio'
+import { chime, rareChime } from '../../utils/audio'
 
 // —— 野生宠物图层(异色/炫彩 · 污染 · 奖牌四件套:大块头/小不点/婉转声/粗嗓门)——
 // 与 POI 图层不同,这几类**不是固定点位**:野生宠会刷新、被别人抓走,只有走进 AOI 才知道它在。
@@ -104,7 +104,9 @@ function fireWildNotify(p) {
   if (p.lv) parts.push('Lv.' + p.lv)
   if (p.weightPct != null) parts.push(`体重 ${Math.round(p.weightPct * 10) / 10}%`)
   parts.push(`X${p.x} Y${p.y} Z${p.z}`)
-  chime()
+  // 异色/炫彩是全场最稀有,响更尖更醒目的升级音;其余稀有类别(污染/奖牌四件套)响普通提示音。
+  const ks = p.kinds || []
+  ;(ks.includes('shiny') || ks.includes('colorful')) ? rareChime() : chime()
   if (!('Notification' in window) || Notification.permission !== 'granted') return
   try {
     const n = new Notification(title, { body: parts.join(' · '), tag: 'wild-' + p.id, renotify: true })
