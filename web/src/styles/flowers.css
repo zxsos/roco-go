@@ -1,1 +1,38 @@
-/* 花种页(占位):家园花种的种植与收获统计。 */
+/* 花种页面:网格卡片展示 0x0375 下发的花灵 BOSS(flower_npcs)。
+   特殊花种(有 specSeedId)以金边区分,普通花种仅蓝边;卡片固定布局,缺信息留占位。 */
+
+.flowers-page { display: flex; flex-direction: column; gap: 12px; }
+.flowers-page .toolbar-hint { font-size: 13px; }
+.flowers-page .spacer { flex: 1; }
+
+.flowers-group { display: flex; flex-direction: column; gap: 8px; }
+.flowers-group-t {
+  margin: 0; font-size: 14px; font-weight: 600; color: var(--fg-dim);
+}
+
+.flower-grid {
+  display: grid; gap: 10px; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+}
+
+.flower-card {
+  border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--bg-1);
+  padding: 10px; display: flex; gap: 10px; align-items: flex-start;
+  box-shadow: var(--shadow-sm); transition: border-color .15s ease;
+}
+.flower-card:hover { border-color: var(--accent); }
+.flower-card.flower-special { border-color: var(--gold); }
+
+.flower-img {
+  width: 56px; height: 56px; border-radius: 50%; object-fit: cover; flex: none;
+}
+
+.flower-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.flower-name {
+  font-weight: 600; font-size: 14px; line-height: 1.3;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.flower-meta {
+  display: flex; align-items: baseline; gap: 6px; font-size: 13px; white-space: nowrap;
+  overflow: hidden;
+}
+.flower-star { color: var(--gold); letter-spacing: 1px; }
