@@ -3,6 +3,7 @@ import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import { getAccounts, getCurrentAccount, setCurrentAccount, getIcons } from './api'
 import { AccountContext, IconsContext } from './context'
 import { useFullscreen } from './hooks/useFullscreen'
+import { useStoredJSON } from './hooks/useStoredState'
 import { PinDialog } from './components/PinDialog'
 import { dropBoxFilter } from './pages/pet-list/filters'
 
@@ -41,6 +42,27 @@ export default function App() {
     document.documentElement.toggleAttribute('data-privacy', privacyOn)
   }, [privacyOn])
   const togglePrivacy = () => setPrivacyOn((v) => !v)
+
+  // 主题模式:auto(跟随浏览器 prefers-color-scheme,默认)/ light / dark。
+  // 持久化到 localStorage('theme'),三态循环切换:auto → light → dark → auto。
+  // <html data-theme="light|dark"> 上挂实际生效的主题:auto 时由 matchMedia 决定并监听变化。
+  const themeSanitize = (v) => (v === 'light' || v === 'dark' || v === 'auto' ? v : 'auto')
+  const [theme, setTheme] = useStoredJSON(localStorage, 'theme', 'auto', themeSanitize)
+  useEffect(() => {
+    const mq = window.matchMedia('(prefers-color-scheme: dark)')
+    // 算出实际生效主题:auto 时看浏览器,否则用户手选
+    const effective = theme === 'auto' ? (mq.matches ? 'dark' : 'light') : theme
+    document.documentElement.setAttribute('data-theme', effective)
+    // auto 模式下监听浏览器主题变化,实时跟随(切到固定 light/dark 后不再监听)
+    if (theme !== 'auto') return
+    const onChange = (e) => document.documentElement.setAttribute('data-theme', e.matches ? 'dark' : 'light')
+    mq.addEventListener('change', onChange)
+    return () => mq.removeEventListener('change', onChange)
+  }, [theme])
+  // 三态循环:auto → light → dark → auto
+  const cycleTheme = () => setTheme((t) => (t === 'auto' ? 'light' : t === 'light' ? 'dark' : 'auto'))
+  const themeLabel = theme === 'auto' ? '跟随系统' : theme === 'light' ? '白天' : '夜间'
+  const themeIcon = theme === 'auto' ? '🌗' : theme === 'light' ? '☀️' : '🌙'
 
   // 全局固定图标只随游戏版本变,拉一次即可。
   useEffect(() => { getIcons().then((d) => setIcons(d || { stat: {} })).catch(() => {}) }, [])
@@ -132,6 +154,11 @@ export default function App() {
               {fullscreen.isFull ? '退出全屏' : '全屏'}
             </button>
           )}
+          <button type="button" className="topbar-fs"
+            onClick={cycleTheme}
+            title={'主题:' + themeLabel + '(点击切换)'}>
+            <span>{themeIcon}</span>
+          </button>
           {accounts.length > 0 && (() => {
             const cur = accounts.find((a) => a.account === account)
             return (
