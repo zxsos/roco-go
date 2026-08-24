@@ -119,20 +119,20 @@ func (p *Pipeline) onBossNpcInfo(m capture.Message, acc string) {
 	p.srv.Hub().Broadcast("flowers", acc, payload)
 }
 
-// onSelectFlowerSeedBoss 记录 c2s 0x0846 选中的花种 npc_logic_id:
-// 玩家点某朵花进战斗时发出,作为捕捉成功(0x0160 catch_way=4)后清理详情的定位锚点。
+// onSelectFlowerSeedBoss 记录 c2s 0x034E 选中的花种 npc_logic_id:
+// 玩家点某朵花进战斗时发出,作为捕捉成功(0x132c catch_way=4)后清理详情的定位锚点。
 func (p *Pipeline) onSelectFlowerSeedBoss(m capture.Message, acc string) {
 	if logicID := scene.ParseSelectFlowerSeedBossReq(m.AppBody); logicID != 0 {
 		p.acct(acc).lastFlowerLogicID = logicID
-		log.Printf("[debug] %s 0x0846 选中花种 npc_logic_id=%d", acc, logicID)
+		log.Printf("[debug] %s 0x034E 选中花种 npc_logic_id=%d", acc, logicID)
 	} else {
-		log.Printf("[debug] %s 0x0846 解析 npc_logic_id=0", acc)
+		log.Printf("[debug] %s 0x034E 解析 npc_logic_id=0", acc)
 	}
 }
 
 // clearFlowerDetail 花种精灵捕捉成功(catch_way=4)后清理对应花种的 0x0338 详情:
 // 捕捉后该花种重生为新的个体,旧详情(等级/炫彩/绑定/奖牌)不再有效,需玩家重新点击查看。
-// 定位用最近一次 c2s 0x0846 选中的 npc_logic_id;清空详情字段后广播,前端恢复「未查看」。
+// 定位用最近一次 c2s 0x034E 选中的 npc_logic_id;清空详情字段后广播,前端恢复「未查看」。
 func (p *Pipeline) clearFlowerDetail(acc string) {
 	logicID := p.acct(acc).lastFlowerLogicID
 	log.Printf("[debug] %s clearFlowerDetail 进入: lastFlowerLogicID=%d", acc, logicID)
