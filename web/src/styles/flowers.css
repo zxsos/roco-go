@@ -15,10 +15,31 @@
 }
 
 .flower-card {
+  position: relative;
   border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--bg-1);
   padding: 10px; display: flex; gap: 10px; align-items: flex-start;
   box-shadow: var(--shadow-sm); transition: border-color .15s ease;
 }
+
+/* 右上角角标:已点过地图花种(=有 0x0338 详情)才显示;炫彩用游戏图标,普通标「普通」 */
+.flower-corner {
+  position: absolute; top: -8px; right: -6px; z-index: 1;
+  display: inline-flex; align-items: center; gap: 2px;
+  font-size: 11px; font-weight: 600; line-height: 1.7; padding: 0 7px; border-radius: 999px;
+  background: var(--bg-1); border: 1px solid var(--line); color: var(--fg-dim);
+  box-shadow: var(--shadow-sm); white-space: nowrap;
+}
+.flower-corner img { width: 15px; height: 15px; object-fit: contain; display: block; }
+.flower-corner-colorful {
+  background: #3a1a2c; border-color: #ffb6e0; color: #ffb6e0;
+  box-shadow: 0 0 6px rgba(255, 182, 224, .6), var(--shadow-sm);
+}
+/* 隐藏炫彩:金色描边发光,与普通炫彩区分 */
+.flower-corner-hidden {
+  background: #3a2f14; border-color: #ffd76e; color: #ffd76e;
+  box-shadow: 0 0 8px rgba(255, 215, 110, .75), var(--shadow-sm);
+}
+.flower-corner-plain { background: var(--bg-2); color: var(--fg-dim); }
 .flower-card:hover { border-color: var(--accent); }
 .flower-card.flower-special { border-color: var(--gold); }
 

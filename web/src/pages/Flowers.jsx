@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useContext, useMemo } from 'react'
 import { getFlowers, subscribe } from '../api'
-import { AccountContext } from '../context'
+import { AccountContext, IconsContext } from '../context'
 import { fmtTime } from '../utils/format'
-import { ImgAvatar } from '../components/icons'
+import { ImgAvatar, imgURL } from '../components/icons'
 
 // 花种页面:渲染 s2c 0x0375 下发的 flower_npcs(花灵)活动 BOSS 分组。
 // 只显示花种;world_leader_npcs(世界 BOSS)与 legendary_npcs(传说 NPC)在解析层就丢弃了。
@@ -56,14 +56,14 @@ export default function Flowers() {
             <section className="flowers-group">
               <h4 className="flowers-group-t">特殊花种(7 星)</h4>
               <div className="flower-grid">
-                {specials.map((f) => <FlowerCard key={f.id} f={f} myUid={myUid} now={now} />)}
+                {specials.map((f) => <FlowerCard key={`${f.id}-${f.blood}`} f={f} myUid={myUid} now={now} />)}
               </div>
             </section>
           )}
           <section className="flowers-group">
             <h4 className="flowers-group-t">普通花种</h4>
             <div className="flower-grid">
-              {normals.map((f) => <FlowerCard key={f.id} f={f} myUid={myUid} now={now} />)}
+              {normals.map((f) => <FlowerCard key={`${f.id}-${f.blood}`} f={f} myUid={myUid} now={now} />)}
             </div>
           </section>
         </>
@@ -85,15 +85,36 @@ function fmtLeft(endTs, nowMs) {
 }
 
 function FlowerCard({ f, myUid, now }) {
+  const icons = useContext(IconsContext)
   const stars = (f.star || 0) > 0 ? '★'.repeat(f.star) : ''
   // 已选状态:0=未选;等于当前账号=我选的;其他=被他人选走(不直接露他人 UID,只给 title 备查)。
   const mine = f.ownerUserId > 0 && f.ownerUserId === myUid
   const taken = f.ownerUserId > 0 && !mine
   const left = fmtLeft(f.endTs, now)
   // 详情字段:点过地图花种后由 0x0338 合并进来;未点过全空(普通花种绑定/奖牌恒为空)。
-  const hasDetail = f.lv > 0 || f.glass || f.bindName || f.medalName
+  const hasDetail = f.detail || f.lv > 0 || f.glass || f.bindName || f.medalName
   return (
     <div className={'flower-card' + (f.specSeedId > 0 ? ' flower-special' : '')}>
+      {/* 右上角标记:已点过(=有 0x0338 详情)才显示——
+          炫彩用游戏图标,普通炫彩粉紫 / 隐藏炫彩金色;无炫彩标「普通」 */}
+      {f.detail && (
+        <span
+          className={
+            'flower-corner' +
+            (f.glassType === 1 ? ' flower-corner-colorful'
+              : f.glassType === 2 ? ' flower-corner-hidden'
+                : ' flower-corner-plain')
+          }
+          title={
+            f.glassType === 2 ? `隐藏炫彩 · ${f.glass}` :
+            f.glassType === 1 ? `炫彩 · ${f.glass}` : '普通(无炫彩)'
+          }
+        >
+          {(f.glassType === 1 || f.glassType === 2) && icons.colorful
+            ? <img src={imgURL(icons.colorful)} alt="炫彩" />
+            : '普通'}
+        </span>
+      )}
       <ImgAvatar src={f.img} alt={f.name} className="flower-img" />
       <div className="flower-info">
         <div className="flower-name" title={f.name}>{f.name || '未知花灵'}</div>
@@ -113,7 +134,6 @@ function FlowerCard({ f, myUid, now }) {
         {hasDetail && (
           <div className="flower-detail">
             {f.lv > 0 && <span className="flower-chip" title="等级">Lv {f.lv}</span>}
-            {f.glass && <span className="flower-chip flower-glass" title={`炫彩:${f.glass}`}>炫彩</span>}
             {f.bindName && (
               <span
                 className="flower-chip flower-bind"

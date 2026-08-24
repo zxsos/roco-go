@@ -19,8 +19,10 @@ type flowerItem struct {
 	SpecSeedID  uint32 `json:"specSeedId"`  // 特殊花种种子 id(0=普通花种)
 	ActivityID  uint32 `json:"activityId"`  // 活动 id
 	OwnerUserID uint64 `json:"ownerUserId"` // 已选花种的玩家 user_id(0=无人选择)
+	Detail     bool   `json:"detail"`       // 是否已收到 0x0338 详情(玩家点过地图花种;未点过=false)
 	// 以下为 0x0338 详情(点击地图花种后更新;0/空=尚未获取,普通花种绑定/奖牌恒为 0/空):
 	Lv        uint32 `json:"lv"`        // 等级
+	GlassType int32  `json:"glassType"` // 炫彩类型(0=无炫彩 / 1=普通 / 2=隐藏;仅在 detail=true 时有效)
 	Glass     string `json:"glass"`     // 炫彩中文描述(GlassDesc;空=无炫彩或未获取)
 	BindName  string `json:"bindName"`  // 绑定守护宠物名(空=无绑定)
 	BindImg   string `json:"bindImg"`   // 绑定守护宠物头像 /img/<此路径>
@@ -90,7 +92,9 @@ func (p *Pipeline) onTeamBattleInfo(m capture.Message, acc string) {
 			continue
 		}
 		updated = true
+		f.Detail = true
 		f.Lv = d.Lv
+		f.GlassType = d.GlassType
 		if d.EndTs != 0 {
 			f.EndTs = d.EndTs
 		}
