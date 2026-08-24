@@ -56,20 +56,26 @@ export default function Flowers() {
             <section className="flowers-group">
               <h4 className="flowers-group-t">特殊花种(7 星)</h4>
               <div className="flower-grid">
-                {specials.map((f) => <FlowerCard key={`${f.id}-${f.blood}`} f={f} myUid={myUid} now={now} />)}
+                {specials.map((f) => <FlowerCard key={flowerKey(f)} f={f} myUid={myUid} now={now} />)}
               </div>
             </section>
           )}
           <section className="flowers-group">
             <h4 className="flowers-group-t">普通花种</h4>
             <div className="flower-grid">
-              {normals.map((f) => <FlowerCard key={`${f.id}-${f.blood}`} f={f} myUid={myUid} now={now} />)}
+              {normals.map((f) => <FlowerCard key={flowerKey(f)} f={f} myUid={myUid} now={now} />)}
             </div>
           </section>
         </>
       )}
     </div>
   )
+}
+
+// flowerKey 生成卡片稳定唯一 key:优先 npcLogicId(每只花种唯一,服务器重发面板时不变),
+// 无则退回 id-blood(旧数据兼容)。
+function flowerKey(f) {
+  return f.npcLogicId ? `log-${f.npcLogicId}` : `${f.id}-${f.blood}`
 }
 
 // fmtLeft 把活动结束时间渲染为剩余倒计时;未设置返回 null,已结束返回 ended 标记。

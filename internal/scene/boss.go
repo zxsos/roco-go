@@ -20,12 +20,14 @@ const (
 // BossNpcInfo 是一只花种(BOSS)的展示字段。字段号据 all.pb 描述符(见 scripts/pbdesc.py):
 // BossNpcInfos.boss_npcs(1,repeated BossNpcInfo) 内:
 //
-//	npc_cfg_id(1) / star(2) / blood(3) / battle_petbase_id(5) / end_timestamp(10) /
-//	spec_flower_seed_id(11,非零=特殊花种) / activity_id(12) / select_flower_owner_id(24)
+//	npc_cfg_id(1) / star(2) / blood(3) / battle_petbase_id(5) / npc_logic_id(6,每只花种唯一) /
+//	npc_obj_id(7) / end_timestamp(10) / spec_flower_seed_id(11,非零=特殊花种) /
+//	activity_id(12) / select_flower_owner_id(24)
 type BossNpcInfo struct {
 	NpcCfgID    uint32 // 花种 NPC 配置 id(20129-20144 普通 / 700002-700004 特殊)
 	Star        uint32 // 星级(普通 5 / 特殊 7)
 	Blood       uint32 // 血量序号(普通 1-17;游戏内按此区分花种)
+	NpcLogicID  uint64 // NPC 逻辑 id(每只花种唯一;0x0338 详情与客户端请求都用它定位)
 	PetBaseID   uint32 // 守护宠物 petbase id(取名称/头像)
 	EndTs       uint64 // 活动结束时间戳(Unix 秒)
 	SpecSeedID  uint32 // 特殊花种种子 id(0=普通花种)
@@ -57,6 +59,8 @@ func ParseBossNpcInfoRsp(body []byte) []BossNpcInfo {
 				n.Blood = uint32(v)
 			case 5:
 				n.PetBaseID = uint32(v)
+			case 6:
+				n.NpcLogicID = v
 			case 10:
 				n.EndTs = v
 			case 11:
@@ -66,10 +70,10 @@ func ParseBossNpcInfoRsp(body []byte) []BossNpcInfo {
 			case 24:
 				n.OwnerUserID = v
 			}
-		})
-		if n.NpcCfgID != 0 {
+			})
+			if n.NpcCfgID != 0 {
 			out = append(out, n)
-		}
+			}
 	}
 	return out
 }
