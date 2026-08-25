@@ -4,7 +4,6 @@ import (
 	"reflect"
 	"sort"
 	"strconv"
-	"strings"
 
 	"github.com/whoisnian/rocom-capture/internal/capture"
 	"github.com/whoisnian/rocom-capture/internal/scene"
@@ -24,8 +23,8 @@ type flowerItem struct {
 	EndTs       uint64 `json:"endTs"`       // 活动结束 Unix 秒(0=未设置)
 	SpecSeedID  uint32 `json:"specSeedId"`  // 特殊花种种子 id(0=普通花种)
 	ActivityID  uint32 `json:"activityId"`  // 活动 id
-	OwnerUserID uint64 `json:"ownerUserId"` // 已选花种的玩家 user_id(0=无人选择)
-	Detail     bool   `json:"detail"`       // 是否已收到 0x0338 详情(玩家点过地图花种;未点过=false)
+	OwnerUserID uint64 `json:"ownerUserId"` // 世界归属判据:0=自己世界;非 0=好友世界,即世界归属者 user_id
+	Detail      bool   `json:"detail"`      // 是否已收到 0x0338 详情(玩家点过地图花种;未点过=false)
 	// 以下为 0x0338 详情(点击地图花种后更新;0/空=尚未获取,普通花种绑定/奖牌恒为 0/空):
 	Lv        uint32 `json:"lv"`        // 等级
 	GlassType int32  `json:"glassType"` // 炫彩类型(0=无炫彩 / 1=普通 / 2=隐藏;仅在 detail=true 时有效)
@@ -48,43 +47,21 @@ type flowerKey struct {
 // 自己世界槽("self")不占名额、永不淘汰,可自由访问任意多好友世界。
 const maxFriendWorlds = 5
 
-// flowerWorldKey 由 npc_logic_id 集合生成世界指纹,用作好友槽的 key。
-// 存档表 payload["worlds"]:键为 "self"(自己世界)或本指纹(好友世界),值为
-// {"flowers": []flowerItem(该世界最近一次完整列表,含 0x0338 detail),
-//  "ts": int64(最近访问 Unix 秒,好友槽 LRU 淘汰依据)}。
-// npc_logic_id 全局唯一;同一世界两次推送仅个别花重生时指纹会变,但重叠度判定
-// (onBossNpcInfo 内)不受影响,指纹只在「识别出全新世界建槽」时用到。
-func flowerWorldKey(items []flowerItem) string {
-	ids := make([]uint64, 0, len(items))
+// flowerWorldOwner 取花种列表的世界归属判据(select_flower_owner_id):
+// 全为 0 = 自己世界;有非 0 值 = 好友世界,该值即世界归属者 user_id(游戏账号唯一标识,
+// 每账号不同)。同世界内各花种取值一致(0 或同一归属者),取第一个非 0 即可。
+func flowerWorldOwner(items []flowerItem) uint64 {
 	for _, it := range items {
-		if it.NpcLogicID != 0 {
-			ids = append(ids, it.NpcLogicID)
+		if it.OwnerUserID != 0 {
+			return it.OwnerUserID
 		}
 	}
-	sort.Slice(ids, func(i, j int) bool { return ids[i] < ids[j] })
-	var b strings.Builder
-	for _, id := range ids {
-		b.WriteString(strconv.FormatUint(id, 36))
-		b.WriteByte(',')
-	}
-	return b.String()
+	return 0
 }
 
-// overlapFlowers 统计两个列表按 npc_logic_id 重叠的朵数。
-func overlapFlowers(a, b []flowerItem) int {
-	set := make(map[uint64]struct{}, len(b))
-	for _, it := range b {
-		if it.NpcLogicID != 0 {
-			set[it.NpcLogicID] = struct{}{}
-		}
-	}
-	n := 0
-	for _, it := range a {
-		if _, ok := set[it.NpcLogicID]; ok {
-			n++
-		}
-	}
-	return n
+// flowerOwnerKey 生成好友世界槽的 key:归属者 user_id 前加 "owner:" 前缀,与 "self" 区分。
+func flowerOwnerKey(owner uint64) string {
+	return "owner:" + strconv.FormatUint(owner, 10)
 }
 
 // mergeFlowerDetail 把旧槽列表里已点过的 0x0338 详情按 npc_logic_id(兜底 id+blood)合并进新列表。
@@ -195,6 +172,9 @@ func (p *Pipeline) setFlowers(acc string, items []flowerItem) {
 		if m, ok := worlds[cur].(map[string]any); ok {
 			ns := make(map[string]any, len(m))
 			for k, v := range m {
+				if k == "avatar" {
+					continue // 0x01df 指纹键已退役,顺带清理旧缓存残留
+				}
 				ns[k] = v
 			}
 			ns["flowers"] = items
@@ -209,14 +189,11 @@ func (p *Pipeline) setFlowers(acc string, items []flowerItem) {
 // onBossNpcInfo 处理 s2c 0x0375 花种 BOSS 分组:只把 flower_npcs(花灵,普通+特殊)渲染到花种页。
 // world_leader_npcs(世界 BOSS)与 legendary_npcs(传说 NPC)与花种无关,解析时不取。
 //
-// 0x0375 不带世界标识,故按「npc_logic_id 全局唯一」这一事实推断世界归属:
-//   - 与某存档槽重叠 ≥ ceil(len/2) 即视为同一世界:从该槽恢复已点过的 0x0338 详情,
-//     避免整组重发把查看状态冲掉(退回拜访过的世界时同样命中,标记不丢)。
-//   - 与自己世界槽无重叠 → 换了世界:当前世界入槽,新列表进新槽;第一个见到的世界记为
-//     自己世界("self",永不淘汰),之后的新世界进好友槽(上限 maxFriendWorlds,按访问时间淘汰)。
-//   - OwnerUserID == 当前账号 user_id 可证明是自己世界(有人选中了花),仅作锦上添花的强化:
-//     实测 select_flower_owner_id 只在「有玩家选中这朵花」时非零,自己世界没人选花时全为 0,
-//     所以它几乎不会触发,主判据就是「首次见到的世界 = self」(见下)。
+// 世界归属由普通花种的 select_flower_owner_id 直接确定(用户确认的判据):
+// 全为 0 = 自己世界("self",永不淘汰);有非 0 值 = 好友世界,该值即世界归属者
+// user_id(游戏账号唯一标识),槽键用归属者 user_id("owner:<uid>",稳定唯一,回访直接命中)。
+// 命中同世界槽即从该槽恢复已点过的 0x0338 详情,避免整组重发把查看状态冲掉
+// (退回拜访过的世界时同样命中,标记不丢)。
 //   - 结果与当前列表完全一致时不广播(退回自己世界且花未变时前端零感知)。
 func (p *Pipeline) onBossNpcInfo(m capture.Message, acc string) {
 	// 解析新列表(不含 detail)。
@@ -275,49 +252,13 @@ func (p *Pipeline) onBossNpcInfo(m capture.Message, acc string) {
 		return
 	}
 
-	// 自己世界强化判据(非主判据):某朵花被当前账号选中(OwnerUserID==自己的 user_id)时必是
-	// 自己世界,直接锁 self(可能尚未建槽);但 select_flower_owner_id 常态为 0,多数情况不触发,
-	// 世界归属仍以「首次见到的世界 = self」为主判据。
-	isSelf := false
-	if uid, ok := uidFromAcc(acc); ok {
-		for i := range items {
-			if items[i].OwnerUserID != 0 && items[i].OwnerUserID == uint64(uid) {
-				isSelf = true
-				break
-			}
-		}
+	// 世界归属(唯一判据):select_flower_owner_id 全 0 = 自己世界;有非 0 = 好友世界(归属者 user_id)。
+	ownerID := flowerWorldOwner(items)
+	targetKey := "self"
+	if ownerID != 0 {
+		targetKey = flowerOwnerKey(ownerID)
 	}
-
-	// 定位目标槽:isSelf 直接锁 self(可能尚未建槽);否则按重叠度匹配已有槽(含 self)。
-	targetKey := ""
-	var targetItems []flowerItem
-	if isSelf {
-		targetKey = "self"
-		targetItems, _, _ = slotFlowers(worlds, "self")
-	} else {
-		bestKey, bestN := "", 0
-		for k := range worlds {
-			si, _, ok := slotFlowers(worlds, k)
-			if !ok {
-				continue
-			}
-			if n := overlapFlowers(items, si); n > bestN {
-				bestKey, bestN = k, n
-			}
-		}
-		if th := (len(items) + 1) / 2; bestKey != "" && bestN >= th {
-			targetKey = bestKey
-			targetItems, _, _ = slotFlowers(worlds, bestKey)
-		}
-	}
-	if targetKey == "" {
-		// 全新世界:首次(尚未有 self 槽)= 自己世界,之后进好友槽(指纹键)。
-		if _, hasSelf := worlds["self"]; hasSelf {
-			targetKey = flowerWorldKey(items)
-		} else {
-			targetKey = "self"
-		}
-	}
+	targetItems, _, _ := slotFlowers(worlds, targetKey)
 
 	// 恢复同世界 detail 并更新槽(复制存档表,不动 server 缓存里的共享 map)。
 	items = mergeFlowerDetail(items, targetItems)
