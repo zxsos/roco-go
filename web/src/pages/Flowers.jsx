@@ -135,7 +135,6 @@ export default function Flowers() {
         <button className="btn ghost" onClick={handleDeleteSlot} disabled={!selKey.startsWith('owner:')}>
           删除该槽
         </button>
-        <span className="muted slot-hint">0=自己世界,有 id=好友世界;删除后回访该世界重新建档</span>
         {slotMsg && <span className={'slot-msg' + (slotMsg.startsWith('已') ? '' : ' slot-msg-err')}>{slotMsg}</span>}
       </div>
       {selKey === '__current__' && !data ? (
