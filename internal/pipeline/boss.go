@@ -1,7 +1,10 @@
 package pipeline
 
 import (
+	"reflect"
 	"sort"
+	"strconv"
+	"strings"
 
 	"github.com/whoisnian/rocom-capture/internal/capture"
 	"github.com/whoisnian/rocom-capture/internal/scene"
@@ -41,49 +44,66 @@ type flowerKey struct {
 	blood uint32
 }
 
-// onBossNpcInfo 处理 s2c 0x0375 花种 BOSS 分组:只把 flower_npcs(花灵,普通+特殊)渲染到花种页。
-// world_leader_npcs(世界 BOSS)与 legendary_npcs(传说 NPC)与花种无关,解析时不取。
-// 游戏内每次打开面板都会整组重发:基础字段以新下发为准,但已点过的 0x0338 详情
-// 按 npc_logic_id 从旧分组里保留,避免整组刷新把查看状态冲掉。
-func (p *Pipeline) onBossNpcInfo(m capture.Message, acc string) {
-	// 先读旧分组,收集已点过(有 0x0338 详情)的项:按 npc_logic_id 索引,兜底按 (id,blood)。
-	prevLogic := make(map[uint64]flowerItem)
-	prevKey := make(map[flowerKey]flowerItem)
-	if raw := p.srv.GetLastFlowers(acc); raw != nil {
-		if payload, ok := raw.(map[string]any); ok {
-			if items, ok := payload["flowers"].([]flowerItem); ok {
-				for _, it := range items {
-					if !it.Detail {
-						continue
-					}
-					if it.NpcLogicID != 0 {
-						prevLogic[it.NpcLogicID] = it
-					} else {
-						prevKey[flowerKey{it.ID, it.Blood}] = it
-					}
-				}
-			}
+// maxFriendWorlds 是好友世界槽上限:超过后按最近访问时间(ts)淘汰最早的;
+// 自己世界槽("self")不占名额、永不淘汰,可自由访问任意多好友世界。
+const maxFriendWorlds = 5
+
+// flowerWorldKey 由 npc_logic_id 集合生成世界指纹,用作好友槽的 key。
+// 存档表 payload["worlds"]:键为 "self"(自己世界)或本指纹(好友世界),值为
+// {"flowers": []flowerItem(该世界最近一次完整列表,含 0x0338 detail),
+//  "ts": int64(最近访问 Unix 秒,好友槽 LRU 淘汰依据)}。
+// npc_logic_id 全局唯一;同一世界两次推送仅个别花重生时指纹会变,但重叠度判定
+// (onBossNpcInfo 内)不受影响,指纹只在「识别出全新世界建槽」时用到。
+func flowerWorldKey(items []flowerItem) string {
+	ids := make([]uint64, 0, len(items))
+	for _, it := range items {
+		if it.NpcLogicID != 0 {
+			ids = append(ids, it.NpcLogicID)
 		}
 	}
-	items := make([]flowerItem, 0, 23)
-	for _, b := range scene.ParseBossNpcInfoRsp(m.AppBody) {
-		it := flowerItem{
-			ID:          b.NpcCfgID,
-			Star:        b.Star,
-			Blood:       b.Blood,
-			NpcLogicID:  b.NpcLogicID,
-			EndTs:       b.EndTs,
-			SpecSeedID:  b.SpecSeedID,
-			ActivityID:  b.ActivityID,
-			OwnerUserID: b.OwnerUserID,
+	sort.Slice(ids, func(i, j int) bool { return ids[i] < ids[j] })
+	var b strings.Builder
+	for _, id := range ids {
+		b.WriteString(strconv.FormatUint(id, 36))
+		b.WriteByte(',')
+	}
+	return b.String()
+}
+
+// overlapFlowers 统计两个列表按 npc_logic_id 重叠的朵数。
+func overlapFlowers(a, b []flowerItem) int {
+	set := make(map[uint64]struct{}, len(b))
+	for _, it := range b {
+		if it.NpcLogicID != 0 {
+			set[it.NpcLogicID] = struct{}{}
 		}
-		if base, ok := p.db.PetBase(b.PetBaseID); ok {
-			it.Name = base.Name
+	}
+	n := 0
+	for _, it := range a {
+		if _, ok := set[it.NpcLogicID]; ok {
+			n++
 		}
-		it.BloodName = p.db.BloodName(b.Blood)
-		it.BloodIcon = p.db.BloodIcon(b.Blood)
-		it.Img = p.db.PetImageByBase(b.PetBaseID, false).Head
-		// 合并旧详情:面板整组重发不丢已点过的 0x0338 查看状态。
+	}
+	return n
+}
+
+// mergeFlowerDetail 把旧槽列表里已点过的 0x0338 详情按 npc_logic_id(兜底 id+blood)合并进新列表。
+// 仅在同世界内调用:(id,blood) 兜底依赖同世界内品种唯一,跨世界可能误继承,故不得跨世界使用。
+func mergeFlowerDetail(items, prev []flowerItem) []flowerItem {
+	prevLogic := make(map[uint64]flowerItem)
+	prevKey := make(map[flowerKey]flowerItem)
+	for _, it := range prev {
+		if !it.Detail {
+			continue
+		}
+		if it.NpcLogicID != 0 {
+			prevLogic[it.NpcLogicID] = it
+		} else {
+			prevKey[flowerKey{it.ID, it.Blood}] = it
+		}
+	}
+	for i := range items {
+		it := &items[i]
 		var old flowerItem
 		var ok bool
 		if it.NpcLogicID != 0 {
@@ -103,6 +123,121 @@ func (p *Pipeline) onBossNpcInfo(m capture.Message, acc string) {
 			it.MedalName = old.MedalName
 			it.MedalIcon = old.MedalIcon
 		}
+	}
+	return items
+}
+
+// cloneWorlds 浅复制存档表,后续增删槽不污染 server 缓存里的共享 map。
+func cloneWorlds(worlds map[string]any) map[string]any {
+	nw := make(map[string]any, len(worlds))
+	for k, v := range worlds {
+		nw[k] = v
+	}
+	return nw
+}
+
+// slotFlowers 读存档表某槽的列表与最近访问时间。
+func slotFlowers(worlds map[string]any, key string) ([]flowerItem, int64, bool) {
+	v, ok := worlds[key]
+	if !ok {
+		return nil, 0, false
+	}
+	m, ok := v.(map[string]any)
+	if !ok {
+		return nil, 0, false
+	}
+	items, _ := m["flowers"].([]flowerItem)
+	ts, _ := m["ts"].(int64)
+	return items, ts, true
+}
+
+// trimFriendWorlds 好友槽超上限时按最近访问时间(ts 升序)淘汰最老的,self 槽不受影响。
+func trimFriendWorlds(worlds map[string]any) {
+	type entry struct {
+		key string
+		ts  int64
+	}
+	var list []entry
+	for k, v := range worlds {
+		if k == "self" {
+			continue
+		}
+		if m, ok := v.(map[string]any); ok {
+			if ts, ok := m["ts"].(int64); ok {
+				list = append(list, entry{k, ts})
+			}
+		}
+	}
+	if len(list) <= maxFriendWorlds {
+		return
+	}
+	sort.Slice(list, func(i, j int) bool { return list[i].ts < list[j].ts })
+	for _, e := range list[:len(list)-maxFriendWorlds] {
+		delete(worlds, e.key)
+	}
+}
+
+// setFlowers 更新当前世界列表并写回对应槽后广播(0x0338 详情合并/捕捉清理共用)。
+// 槽同步写回,保证回访该世界时恢复的是最新 detail。
+func (p *Pipeline) setFlowers(acc string, items []flowerItem) {
+	payload, _ := p.srv.GetLastFlowers(acc).(map[string]any)
+	var worlds map[string]any
+	var cur string
+	if payload != nil {
+		worlds, _ = payload["worlds"].(map[string]any)
+		cur, _ = payload["cur"].(string)
+	}
+	if worlds == nil {
+		worlds = map[string]any{}
+	}
+	worlds = cloneWorlds(worlds)
+	if cur != "" {
+		if m, ok := worlds[cur].(map[string]any); ok {
+			ns := make(map[string]any, len(m))
+			for k, v := range m {
+				ns[k] = v
+			}
+			ns["flowers"] = items
+			worlds[cur] = ns
+		}
+	}
+	payload = map[string]any{"account": acc, "flowers": items, "cur": cur, "worlds": worlds}
+	p.srv.SetLastFlowers(acc, payload)
+	p.srv.Hub().Broadcast("flowers", acc, payload)
+}
+
+// onBossNpcInfo 处理 s2c 0x0375 花种 BOSS 分组:只把 flower_npcs(花灵,普通+特殊)渲染到花种页。
+// world_leader_npcs(世界 BOSS)与 legendary_npcs(传说 NPC)与花种无关,解析时不取。
+//
+// 0x0375 不带世界标识,故按「npc_logic_id 全局唯一」这一事实推断世界归属:
+//   - 与某存档槽重叠 ≥ ceil(len/2) 即视为同一世界:从该槽恢复已点过的 0x0338 详情,
+//     避免整组重发把查看状态冲掉(退回拜访过的世界时同样命中,标记不丢)。
+//   - 与自己世界槽无重叠 → 换了世界:当前世界入槽,新列表进新槽;第一个见到的世界记为
+//     自己世界("self",永不淘汰),之后的新世界进好友槽(上限 maxFriendWorlds,按访问时间淘汰)。
+//   - OwnerUserID == 当前账号 user_id 可证明是自己世界(有人选中了花),仅作锦上添花的强化:
+//     实测 select_flower_owner_id 只在「有玩家选中这朵花」时非零,自己世界没人选花时全为 0,
+//     所以它几乎不会触发,主判据就是「首次见到的世界 = self」(见下)。
+//   - 结果与当前列表完全一致时不广播(退回自己世界且花未变时前端零感知)。
+func (p *Pipeline) onBossNpcInfo(m capture.Message, acc string) {
+	// 解析新列表(不含 detail)。
+	items := make([]flowerItem, 0, 23)
+	for _, b := range scene.ParseBossNpcInfoRsp(m.AppBody) {
+		it := flowerItem{
+			ID:          b.NpcCfgID,
+			Star:        b.Star,
+			Blood:       b.Blood,
+			NpcLogicID:  b.NpcLogicID,
+			EndTs:       b.EndTs,
+			SpecSeedID:  b.SpecSeedID,
+			ActivityID:  b.ActivityID,
+			OwnerUserID: b.OwnerUserID,
+		}
+		if base, ok := p.db.PetBase(b.PetBaseID); ok {
+			it.Name = base.Name
+		}
+		it.BloodName = p.db.BloodName(b.Blood)
+		it.BloodIcon = p.db.BloodIcon(b.Blood)
+		it.Img = p.db.PetImageByBase(b.PetBaseID, false).Head
 		items = append(items, it)
 	}
 	// 顺序稳定:特殊花种(7 星)在前,普通花种按血脉 id 升序。
@@ -112,7 +247,89 @@ func (p *Pipeline) onBossNpcInfo(m capture.Message, acc string) {
 		}
 		return items[i].Blood < items[j].Blood
 	})
-	payload := map[string]any{"account": acc, "flowers": items}
+
+	// 读缓存。
+	var payload map[string]any
+	if raw, _ := p.srv.GetLastFlowers(acc).(map[string]any); raw != nil {
+		payload = raw
+	}
+	var oldItems []flowerItem
+	var oldCur string
+	var worlds map[string]any
+	if payload != nil {
+		oldItems, _ = payload["flowers"].([]flowerItem)
+		oldCur, _ = payload["cur"].(string)
+		worlds, _ = payload["worlds"].(map[string]any)
+	}
+	if worlds == nil {
+		worlds = map[string]any{}
+	}
+
+	// 空分组(花种全被采完):当前世界清空显示,但保留槽内 detail 不覆盖,等下次推送恢复。
+	if len(items) == 0 {
+		if len(oldItems) != 0 {
+			payload = map[string]any{"account": acc, "flowers": []flowerItem{}, "cur": oldCur, "worlds": worlds}
+			p.srv.SetLastFlowers(acc, payload)
+			p.srv.Hub().Broadcast("flowers", acc, payload)
+		}
+		return
+	}
+
+	// 自己世界强化判据(非主判据):某朵花被当前账号选中(OwnerUserID==自己的 user_id)时必是
+	// 自己世界,直接锁 self(可能尚未建槽);但 select_flower_owner_id 常态为 0,多数情况不触发,
+	// 世界归属仍以「首次见到的世界 = self」为主判据。
+	isSelf := false
+	if uid, ok := uidFromAcc(acc); ok {
+		for i := range items {
+			if items[i].OwnerUserID != 0 && items[i].OwnerUserID == uint64(uid) {
+				isSelf = true
+				break
+			}
+		}
+	}
+
+	// 定位目标槽:isSelf 直接锁 self(可能尚未建槽);否则按重叠度匹配已有槽(含 self)。
+	targetKey := ""
+	var targetItems []flowerItem
+	if isSelf {
+		targetKey = "self"
+		targetItems, _, _ = slotFlowers(worlds, "self")
+	} else {
+		bestKey, bestN := "", 0
+		for k := range worlds {
+			si, _, ok := slotFlowers(worlds, k)
+			if !ok {
+				continue
+			}
+			if n := overlapFlowers(items, si); n > bestN {
+				bestKey, bestN = k, n
+			}
+		}
+		if th := (len(items) + 1) / 2; bestKey != "" && bestN >= th {
+			targetKey = bestKey
+			targetItems, _, _ = slotFlowers(worlds, bestKey)
+		}
+	}
+	if targetKey == "" {
+		// 全新世界:首次(尚未有 self 槽)= 自己世界,之后进好友槽(指纹键)。
+		if _, hasSelf := worlds["self"]; hasSelf {
+			targetKey = flowerWorldKey(items)
+		} else {
+			targetKey = "self"
+		}
+	}
+
+	// 恢复同世界 detail 并更新槽(复制存档表,不动 server 缓存里的共享 map)。
+	items = mergeFlowerDetail(items, targetItems)
+	worlds = cloneWorlds(worlds)
+	worlds[targetKey] = map[string]any{"flowers": items, "ts": m.Time.Unix()}
+	trimFriendWorlds(worlds)
+
+	// 结果与当前完全一致则不刷新(退回自己世界且花未变时前端零感知)。
+	if oldCur == targetKey && reflect.DeepEqual(items, oldItems) {
+		return
+	}
+	payload = map[string]any{"account": acc, "flowers": items, "cur": targetKey, "worlds": worlds}
 	p.srv.SetLastFlowers(acc, payload)
 	p.srv.Hub().Broadcast("flowers", acc, payload)
 }
@@ -168,9 +385,7 @@ func (p *Pipeline) clearFlowerDetail(acc string) {
 	if !updated {
 		return
 	}
-	payload = map[string]any{"account": acc, "flowers": items}
-	p.srv.SetLastFlowers(acc, payload)
-	p.srv.Hub().Broadcast("flowers", acc, payload)
+	p.setFlowers(acc, items)
 }
 
 // onTeamBattleInfo 处理 s2c 0x0338(点击地图花种的详情回包):
@@ -249,7 +464,5 @@ func (p *Pipeline) onTeamBattleInfo(m capture.Message, acc string) {
 	if !updated {
 		return
 	}
-	payload = map[string]any{"account": acc, "flowers": items}
-	p.srv.SetLastFlowers(acc, payload)
-	p.srv.Hub().Broadcast("flowers", acc, payload)
+	p.setFlowers(acc, items)
 }

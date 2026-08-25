@@ -103,10 +103,21 @@ func (s *Server) GetLastFlowers(account string) any {
 }
 
 // handleFlowers 返回当前账号最近一次花种(花灵)BOSS 分组;无记录(尚未收到 0x0375)返回 null。
+// 内部字段(cur/worlds:世界存档表,见 pipeline/boss.go)对前端隐藏,只透传 account/flowers。
 func (s *Server) handleFlowers(w http.ResponseWriter, r *http.Request) {
 	s.posMu.Lock()
 	v := s.lastFlowers[s.acct(r)]
 	s.posMu.Unlock()
+	if m, ok := v.(map[string]any); ok {
+		cp := make(map[string]any, len(m))
+		for k, val := range m {
+			if k == "cur" || k == "worlds" {
+				continue
+			}
+			cp[k] = val
+		}
+		v = cp
+	}
 	writeJSON(w, v)
 }
 
