@@ -44,6 +44,9 @@ img.pet-avatar { object-fit: cover; }
 .mark-shiny { background: #3a2f6b; color: #c9b6ff; }
 .mark-colorful { background: #6b2f50; color: #ffb6e0; }
 .mark-form { background: #2f4a3a; color: #a8e6c0; font-weight: 500; }
+/* 炫彩色卡缩略图(280x154 按 1.8:1 缩小,与 .mark-img 同高),细描边便于浅色卡在浅底上区分 */
+.glass-chip { height: 18px; width: 33px; object-fit: cover; border-radius: 3px;
+  margin-left: 4px; vertical-align: middle; box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.18); }
 
 /* 蛋组(繁殖组)标签:多个组名并排,hover 显示官方描述 */
 .egg-groups { display: inline-flex; gap: 4px; flex-wrap: wrap; vertical-align: middle; }

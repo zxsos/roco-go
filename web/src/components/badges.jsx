@@ -25,7 +25,18 @@ function MarkIcon({ src, title, fallback, cls }) {
   return <span className={'mark ' + cls} title={title}>{fallback}</span>
 }
 
-// Marks 渲染异色/炫彩标记(优先游戏图标;两者兼具用合成的异色炫彩图)。
+// GlassChip 渲染炫彩色卡缩略图(按 glassType/glassValue 生成的 280x154 webp,
+// 后端 gen_glass.py 合成,见 scripts/gen_glass.py);未生成时退化为原炫彩图标。
+function GlassChip({ p }) {
+  const icons = React.useContext(IconsContext)
+  if (p.glassChip) {
+    return <img className="glass-chip" src={imgURL(p.glassChip)} alt="炫彩" title="炫彩色卡" />
+  }
+  return <MarkIcon src={icons.colorful} title="炫彩" fallback="彩" cls="mark-colorful" />
+}
+
+// Marks 渲染异色/炫彩标记(优先游戏图标;两者兼具用合成的异色炫彩图;
+// 炫彩单标的优先用色卡图,缺图回退图标/文字)。
 export function Marks({ p }) {
   const icons = React.useContext(IconsContext)
   if (!p) return null
@@ -35,7 +46,7 @@ export function Marks({ p }) {
   return (
     <>
       {p.shiny && <MarkIcon src={icons.shiny} title="异色" fallback="异" cls="mark-shiny" />}
-      {p.colorful && <MarkIcon src={icons.colorful} title="炫彩" fallback="彩" cls="mark-colorful" />}
+      {p.colorful && <GlassChip p={p} />}
     </>
   )
 }
