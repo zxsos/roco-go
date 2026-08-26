@@ -36,6 +36,9 @@ export default function Events() {
   // 规则命中提示音开关:新捕获事件命中高亮规则时响铃(异色/炫彩响升级音)。默认关,不打扰。
   const [soundOn, setSoundOn] = useStoredFlag(localStorage, 'ev.hlSound.v1', false)
   const [detailGid, setDetailGid] = useState(null) // 详情弹窗的 gid(null=关闭)
+  // 分页:初始只拉最近 100 条,列表底部「加载更多」按 beforeId 追加更早事件(实时推送仍进顶部)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const [hasMore, setHasMore] = useState(true)
   useWakeLock(keepAwake)
   // subscribe 的 effect 只依赖 account,回调里读 rules/mode/soundOn 需走 ref 拿最新值
   const soundRef = useRef({ rules, mode, soundOn })
@@ -43,7 +46,10 @@ export default function Events() {
 
   useEffect(() => {
     // 后端只记录获得宠物事件(放生/赠送出等减少事件不入库),故无需再按类型过滤。
-    getEvents({ limit: 100 }).then((e) => setEvents(e || [])).catch(() => {})
+    getEvents({ limit: 100 }).then((e) => {
+      setEvents(e || [])
+      setHasMore((e || []).length >= 100) // 不足一页说明没有更早事件
+    }).catch(() => {})
     getEventCount().then((r) => setTotal(r?.count || 0)).catch(() => {})
     getEventStats().then(setStats).catch(() => {})
     return subscribe((m) => {
@@ -55,7 +61,8 @@ export default function Events() {
       if (so && isHighlight(pet, rs, md)) {
         pet.shiny || pet.colorful ? rareChime() : chime()
       }
-      setEvents((prev) => [m.data, ...prev].slice(0, 300))
+      // 上限放宽到 500:实时推送裁掉最旧尾部,不影响已加载的分页历史
+      setEvents((prev) => [m.data, ...prev].slice(0, 500))
       setTotal((n) => n + 1)
       getEventStats().then(setStats).catch(() => {}) // 新事件入库后刷新统计
     })
@@ -71,7 +78,25 @@ export default function Events() {
   // 清空事件历史(后端删除 + 前端清列表并将计数归零,下次获得从 1 重新计)
   const clearAll = () => {
     if (!window.confirm('确定清空所有事件历史?计数将从头开始。')) return
-    clearEvents().then(() => { setEvents([]); setTotal(0); setStats(null) }).catch(() => {})
+    clearEvents().then(() => { setEvents([]); setTotal(0); setStats(null); setHasMore(true) }).catch(() => {})
+  }
+
+  // 加载更早的历史事件:以当前最早一条的 id 作为 beforeId 向后端翻页,
+  // 追加到列表尾部(按 id 去重,避免与实时推送/已加载条目重复)。
+  const loadMore = () => {
+    const last = events[events.length - 1]
+    if (loadingMore || !last || !last.id) return
+    setLoadingMore(true)
+    getEvents({ limit: 100, beforeId: last.id })
+      .then((older) => {
+        setEvents((prev) => {
+          const ids = new Set(prev.map((e) => e.id))
+          return [...prev, ...(older || []).filter((o) => !ids.has(o.id))]
+        })
+        if (!older || older.length < 100) setHasMore(false) // 不足一页说明没有更早事件
+      })
+      .catch(() => {})
+      .finally(() => setLoadingMore(false))
   }
 
   return (
@@ -161,6 +186,11 @@ export default function Events() {
           {events.length === 0 && <div className="empty">暂无事件。游戏中捕捉/孵蛋新宠物后将实时出现在这里。</div>}
           {events.length > 0 && onlyHl && !events.some((ev) => isHighlight(ev.pet, rules, mode)) &&
             <div className="empty">当前没有命中高亮规则的事件。{rules.length === 0 ? '请先添加高亮规则。' : ''}</div>}
+          {events.length > 0 && hasMore && (
+            <button className="btn load-more" onClick={loadMore} disabled={loadingMore}>
+              {loadingMore ? '加载中…' : '加载更多'}
+            </button>
+          )}
         </div>
       </section>
 

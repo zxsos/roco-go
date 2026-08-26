@@ -23,9 +23,13 @@
 .stat-num { font-size: 18px; font-weight: 700; line-height: 1.2; font-variant-numeric: tabular-nums; }
 .stat-label { font-size: 12px; color: var(--fg-dim); }
 .stat-chart {
-  display: flex; align-items: flex-end; gap: 2px; height: 72px; padding: 8px 8px 4px;
+  display: flex; align-items: flex-end; gap: 2px; height: 100%; min-height: 72px; padding: 8px 8px 4px;
   border: 1px solid var(--line); border-radius: var(--radius); background: var(--bg-1);
+  /* 桌面两列网格中撑满行高:与右侧热门排行等高,填充空白(行高由右侧内容决定);
+     移动端单列时行高由内容决定,height:100% 无效,由媒体查询覆盖回固定高度 */
 }
+/* 加载更多:flex column 子项默认 stretch 铺满整行,按钮文字居中 */
+.event-list .load-more { margin-top: 2px; }
 .bar { flex: 1; min-width: 0; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 2px; }
 .bar-fill { width: 100%; background: var(--accent); border-radius: 2px 2px 0 0; min-height: 2px; opacity: .85; transition: opacity .15s ease; }
 .bar:hover .bar-fill { opacity: 1; }
@@ -73,6 +77,8 @@
   .content:has(.events-page) { padding-bottom: 12px; }
   /* 统计区回退单列:窄屏两列太挤,柱状图与热门排行纵向堆叠 */
   .event-stats { grid-template-columns: 1fr; }
+  /* 单列下行高由内容决定,height:100% 无效,柱状图固定回 72px */
+  .stat-chart { height: 72px; }
   /* 高度 = 视口 - 顶栏(~46) - .content padding(12×2) - 底部导航(~51);留 3px 余量 */
   .events-main { height: calc(100vh - 124px); height: calc(100dvh - 124px); }
   /* 移动端抽屉:标题行吸顶,✕ 关闭显示(标题与 AND/OR 同行,靠右) */
