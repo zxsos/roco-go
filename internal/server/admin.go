@@ -632,7 +632,6 @@ func (s *Server) handleAdminInjectFlower(w http.ResponseWriter, r *http.Request)
 	s.injectMu.Unlock()
 	writeJSON(w, map[string]any{"ok": true, "id": id, "npcLogicId": f.NpcLogicID})
 }
-}
 
 // handleAdminRevokeInject 撤销一只注入精灵(?account=xxx&id=yyy)。
 // 从 injects 与 lastWild 缓存里删掉,再广播一条 wildpets(不含该 id)让前端清掉标记。
