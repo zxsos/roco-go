@@ -513,8 +513,11 @@ func eggFromView(v *EggView) Egg {
 // 库里那份是写入当时的样子:本工具后加的字段(异色标记、品类排序键…)在旧行里根本没有,
 // 游戏版本更新后名称/区间也可能变——不重算的话,得等玩家再开一次背包才对得上。
 // 双亲快照存在另一列,原样带过来,再据此补推测嗓音与奖牌。
+// **在孵标记以入参为准**(调用方 store.ListEggs 已用权威列覆盖):data 里的 StartHatch
+// 是背包快照的残留(服务器取出蛋时不把它清零),重算若按它重推会把已取出的蛋又送进孵蛋栏。
 func RefreshEggView(v *EggView, db *gamedata.DB) *EggView {
 	out := ToEggView(eggFromView(v), db)
+	out.Hatching = v.Hatching
 	out.Parents = v.Parents
 	FillEggDerived(out, db)
 	return out
