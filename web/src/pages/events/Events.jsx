@@ -69,14 +69,14 @@ export default function Events() {
   }
 
   return (
-    <div className="list-layout">
+    <div className="list-layout events-page">
       <RulePanel
         rules={rules} mode={mode} setMode={setMode}
         addRule={addRule} toggleRule={toggleRule}
         collapsed={collapsed} onClose={() => setCollapsed(true)}
       />
 
-      <section>
+      <section className="events-main">
         <div className="toolbar list-toolbar event-head">
           <button className="btn filter-toggle" onClick={() => setCollapsed(false)}>规则{rules.length ? ` (${rules.length})` : ''}</button>
           <strong className="event-title">捕获事件</strong>
