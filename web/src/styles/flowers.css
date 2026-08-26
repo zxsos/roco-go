@@ -37,6 +37,8 @@
   box-shadow: var(--shadow-sm); white-space: nowrap;
 }
 .flower-corner img { width: 15px; height: 15px; object-fit: contain; display: block; }
+/* 炫彩色卡(280x154 长条)在角标里按原比例放大展示,盖过上面 15x15 的图标尺寸 */
+.flower-corner img.glass-chip { width: 33px; height: 18px; object-fit: cover; border-radius: 3px; }
 .flower-corner-colorful {
   background: #3a1a2c; border-color: #ffb6e0; color: #ffb6e0;
   box-shadow: 0 0 6px rgba(255, 182, 224, .6), var(--shadow-sm);

@@ -214,8 +214,8 @@ function FlowerCard({ f, now }) {
             f.glassType === 1 ? `炫彩 · ${f.glass}` : '普通(无炫彩)'
           }
         >
-          {(f.glassType === 1 || f.glassType === 2) && icons.colorful
-            ? <img src={imgURL(icons.colorful)} alt="炫彩" />
+          {(f.glassType === 1 || f.glassType === 2) && (f.glassChip || icons.colorful)
+            ? <img className={f.glassChip ? 'glass-chip' : ''} src={imgURL(f.glassChip || icons.colorful)} alt="炫彩" />
             : '普通'}
         </span>
       )}

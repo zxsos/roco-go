@@ -361,7 +361,7 @@ const WildLayer = React.memo(({ marks, mapPx, wildTip, dist }) => {
       const rare = kinds.includes('shiny') || kinds.includes('colorful')
       const mark = (kinds.includes('shiny') && kinds.includes('colorful') && icons.shinyColorful) ||
         (kinds.includes('shiny') && icons.shiny) ||
-        (kinds.includes('colorful') && icons.colorful)
+        (kinds.includes('colorful') && (p.glassChip || icons.colorful))
       const markKind = kinds.includes('shiny') && kinds.includes('colorful') ? 'shinyColorful'
         : kinds.includes('shiny') ? 'shiny'
         : kinds.includes('colorful') ? 'colorful'
@@ -374,7 +374,7 @@ const WildLayer = React.memo(({ marks, mapPx, wildTip, dist }) => {
           {p.img ? <img className="map-wild-face" src={imgURL(p.img)} alt="" draggable={false} /> : <span className="map-wild-face-fallback">🐾</span>}
           {rare && mark && (
             <span className={'map-wild-mark map-wild-mark-' + markKind}>
-              <img src={imgURL(mark)} alt="" draggable={false} />
+              <img className={p.glassChip ? 'map-glass-chip' : ''} src={imgURL(mark)} alt="" draggable={false} />
             </span>
           )}
         </div>,

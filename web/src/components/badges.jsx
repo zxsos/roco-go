@@ -27,7 +27,7 @@ function MarkIcon({ src, title, fallback, cls }) {
 
 // GlassChip 渲染炫彩色卡缩略图(按 glassType/glassValue 生成的 280x154 webp,
 // 后端 gen_glass.py 合成,见 scripts/gen_glass.py);未生成时退化为原炫彩图标。
-function GlassChip({ p }) {
+export function GlassChip({ p }) {
   const icons = React.useContext(IconsContext)
   if (p.glassChip) {
     return <img className="glass-chip" src={imgURL(p.glassChip)} alt="炫彩" title="炫彩色卡" />
