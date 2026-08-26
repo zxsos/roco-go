@@ -4,8 +4,11 @@
 .eggs-col-t { font-weight: 600; display: flex; align-items: center; gap: 6px; }
 .eggs-col-t .muted { font-weight: 400; font-size: 13px; }
 
-/* 孵蛋器:固定 3 格,每格三等分(与游戏内孵蛋器一致);空格子占位补满三格 */
-.eggs-incu { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+/* 孵蛋器:3 张卡片弹性填充整行(大屏 3 张均分,看起来也是三等分),但每格有宽度下限
+   (min-width:260px),容器不够宽时 flex 换行、宁可用尽行宽也不把卡片压扁丢信息;
+   空格子与卡片同宽补位,不足 3 格时占住后面的坑。 */
+.eggs-incu { display: flex; flex-wrap: wrap; gap: 10px; }
+.eggs-incu .egg-card, .eggs-incu .egg-slot-empty { flex: 1 1 300px; min-width: 260px; }
 .eggs-hatched, .eggs-bag { min-width: 0; }
 
 /* 孵蛋器标题旁的提示图标:比数字(13px)小;深色主题下黑色 svg 反白显示 */
@@ -52,7 +55,7 @@
 @media (max-width: 900px) {
   /* 空格子在手机上一个就占一行,却只是说「这一格还能放一颗」——标题的 n/3 已经说清了,
      故窄屏一律收起(空着几格、还是一颗都没在孵,都不占高度)。
-     孵蛋器仍是固定三等分(grid 列不变),只把空位格藏掉,蛋卡片照旧占 1/3 格。 */
+     孵蛋器卡片因 min-width 下限自动换行排布,不强制挤进一行。 */
   .egg-slot-empty { display: none; }
   .egg-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
@@ -60,7 +63,7 @@
    头部「蛋图 | 名称 | 角标+头像」三段并排放不下,故让名称换到第二行独占整行:
    名称块(egg-title)order:1 排到最后 + flex-basis:100% 自然折行,拿到整卡宽度,
    不至于被省略成两三个字;蛋图与角标组(都是定宽小图)留在第一行两端。
-   孵蛋器那栏更窄(固定三等分,每格只剩 ~110px),同样需要折行,故不限定 .egg-grid 内。 */
+   孵蛋器卡片窄屏时按 min-width 下限单列/双列,同样套用折行保信息,故不限定 .egg-grid 内。 */
 @media (max-width: 560px) {
   .egg-grid { gap: 8px; }
   .egg-grid .egg-card, .eggs-incu .egg-card { padding: 8px; }
