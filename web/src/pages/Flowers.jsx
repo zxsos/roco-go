@@ -256,6 +256,14 @@ function FlowerCard({ f, now }) {
             )}
           </div>
         )}
+        {/* 炫彩/隐藏炫彩:卡片内展示完整大色卡(角标小色卡看不清配色,这里铺满信息列可细看)。
+            后端在 glassType != 0 时才带 glassValue,故此处判断即可。 */}
+        {f.glassType > 0 && f.glassValue > 0 && (
+          <div className="flower-glass-bar">
+            <GlassChip p={f} className="flower-glass-chip" />
+            {f.glass && <span className="flower-glass-t" title={f.glass}>{f.glass}</span>}
+          </div>
+        )}
       </div>
     </div>
   )

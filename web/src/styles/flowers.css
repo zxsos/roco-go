@@ -38,10 +38,33 @@
 }
 .flower-corner img { width: 15px; height: 15px; object-fit: contain; display: block; }
 /* 炫彩色卡(280x154 长条)在角标里按原比例放大展示,盖过上面 15x15 的图标尺寸
-   (span 容器 = 3 层 mask 合成,img = 隐藏炫彩整图) */
-.flower-corner .glass-chip { width: 33px; height: 18px; border-radius: 3px; }
+   (span 容器 = 3 层 mask 合成,img = 隐藏炫彩整图)。必须显式 position:relative +
+   display:block + overflow:hidden——span 默认 inline 时宽高不生效,子层 <i> 的
+   absolute inset:0 会相对最近定位祖先(角标 .flower-corner)铺满整个角标,色卡错位。 */
+.flower-corner .glass-chip {
+  position: relative; display: block; overflow: hidden;
+  width: 33px; height: 18px; border-radius: 3px;
+}
 /* 角标里 15x15 的 img 规则会命中色卡内部整图,还原铺满 */
 .flower-corner .glass-chip > img { width: 100%; height: 100%; object-fit: cover; }
+/* 卡片内大色卡:280x154 原始比例的 1/2(140x77),铺满信息列宽度,点开即可看清配色;
+   下方附炫彩外观描述文字(如「四角星·亮X暗 - 浅紫橙」)。定位要求与角标同款。 */
+.flower-glass-bar {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 2px;
+  margin-top: 4px; min-width: 0;
+}
+.flower-glass-chip {
+  position: relative; display: block; overflow: hidden;
+  width: 100%; max-width: 140px; aspect-ratio: 280 / 154;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, .14);
+  box-shadow: 0 1px 6px rgba(0, 0, 0, .4);
+}
+.flower-glass-chip > img { width: 100%; height: 100%; object-fit: cover; }
+.flower-glass-t {
+  font-size: 11px; color: var(--accent); line-height: 1.4;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%;
+}
 .flower-corner-colorful {
   background: #3a1a2c; border-color: #ffb6e0; color: #ffb6e0;
   box-shadow: 0 0 6px rgba(255, 182, 224, .6), var(--shadow-sm);

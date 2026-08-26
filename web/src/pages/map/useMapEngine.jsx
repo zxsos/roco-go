@@ -388,6 +388,11 @@ const WildLayer = React.memo(({ marks, mapPx, wildTip, dist }) => {
             style={{ left: p.u * mapPx, top: p.v * mapPx }}>
             <div className="twn">{p.n || '野生宠物'}{p.lv ? ' Lv.' + p.lv : ''}</div>
             <div className="twt">{wildTags(p.kinds).join(' ') || '普通'}</div>
+            {/* 炫彩/异色炫彩:悬浮面板里展示完整色卡(角标圆盘太小看不清,点开可细看配色)。
+                后端在 glassType != 空 时才带这两个字段,故此处判断即可;异色(仅 shiny)无炫彩数据不显示。 */}
+            {p.glassType > 0 && p.glassValue > 0 && (
+              <div className="twg"><GlassChip p={p} className="map-wild-tip-chip" /></div>
+            )}
             <div className="twr">体重 {p.weightPct != null ? Math.round(p.weightPct * 10) / 10 + '%' : '-'} · 嗓音 {p.voice}</div>
             <div className="twc">X {p.x} · Y {p.y} · Z {p.z}</div>
             <div className="twd">距离 {dist != null ? dist : '-'} 米</div>
