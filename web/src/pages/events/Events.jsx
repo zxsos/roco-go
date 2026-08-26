@@ -25,6 +25,12 @@ export default function Events() {
   const [collapsed, setCollapsed] = useStoredFlag(sessionStorage, 'hlCollapsed', true)
   // 仅展示命中高亮规则的事件
   const [onlyHl, setOnlyHl] = useStoredFlag(localStorage, 'onlyHl', false)
+  // 统计图表折叠(手机竖屏图表占比大,默认收起;桌面空间充足默认展开;用户手动切换后按选择持久化)
+  const [statsOpen, setStatsOpen] = useStoredState(
+    localStorage, 'ev.statsOpen',
+    (s) => (s === null ? !window.matchMedia('(max-width: 760px)').matches : s === '1'),
+    (v) => (v ? '1' : '0'),
+  )
   // 屏幕常亮开关(Screen Wake Lock)
   const [keepAwake, setKeepAwake] = useStoredFlag(localStorage, 'keepAwake', false)
   // 规则命中提示音开关:新捕获事件命中高亮规则时响铃(异色/炫彩响升级音)。默认关,不打扰。
@@ -83,6 +89,8 @@ export default function Events() {
           <span className="muted">共 {total} 只</span>
           <div className="spacer" />
           {/* 三个操作统一为单图标,含义见各自 title */}
+          <button className={'btn btn-icon' + (statsOpen ? ' primary' : '')} onClick={() => setStatsOpen((v) => !v)}
+            title={statsOpen ? '收起统计图表' : '展开统计图表'}>{statsOpen ? '▴' : '▾'}</button>
           <button className={'btn btn-icon' + (onlyHl ? ' primary' : '')} onClick={() => setOnlyHl((v) => !v)}
             title="仅展示命中高亮规则的事件">{onlyHl ? '★' : '☆'}</button>
           {wakeLockSupported
@@ -93,7 +101,7 @@ export default function Events() {
             title="规则命中提示音,新捕获命中高亮规则时响铃(异色/炫彩响升级音)">{soundOn ? '🔊' : '🔈'}</button>
           <button className="btn btn-icon" disabled={events.length === 0} onClick={clearAll} title="清空事件历史">🗑</button>
         </div>
-        {stats && (
+        {statsOpen && stats && (
           <div className="event-stats">
             <div className="stat-cards">
               <div className="stat-card">
