@@ -13,11 +13,11 @@ import (
 // 唯一要当心的是 **双亲快照单列存**:亲本可能被放生/赠送(pets 行随之删除),而蛋上记下的
 // 双亲要留存,故 parents 存的是收蛋那一刻的 JSON 快照,不引用 pets 表;常规 upsert 不碰它。
 //
-// **hatching 列是「在孵蛋器里」的权威状态,只能由动作/权威消息维护**:
-// 服务器取出蛋时不清 start_hatch_time,背包快照(0x1344/登录)的入孵时刻不可信,故 UpsertEggs
-// 只把新行初始为 0、更新时不碰该列。置位/清零/对账分别走 SetEggHatcher(0x0164 放入)、
-// ClearHatching(0x0300 取出)、ReconcileHatching(0x0312 权威列表)。读取时以列为准覆盖
-// data 里的推断值(见 ListEggs)。
+// **hatching 列是「在孵蛋器里」的权威状态,只由 0x0312 对账(ReconcileHatching)维护**:
+// 服务器取出蛋时不清 start_hatch_time,放入/取出/破壳动作的回包与背包快照(0x1344/登录)
+// 的入孵时刻都不可信,故 UpsertEggs 只把新行初始为 0、更新时不碰该列;放入(0x0164)、
+// 取出(0x0300)回包一律只当普通变化入库,标记在玩家下次打开孵蛋器(0x0312)时全量收敛。
+// 读取时以列为准覆盖 data 里的推断值(见 ListEggs)。
 
 // UpsertEggs 批量写入/更新蛋(不动 parents、first_seen 与 hatching 列)。
 // now 取**消息时刻**而非 time.Now():离线回放的包时间是几小时前的,与挂钟混用会让
@@ -41,7 +41,7 @@ func (sc *Scoped) UpsertEggs(eggs []*pet.EggView, now int64) error {
 		}
 		rows = append(rows, []any{
 			sc.account, e.Gid, e.ItemID, e.ConfID, e.Name, e.Species,
-			e.HeightM, e.WeightKg, hpct, wpct, e.Src, 0, e.ObtainedAt, // hatching 恒写 0:权威状态由动作消息维护
+			e.HeightM, e.WeightKg, hpct, wpct, e.Src, 0, e.ObtainedAt, // hatching 恒写 0:权威状态只由 0x0312 维护
 			now, now, string(data),
 		})
 	}
@@ -56,23 +56,6 @@ ON CONFLICT(account, gid) DO UPDATE SET
   height_pct=excluded.height_pct, weight_pct=excluded.weight_pct,
   src=excluded.src, obtained_at=excluded.obtained_at,
   updated_at=excluded.updated_at, data=excluded.data`, rows)
-}
-
-// SetEggHatcher 按动作语义置一颗蛋的在孵标记:放入孵蛋器(0x0164)回包确认后置 1。
-// 更新前后值相同则不动库,返回 false。
-func (sc *Scoped) SetEggHatcher(gid uint32, in bool, now int64) (bool, error) {
-	want := 0
-	if in {
-		want = 1
-	}
-	res, err := sc.db.Exec(
-		`UPDATE eggs SET hatching=?, updated_at=? WHERE account=? AND gid=? AND hatching<>?`,
-		want, now, sc.account, gid, want)
-	if err != nil {
-		return false, err
-	}
-	n, _ := res.RowsAffected()
-	return n > 0, nil
 }
 
 // SetEggParents 记下某颗蛋的双亲快照(收蛋那一刻推断出来的);已有记录不覆盖,
@@ -105,40 +88,6 @@ func (sc *Scoped) DeleteEgg(gid uint32) error {
 	return err
 }
 
-// ClearHatching 按动作语义清一颗蛋的在孵标记:取出孵蛋器(0x0300)回包确认后调用。
-// 服务器不清 start_hatch_time,蛋字段不可信,只有动作是可靠的;列与 data 一并清,
-// 本来就不在孵时不动库,返回 false。
-func (sc *Scoped) ClearHatching(gid uint32, now int64) (bool, error) {
-	var data string
-	if err := sc.rdb.QueryRow(`SELECT data FROM eggs WHERE account=? AND gid=?`, sc.account, gid).Scan(&data); err != nil {
-		if err == sql.ErrNoRows {
-			return false, nil
-		}
-		return false, err
-	}
-	var v pet.EggView
-	if json.Unmarshal([]byte(data), &v) != nil {
-		return false, nil
-	}
-	if !v.Hatching {
-		return false, nil
-	}
-	v.Hatching = false
-	v.HatchedSecs, v.HatchUpdate, v.StartHatch = 0, 0, 0
-	blob, err := json.Marshal(&v)
-	if err != nil {
-		return false, err
-	}
-	res, err := sc.db.Exec(
-		`UPDATE eggs SET hatching=0, data=?, updated_at=? WHERE account=? AND gid=?`,
-		string(blob), now, sc.account, gid)
-	if err != nil {
-		return false, err
-	}
-	n, _ := res.RowsAffected()
-	return n > 0, nil
-}
-
 // PruneMissingEggs 据一轮完整的背包全量对账:不在背包里的直接删掉。
 // before 之后才首次见到的行放过,避免与同一时刻的新蛋抢跑。
 func (sc *Scoped) PruneMissingEggs(keep map[uint32]bool, before int64) error {
@@ -160,8 +109,10 @@ func (sc *Scoped) PruneMissingEggs(keep map[uint32]bool, before int64) error {
 	return nil
 }
 
-// ReconcileHatching 用 0x0312 的权威列表对账「在孵蛋器」标记(见 docs/data.md 3.6):
-//   - gids 里没有、但列标着在孵的蛋 → 清列与进度(取出残留的最终收敛点)
+// ReconcileHatching 用 0x0312 的权威列表对账「在孵蛋器」标记(见 docs/data.md 3.6)。
+// hatching 列**只由这里维护**:放入/取出/破壳都不再写列,全靠它全量收敛——
+//   - gids 为空(孵蛋器空) → 本账号所有标着在孵的蛋全部清列与进度
+//   - gids 里没有、但列标着在孵的蛋 → 清列与进度(取出/破壳残留的收敛点)
 //   - gids 里的蛋 → 确保列为在孵;skip 里的蛋刚由 ret_info.changes 精确刷新过
 //     (含 last_hatch_update_sec),不再动它们的进度
 //   - secs 与 gids 长度一致时才顺带刷新进度(HatchUpdate 取消息时刻近似;proto3 会省掉
@@ -169,9 +120,6 @@ func (sc *Scoped) PruneMissingEggs(keep map[uint32]bool, before int64) error {
 //
 // 返回是否有行被改动。
 func (sc *Scoped) ReconcileHatching(gids []uint32, secs []int32, skip map[uint32]bool, now int64) (bool, error) {
-	if len(gids) == 0 {
-		return false, nil
-	}
 	in := make(map[uint32]bool, len(gids))
 	for _, g := range gids {
 		in[g] = true
