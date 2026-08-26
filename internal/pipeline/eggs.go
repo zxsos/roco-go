@@ -15,10 +15,13 @@ import (
 //   - 0x1344 背包分页全量:入库 + 末页对账(不在背包的删掉,与宠物列表同一套路)
 //   - 0x0243 奖励通知:新得的蛋;flow_reason=223 即家园小窝下的蛋,顺手记双亲
 //   - 0x0262 商店购买:远行商人的「神奇的蛋」等,新蛋只在这条回包里下发(不另发奖励通知)
-//   - 0x0164 用道具 / 0x0312 孵化状态:同一颗蛋的进度更新(入孵时刻、已孵秒数)
+//   - 0x0164 用道具:放蛋入孵蛋器,changes 里入孵时刻非 0 的蛋置 hatching 权威列(1)
 //   - 0x02ff/0x0300 取出孵蛋器:服务器不清 start_hatch_time(实测只清进度),回包后按
-//     动作清零在孵标记(见 stopHatch);背包全量(0x1344/登录)可能把残留标记回灌,靠
-//     pet.Egg.PruneTakenOut 时间推断兜底、0x0312 对账作最终权威(见 applyHatchStatus)
+//     动作清零权威列(见 stopHatch)
+//   - 0x0312 孵化状态:进度更新 + 顶层 egg_gid[] 权威对账,列以它为准(见 applyHatchStatus)
+//
+// hatching 列只能由上面这三个动作/权威消息维护;背包快照(0x1344/登录)的 start_hatch_time
+// 不可信(取出残留),upsert 一律不碰该列,新行初始为 0。
 //   - 0x030b/0x030c 破壳:请求带 egg_gid,回包一到就把这颗蛋从库里删掉(它已不在背包里)
 //
 // 库里存的就是**背包现状**:页面只看背包,破壳/送人的蛋没人回看,故不留历史行。
@@ -62,6 +65,20 @@ func (p *Pipeline) handleEgg(m capture.Message, acc string) {
 			return
 		}
 		p.upsertEggs(sc, acc, eggs, m.Time)
+		if m.Opcode == pet.OpUseBagItemRsp {
+			// 放蛋入孵蛋器(0x0164):changes 里入孵时刻非 0 的蛋就是放进去的,置权威列。
+			need := false
+			for _, e := range eggs {
+				if e.Hatching() {
+					if ch, err := sc.SetEggHatcher(e.Gid, true, m.Time.Unix()); err == nil && ch {
+						need = true
+					}
+				}
+			}
+			if need {
+				p.srv.Hub().Broadcast("eggs", acc, map[string]any{"account": acc})
+			}
+		}
 		if m.Opcode == pet.OpGoodsRewardNotify && pet.ParseFlowReason(m.AppBody) == pet.FlowReasonHomeLay {
 			p.recordEggParents(m.Session, sc, eggs, m.Time)
 		}
@@ -81,8 +98,7 @@ func (p *Pipeline) handleEgg(m capture.Message, acc string) {
 
 // stopHatch 处理取出孵蛋器回包(0x0300)。服务器不清 start_hatch_time,蛋字段不可信,
 // 按「动作已确认」语义清零:回包 ret_info.changes 里的蛋仍常规入库(刷新背包侧 update_time,
-// PruneTakenOut 可能已顺带清掉残留),再按 c2s 请求(0x02ff)记下的 gid 动作清零,保证
-// 放入后立刻取出(时间差 < 孵满时长,推断判不出)也能实时清掉。
+// 不碰 hatching 列),再按 c2s 请求(0x02ff)记下的 gid 动作清零权威列,无论取出多久都能实时清。
 func (p *Pipeline) stopHatch(m capture.Message, sc *store.Scoped, acc string) {
 	gid := p.conn(m.Session).takeEgg
 	p.conn(m.Session).takeEgg = 0
@@ -156,15 +172,13 @@ func (p *Pipeline) upsertEggs(sc *store.Scoped, acc string, eggs []pet.Egg, now 
 	if len(eggs) == 0 {
 		return
 	}
-	nowUnix := now.Unix()
 	views := make([]*pet.EggView, 0, len(eggs))
-	for i := range eggs {
-		// 背包快照(0x1344/登录)里的 start_hatch_time 可能是取出后残留的旧值,时间推断
-		// 兜底清掉,避免重新登录把已取出的蛋又标成在孵(见 pet.Egg.PruneTakenOut)。
-		eggs[i].PruneTakenOut(nowUnix)
-		views = append(views, pet.ToEggView(eggs[i], p.db))
+	for _, e := range eggs {
+		views = append(views, pet.ToEggView(e, p.db))
 	}
-	if err := sc.UpsertEggs(views, nowUnix); err == nil {
+	// UpsertEggs 不碰 hatching 列:孵蛋器状态由动作/权威消息维护(SetEggHatcher/
+	// ClearHatching/ReconcileHatching),背包快照的 start_hatch_time 不可信。
+	if err := sc.UpsertEggs(views, now.Unix()); err == nil {
 		p.srv.Hub().Broadcast("eggs", acc, map[string]any{"account": acc})
 	}
 }

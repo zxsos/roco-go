@@ -51,21 +51,9 @@ type Egg struct {
 	// 客户端自己查 PET_EGG_CONF[conf_id].precious_egg_type,这里同样以配置为准(见 ToEggView)
 }
 
-// Hatching 报告这颗蛋是否正在孵蛋器里。
+// Hatching 报告这颗蛋是否正在孵蛋器里。仅作 data 快照内的推断值:孵蛋器状态以
+// store 的 hatching 权威列为准(ListEggs 读取时覆盖本字段),判断依据见 docs/data.md 3.6。
 func (e Egg) Hatching() bool { return e.StartHatch > 0 }
-
-// PruneTakenOut 清理「已被取出孵蛋器」的残留标记。服务器取出蛋(0x0300)时**不清零**
-// start_hatch_time(实测只清 hatched_secs/last_hatch_update_sec),所以背包全量(0x1344/
-// 登录)会把已取出的蛋又标成在孵。判据:入孵时刻残留、且毫无孵化进度、且放入至今已超过
-// 孵满时长——放着早该孵完却零进度,只能是被取出过。此刻把孵化字段全部清零。
-// 刚放入(入孵时刻=现在,差几秒)或正在孵(有进度)的蛋不会命中;放入后立刻取出、时间差
-// 不到孵满时长的,靠 0x0300 的动作清零兜底(见 pipeline.eggs.go)。
-func (e *Egg) PruneTakenOut(now int64) {
-	if e.StartHatch > 0 && e.HatchedSec == 0 && e.HatchUpdate == 0 &&
-		e.MaxSec > 0 && now-int64(e.StartHatch) > int64(e.MaxSec) {
-		e.StartHatch, e.HatchedSec, e.HatchUpdate = 0, 0, 0
-	}
-}
 
 // ParseBagEggs 从背包分页回包(0x1344)取本页的全部精灵蛋,并返回本页页号与总页数
 // (供调用方判断一轮全量是否已收齐,与宠物列表的分页对账同一套路)。

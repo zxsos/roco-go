@@ -12,8 +12,14 @@ import (
 // 这张表就是**当前背包里的蛋**:破壳/送人/用掉的直接删行(页面只看背包,留着也没人看)。
 // 唯一要当心的是 **双亲快照单列存**:亲本可能被放生/赠送(pets 行随之删除),而蛋上记下的
 // 双亲要留存,故 parents 存的是收蛋那一刻的 JSON 快照,不引用 pets 表;常规 upsert 不碰它。
+//
+// **hatching 列是「在孵蛋器里」的权威状态,只能由动作/权威消息维护**:
+// 服务器取出蛋时不清 start_hatch_time,背包快照(0x1344/登录)的入孵时刻不可信,故 UpsertEggs
+// 只把新行初始为 0、更新时不碰该列。置位/清零/对账分别走 SetEggHatcher(0x0164 放入)、
+// ClearHatching(0x0300 取出)、ReconcileHatching(0x0312 权威列表)。读取时以列为准覆盖
+// data 里的推断值(见 ListEggs)。
 
-// UpsertEggs 批量写入/更新蛋(不动 parents 与 first_seen)。
+// UpsertEggs 批量写入/更新蛋(不动 parents、first_seen 与 hatching 列)。
 // now 取**消息时刻**而非 time.Now():离线回放的包时间是几小时前的,与挂钟混用会让
 // PruneMissingEggs 的 first_seen<=before 永远不成立,过期的蛋就永远删不掉。
 func (sc *Scoped) UpsertEggs(eggs []*pet.EggView, now int64) error {
@@ -35,7 +41,7 @@ func (sc *Scoped) UpsertEggs(eggs []*pet.EggView, now int64) error {
 		}
 		rows = append(rows, []any{
 			sc.account, e.Gid, e.ItemID, e.ConfID, e.Name, e.Species,
-			e.HeightM, e.WeightKg, hpct, wpct, e.Src, e.Hatching, e.ObtainedAt,
+			e.HeightM, e.WeightKg, hpct, wpct, e.Src, 0, e.ObtainedAt, // hatching 恒写 0:权威状态由动作消息维护
 			now, now, string(data),
 		})
 	}
@@ -48,8 +54,25 @@ ON CONFLICT(account, gid) DO UPDATE SET
   item_id=excluded.item_id, conf_id=excluded.conf_id, name=excluded.name, species=excluded.species,
   height=excluded.height, weight=excluded.weight,
   height_pct=excluded.height_pct, weight_pct=excluded.weight_pct,
-  src=excluded.src, hatching=excluded.hatching, obtained_at=excluded.obtained_at,
+  src=excluded.src, obtained_at=excluded.obtained_at,
   updated_at=excluded.updated_at, data=excluded.data`, rows)
+}
+
+// SetEggHatcher 按动作语义置一颗蛋的在孵标记:放入孵蛋器(0x0164)回包确认后置 1。
+// 更新前后值相同则不动库,返回 false。
+func (sc *Scoped) SetEggHatcher(gid uint32, in bool, now int64) (bool, error) {
+	want := 0
+	if in {
+		want = 1
+	}
+	res, err := sc.db.Exec(
+		`UPDATE eggs SET hatching=?, updated_at=? WHERE account=? AND gid=? AND hatching<>?`,
+		want, now, sc.account, gid, want)
+	if err != nil {
+		return false, err
+	}
+	n, _ := res.RowsAffected()
+	return n > 0, nil
 }
 
 // SetEggParents 记下某颗蛋的双亲快照(收蛋那一刻推断出来的);已有记录不覆盖,
@@ -83,7 +106,7 @@ func (sc *Scoped) DeleteEgg(gid uint32) error {
 }
 
 // ClearHatching 按动作语义清一颗蛋的在孵标记:取出孵蛋器(0x0300)回包确认后调用。
-// 服务器不清 start_hatch_time,蛋字段不可信,只有动作是可靠的;读完改完再写回。
+// 服务器不清 start_hatch_time,蛋字段不可信,只有动作是可靠的;列与 data 一并清,
 // 本来就不在孵时不动库,返回 false。
 func (sc *Scoped) ClearHatching(gid uint32, now int64) (bool, error) {
 	var data string
@@ -102,7 +125,18 @@ func (sc *Scoped) ClearHatching(gid uint32, now int64) (bool, error) {
 	}
 	v.Hatching = false
 	v.HatchedSecs, v.HatchUpdate, v.StartHatch = 0, 0, 0
-	return true, sc.UpsertEggs([]*pet.EggView{&v}, now)
+	blob, err := json.Marshal(&v)
+	if err != nil {
+		return false, err
+	}
+	res, err := sc.db.Exec(
+		`UPDATE eggs SET hatching=0, data=?, updated_at=? WHERE account=? AND gid=?`,
+		string(blob), now, sc.account, gid)
+	if err != nil {
+		return false, err
+	}
+	n, _ := res.RowsAffected()
+	return n > 0, nil
 }
 
 // PruneMissingEggs 据一轮完整的背包全量对账:不在背包里的直接删掉。
@@ -127,8 +161,8 @@ func (sc *Scoped) PruneMissingEggs(keep map[uint32]bool, before int64) error {
 }
 
 // ReconcileHatching 用 0x0312 的权威列表对账「在孵蛋器」标记(见 docs/data.md 3.6):
-//   - gids 里没有、但库里标着在孵的蛋 → 清标记与进度(取出孵蛋器就靠这里兜底)
-//   - gids 里的蛋 → 确保标记为在孵;skip 里的蛋刚由 ret_info.changes 精确刷新过
+//   - gids 里没有、但列标着在孵的蛋 → 清列与进度(取出残留的最终收敛点)
+//   - gids 里的蛋 → 确保列为在孵;skip 里的蛋刚由 ret_info.changes 精确刷新过
 //     (含 last_hatch_update_sec),不再动它们的进度
 //   - secs 与 gids 长度一致时才顺带刷新进度(HatchUpdate 取消息时刻近似;proto3 会省掉
 //     hatched_secs=0 的项,数组对不上时只对账标记)
@@ -148,16 +182,16 @@ func (sc *Scoped) ReconcileHatching(gids []uint32, secs []int32, skip map[uint32
 			secBy[g] = secs[i]
 		}
 	}
-	rows, err := sc.rdb.Query(`SELECT gid, data FROM eggs WHERE account=?`, sc.account)
+	rows, err := sc.rdb.Query(`SELECT gid, hatching, data FROM eggs WHERE account=?`, sc.account)
 	if err != nil {
 		return false, err
 	}
-	var changed []*pet.EggView
-	touched := map[uint32]bool{}
+	var updates [][]any
 	for rows.Next() {
 		var gid uint32
+		var hatching int
 		var data string
-		if err := rows.Scan(&gid, &data); err != nil {
+		if err := rows.Scan(&gid, &hatching, &data); err != nil {
 			continue
 		}
 		var v pet.EggView
@@ -165,33 +199,42 @@ func (sc *Scoped) ReconcileHatching(gids []uint32, secs []int32, skip map[uint32
 			continue
 		}
 		if in[gid] {
-			if !v.Hatching {
-				v.Hatching = true
-				touched[gid] = true
-			}
-			if !skip[gid] {
-				if sec, ok := secBy[gid]; ok && (v.HatchedSecs != sec || v.HatchUpdate != now) {
-					v.HatchedSecs, v.HatchUpdate = sec, now
-					touched[gid] = true
+			if hatching == 1 {
+				if skip[gid] {
+					continue // changes 已精确刷新过,不动
 				}
+				if sec, ok := secBy[gid]; !ok || (v.HatchedSecs == sec && v.HatchUpdate == now) {
+					continue // 无可刷新进度
+				}
+			} else {
+				hatching = 1
+				v.Hatching = true
 			}
-		} else if v.Hatching {
+			if sec, ok := secBy[gid]; ok {
+				v.HatchedSecs, v.HatchUpdate = sec, now
+			}
+		} else if hatching == 1 {
+			hatching = 0
 			v.Hatching = false
 			v.HatchedSecs, v.HatchUpdate, v.StartHatch = 0, 0, 0
-			touched[gid] = true
+		} else {
+			continue
 		}
-		if touched[gid] {
-			changed = append(changed, &v)
+		blob, err := json.Marshal(&v)
+		if err != nil {
+			continue
 		}
+		updates = append(updates, []any{hatching, string(blob), now, sc.account, gid})
 	}
 	rows.Close()
 	if err := rows.Err(); err != nil {
 		return false, err
 	}
-	if len(changed) == 0 {
+	if len(updates) == 0 {
 		return false, nil
 	}
-	return true, sc.UpsertEggs(changed, now)
+	return true, execBatch(sc.db,
+		`UPDATE eggs SET hatching=?, data=?, updated_at=? WHERE account=? AND gid=?`, updates)
 }
 
 // EggFilter 是精灵蛋列表的筛选条件(空值即不限)。
@@ -212,7 +255,7 @@ func (sc *Scoped) ListEggs(f EggFilter) ([]*pet.EggView, error) {
 	// 基准顺序 = 背包里的原始次序(见 SetEggOrder);还没对过账的新蛋没有 seq,排在最后。
 	// pet.SortEggs 用的是稳定排序,故所有键都相等的蛋会保持这个次序,与游戏内一致。
 	rows, err := sc.rdb.Query(
-		`SELECT data, parents FROM eggs WHERE `+where+
+		`SELECT data, parents, hatching FROM eggs WHERE `+where+
 			` ORDER BY seq IS NULL, seq, gid`, args...)
 	if err != nil {
 		return nil, err
@@ -222,13 +265,15 @@ func (sc *Scoped) ListEggs(f EggFilter) ([]*pet.EggView, error) {
 	for rows.Next() {
 		var data string
 		var parents sql.NullString
-		if err := rows.Scan(&data, &parents); err != nil {
+		var hatching int
+		if err := rows.Scan(&data, &parents, &hatching); err != nil {
 			continue
 		}
 		var e pet.EggView
 		if json.Unmarshal([]byte(data), &e) != nil {
 			continue
 		}
+		e.Hatching = hatching == 1 // 以权威列覆盖 data 里的推断值
 		if parents.Valid && parents.String != "" {
 			var p pet.EggParents
 			if json.Unmarshal([]byte(parents.String), &p) == nil {
