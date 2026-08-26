@@ -103,6 +103,74 @@ func (sc *Scoped) PruneMissingEggs(keep map[uint32]bool, before int64) error {
 	return nil
 }
 
+// ReconcileHatching 用 0x0312 的权威列表对账「在孵蛋器」标记(见 docs/data.md 3.6):
+//   - gids 里没有、但库里标着在孵的蛋 → 清标记与进度(取出孵蛋器就靠这里兜底)
+//   - gids 里的蛋 → 确保标记为在孵;skip 里的蛋刚由 ret_info.changes 精确刷新过
+//     (含 last_hatch_update_sec),不再动它们的进度
+//   - secs 与 gids 长度一致时才顺带刷新进度(HatchUpdate 取消息时刻近似;proto3 会省掉
+//     hatched_secs=0 的项,数组对不上时只对账标记)
+//
+// 返回是否有行被改动。
+func (sc *Scoped) ReconcileHatching(gids []uint32, secs []int32, skip map[uint32]bool, now int64) (bool, error) {
+	if len(gids) == 0 {
+		return false, nil
+	}
+	in := make(map[uint32]bool, len(gids))
+	for _, g := range gids {
+		in[g] = true
+	}
+	secBy := map[uint32]int32{}
+	if paired := len(secs) == len(gids); paired {
+		for i, g := range gids {
+			secBy[g] = secs[i]
+		}
+	}
+	rows, err := sc.rdb.Query(`SELECT gid, data FROM eggs WHERE account=?`, sc.account)
+	if err != nil {
+		return false, err
+	}
+	var changed []*pet.EggView
+	touched := map[uint32]bool{}
+	for rows.Next() {
+		var gid uint32
+		var data string
+		if err := rows.Scan(&gid, &data); err != nil {
+			continue
+		}
+		var v pet.EggView
+		if json.Unmarshal([]byte(data), &v) != nil {
+			continue
+		}
+		if in[gid] {
+			if !v.Hatching {
+				v.Hatching = true
+				touched[gid] = true
+			}
+			if !skip[gid] {
+				if sec, ok := secBy[gid]; ok && (v.HatchedSecs != sec || v.HatchUpdate != now) {
+					v.HatchedSecs, v.HatchUpdate = sec, now
+					touched[gid] = true
+				}
+			}
+		} else if v.Hatching {
+			v.Hatching = false
+			v.HatchedSecs, v.HatchUpdate, v.StartHatch = 0, 0, 0
+			touched[gid] = true
+		}
+		if touched[gid] {
+			changed = append(changed, &v)
+		}
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return false, err
+	}
+	if len(changed) == 0 {
+		return false, nil
+	}
+	return true, sc.UpsertEggs(changed, now)
+}
+
 // EggFilter 是精灵蛋列表的筛选条件(空值即不限)。
 // 排序不在这里:游戏内的「品质排序」是品类/品质/物品排序号的复合键,这些键取自名称库、
 // 读取时才重算(见 pet.RefreshEggView),故排序由调用方在重算之后用 pet.SortEggs 做。

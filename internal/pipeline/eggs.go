@@ -16,6 +16,8 @@ import (
 //   - 0x0243 奖励通知:新得的蛋;flow_reason=223 即家园小窝下的蛋,顺手记双亲
 //   - 0x0262 商店购买:远行商人的「神奇的蛋」等,新蛋只在这条回包里下发(不另发奖励通知)
 //   - 0x0164 用道具 / 0x0312 孵化状态:同一颗蛋的进度更新(入孵时刻、已孵秒数)
+//     0x0312 另兼权威对账:顶层 egg_gid[] 是「在孵蛋器里」的唯一口径,取出孵蛋器不另发
+//     清零报文,残留标记靠它兜底纠正(见 applyHatchStatus)
 //   - 0x030b/0x030c 破壳:请求带 egg_gid,回包一到就把这颗蛋从库里删掉(它已不在背包里)
 //
 // 库里存的就是**背包现状**:页面只看背包,破壳/送人的蛋没人回看,故不留历史行。
@@ -53,8 +55,7 @@ func (p *Pipeline) handleEgg(m capture.Message, acc string) {
 		}
 
 	case m.Direction == gcp.S2C && (m.Opcode == pet.OpGoodsRewardNotify ||
-		m.Opcode == pet.OpShopBuyItemRsp || m.Opcode == pet.OpUseBagItemRsp ||
-		m.Opcode == pet.OpGetAllHatchStatusRsp):
+		m.Opcode == pet.OpShopBuyItemRsp || m.Opcode == pet.OpUseBagItemRsp):
 		eggs := pet.ParseChangedEggs(m.AppBody)
 		if len(eggs) == 0 {
 			return
@@ -63,6 +64,31 @@ func (p *Pipeline) handleEgg(m capture.Message, acc string) {
 		if m.Opcode == pet.OpGoodsRewardNotify && pet.ParseFlowReason(m.AppBody) == pet.FlowReasonHomeLay {
 			p.recordEggParents(m.Session, sc, eggs, m.Time)
 		}
+
+	case m.Direction == gcp.S2C && m.Opcode == pet.OpGetAllHatchStatusRsp:
+		p.applyHatchStatus(m, sc, acc)
+	}
+}
+
+// applyHatchStatus 处理孵化状态回包(0x0312):ret_info.changes 里的蛋先按常规入库
+// (带精确的 last_hatch_update_sec),再用顶层 egg_gid[] 权威列表对账在孵标记。
+// 取出孵蛋器的蛋不另发清零报文,start_hatch_time 会残留旧值,只有这里的对账能兜底
+// 把标记清掉(见 docs/data.md 3.6)。
+func (p *Pipeline) applyHatchStatus(m capture.Message, sc *store.Scoped, acc string) {
+	eggs := pet.ParseChangedEggs(m.AppBody)
+	skip := make(map[uint32]bool, len(eggs))
+	for _, e := range eggs {
+		skip[e.Gid] = true
+	}
+	if len(eggs) > 0 {
+		p.upsertEggs(sc, acc, eggs, m.Time)
+	}
+	gids, secs := pet.ParseHatchStatus(m.AppBody)
+	if len(gids) == 0 {
+		return
+	}
+	if changed, err := sc.ReconcileHatching(gids, secs, skip, m.Time.Unix()); err == nil && changed {
+		p.srv.Hub().Broadcast("eggs", acc, map[string]any{"account": acc})
 	}
 }
 

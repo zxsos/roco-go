@@ -102,6 +102,27 @@ func ParseChangedEggs(body []byte) []Egg {
 	return out
 }
 
+// ParseHatchStatus 从孵化状态回包(0x0312)取顶层权威列表:egg_gid[](field 2)与
+// hatched_secs[](field 3)按下标配对,即「当前孵蛋器里有哪些蛋、各孵了多久」。
+// 这是服务器对「在孵蛋器里」的唯一权威口径——取出孵蛋器的蛋不会另发清零报文,
+// 只有靠它兜底对账(见 docs/data.md 3.6)。
+// 注意 proto3 会省略 0 值:hatched_secs=0(刚放入)的项会被省掉,导致两个数组长度不一致,
+// 此时调用方只应拿 gids 做标记对账,不应按下标配对刷新进度。
+func ParseHatchStatus(body []byte) (gids []uint32, secs []int32) {
+	wire.ScanFields(body, func(num protowire.Number, typ protowire.Type, _ []byte, v uint64) {
+		if typ != protowire.VarintType {
+			return
+		}
+		switch num {
+		case 2:
+			gids = append(gids, uint32(v))
+		case 3:
+			secs = append(secs, int32(v))
+		}
+	})
+	return
+}
+
 // ParseFlowReason 取奖励通知(0x0243)的 flow_reason(3)。223 = FLOW_REASON_PET_HOME_LAY,
 // 即「家园宠物下蛋」——从小窝上收下来的蛋走的就是这个理由(见 docs/data.md 3.6)。
 func ParseFlowReason(body []byte) int32 {
