@@ -48,7 +48,6 @@ type DB struct {
 	glassNames     map[string]string
 	glassColors    map[string]string
 	glassParticles map[string]string
-	glassChips     map[string]string // "类型_数值" -> 色卡图相对路径(见 GlassChip)
 	evoIndex       map[uint32][]uint32 // 进化链分组 -> 该链各 petbase_id
 	imgFiles       map[string]bool     // 实际 embed 的图片相对路径(异色图缺失时回退普通)
 	// UI 图标索引: 语义键 -> 图标原始文件名(webp 保持原名),Go 侧拼 <组>/<原名>.webp。
@@ -100,7 +99,6 @@ func Load() (*DB, error) {
 		GlassNames     map[string]string            `json:"glass_names"`
 		GlassColors    map[string]string            `json:"glass_colors"`
 		GlassParticles map[string]string            `json:"glass_particles"`
-		GlassChips     map[string]string            `json:"glass_chips"`
 		Petbase        map[string]struct {
 			N  string   `json:"n"`
 			B  uint32   `json:"b"`
@@ -287,7 +285,6 @@ func Load() (*DB, error) {
 		glassNames:     raw.GlassNames,
 		glassColors:    raw.GlassColors,
 		glassParticles: raw.GlassParticles,
-		glassChips:     raw.GlassChips,
 		evoIndex:       evoIndex,
 		imgFiles:       imgFiles,
 		eggConf:        eggConf,

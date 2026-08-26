@@ -80,11 +80,11 @@ type Pet struct {
 	Shiny     bool  `json:"shiny"`     // 异色(mutation_type bit0)
 	Colorful  bool  `json:"colorful"`  // 炫彩(mutation_type bit3)
 
-	// 炫彩类型与数值(见 gamedata.GlassDesc/GlassChip):普通炫彩 glassValue 是打包色号
+	// 炫彩类型与数值(见 gamedata.GlassDesc):普通炫彩 glassValue 是打包色号
 	// ((粒子id<<20)|配色id),隐藏炫彩是 HIDDEN_GLASS_CONF.id(1/2/3 赛季、1000 黑白)。
-	GlassType  int32  `json:"glassType,omitempty"`
-	GlassValue int32  `json:"glassValue,omitempty"`
-	GlassChip  string `json:"glassChip,omitempty"` // 色卡图相对路径(前端拼 /img/ 前缀)
+	// 前端据此用 glassConf.js 的素材 CSS mask 渲染色卡,不预生成图片。
+	GlassType  int32 `json:"glassType,omitempty"`
+	GlassValue int32 `json:"glassValue,omitempty"`
 
 	Image gamedata.PetImage `json:"image"` // 各尺寸图片相对路径(由前端拼到 /img/ 下)
 
@@ -172,11 +172,10 @@ func ToPet(p *pb.PetData, db *gamedata.DB) *Pet {
 	}
 
 	// 炫彩外观类型/数值直接取自 GlassInfo(与 mutation_type bit3 一致),
-	// 前端据此拼色卡图(/img/ + GlassChip)。
+	// 前端据此用玻璃色卡素材 CSS mask 渲染色卡(见 web/src/components/badges.jsx)。
 	if gi := p.GetGlassInfo(); gi != nil {
 		out.GlassType = int32(gi.GetGlassType())
 		out.GlassValue = gi.GetGlassValue()
-		out.GlassChip = db.GlassChip(out.GlassType, out.GlassValue)
 	}
 
 	if m, ok := db.Medal(p.GetWearMedalConfId()); ok {

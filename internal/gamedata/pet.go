@@ -210,14 +210,6 @@ const (
 // (客户端 PetUtils.GetShineDataValue 即按 20 位拆)。
 const glassParticleShift = 20
 
-// GlassChip 返回炫彩色卡图片的相对路径(如 "dazzling/glass_1_1048577.webp"),
-// 前端拼 /img/ 前缀直接引用。非炫彩或未生成时返回空串。
-// 见 scripts/gen_glass.py 的生成规则:普通炫彩按 (glass_type, glass_value) 全量
-// 合成(4 粒子 x 39 配色),隐藏炫彩按 glass_value(1/2/3 赛季、1000 黑白)映射整图。
-func (db *DB) GlassChip(glassType, glassValue int32) string {
-	return db.glassChips[key(uint32(glassType))+"_"+key(uint32(glassValue))]
-}
-
 // GlassDesc 返回炫彩外观的中文描述(见 docs/data.md 3.5):
 // 隐藏炫彩给外观名(暗夜拾光…),普通炫彩给「粒子·配色」(四角星·亮X暗 - 浅紫橙)。
 // 非炫彩或查不到时返回空串(调用方自行兜底)。
