@@ -1,19 +1,13 @@
-/* 精灵蛋页面:左栏孵蛋器 + 右栏背包(每行六个)。卡片布局固定,缺信息留占位,保证等高。 */
-
-/* 两栏各自的标题(左「孵蛋器」、右「背包」+排序+搜索)是同一网格行的两个单元格,行高取两者
-   较高的那个(右栏被输入框/按钮撑高),故两栏的卡片必从同一条基线开始;左标题 stretch 满行高、
-   自身居中,文字也就与右标题齐平。别改回「标题各归各栏」——那样只能靠写死 min-height 对齐。 */
-.eggs-cols {
-  display: grid; grid-template-columns: 300px 1fr;
-  grid-template-areas: "ht hb" "incu bag";
-  column-gap: 16px; row-gap: 10px; align-items: start;
-}
-.eggs-cols > .eggs-col-t { grid-area: ht; align-self: stretch; }
-.eggs-cols > .eggs-bar { grid-area: hb; }
-.eggs-incu { grid-area: incu; display: flex; flex-direction: column; gap: 10px; }
-.eggs-bag { grid-area: bag; min-width: 0; }
+/* 精灵蛋页面:三段垂直 —— 孵蛋器(在孵且进度未满)、已孵化蛋(进度满的标记蛋)、
+   仓库(其余蛋,每行六个,同游戏内布局)。卡片布局固定,缺信息留占位,保证等高。 */
+.eggs-cols { display: flex; flex-direction: column; gap: 10px; align-items: stretch; }
 .eggs-col-t { font-weight: 600; display: flex; align-items: center; gap: 6px; }
 .eggs-col-t .muted { font-weight: 400; font-size: 13px; }
+
+/* 孵蛋器:在孵的蛋通常只有一两颗,横向流式排布(不满一行不拉满整行) */
+.eggs-incu { display: flex; flex-wrap: wrap; gap: 10px; }
+.eggs-incu .egg-card { flex: 1 1 300px; max-width: 560px; }
+.eggs-hatched, .eggs-bag { min-width: 0; }
 
 /* 孵蛋器标题旁的提示图标:比数字(13px)小;深色主题下黑色 svg 反白显示 */
 .incu-tip { position: relative; display: inline-flex; }
@@ -57,11 +51,7 @@
 @media (max-width: 1450px) { .egg-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
 @media (max-width: 1100px) { .egg-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 @media (max-width: 900px) {
-  /* 单栏:各标题回到自己那一段前面(否则两个标题会叠在最上方) */
-  .eggs-cols { grid-template-columns: 1fr; grid-template-areas: "ht" "incu" "hb" "bag"; }
-  .eggs-cols > .eggs-bar { margin-top: 6px; } /* 与上面的孵蛋器卡片拉开,免得两段黏在一起 */
-  .eggs-incu { flex-direction: row; flex-wrap: wrap; }
-  .eggs-incu .egg-card { flex: 1 1 240px; }
+  .eggs-incu .egg-card { flex-basis: 240px; }
   /* 空格子在手机上一个就占一行,却只是说「这一格还能放一颗」——标题的 n/3 已经说清了,
      故窄屏一律收起(空着几格、还是一颗都没在孵,都不占高度)。 */
   .egg-slot-empty { display: none; }
