@@ -558,6 +558,7 @@ func (s *Server) handleAdminInjectFlower(w http.ResponseWriter, r *http.Request)
 	var req struct {
 		Account    string `json:"account"`
 		Base       uint32 `json:"base"`      // 守护宠物 petbase id
+		Star       uint32 `json:"star"`      // 花种星级 1-7;0=默认 7 星
 		GlassType  int32  `json:"glassType"` // 炫彩色卡类型(1=普通 2=隐藏;0=随机)
 		GlassValue int32  `json:"glassValue"`
 	}
@@ -583,6 +584,14 @@ func (s *Server) handleAdminInjectFlower(w http.ResponseWriter, r *http.Request)
 		http.Error(w, "该形态没有可用的头像,无法投放", 400)
 		return
 	}
+	// 花种星级:1-7 自定义;0=默认 7 星(兼容旧调用)。
+	star := req.Star
+	if star == 0 {
+		star = 7
+	} else if star > 7 {
+		http.Error(w, "star must be 1-7", 400)
+		return
+	}
 	// 炫彩色卡设置:同野生精灵投放,指定类型+数值或随机一个合法色卡。
 	glassType, glassValue := req.GlassType, req.GlassValue
 	if glassType == 0 && glassValue == 0 {
@@ -602,7 +611,7 @@ func (s *Server) handleAdminInjectFlower(w http.ResponseWriter, r *http.Request)
 		ID:          req.Base,
 		Name:        info.Name,
 		Img:         head,
-		Star:        7, // 特殊花灵
+		Star:        star,
 		Blood:       blood,
 		BloodName:   s.db.BloodName(blood),
 		BloodIcon:   s.db.BloodIcon(blood),

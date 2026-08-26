@@ -179,6 +179,7 @@ export default function Admin() {
   // 投放假炫彩花种
   const [flAccount, setFlAccount] = useState('')
   const [flBase, setFlBase] = useState('')
+  const [flStar, setFlStar] = useState(7) // 花种星级 1-7
   const [flGlass, setFlGlass] = useState({ type: 'random', particle: 1, color: 1, hidden: 1 })
   const [flErr, setFlErr] = useState('')
   const [flMsg, setFlMsg] = useState('')
@@ -269,7 +270,7 @@ export default function Admin() {
     setFlErr(''); setFlMsg('')
     try {
       const { glassType, glassValue } = glassOf(flGlass)
-      const res = await adminInjectFlower(account, Number(flBase), glassType, glassValue)
+      const res = await adminInjectFlower(account, Number(flBase), Number(flStar), glassType, glassValue)
       setFlMsg('已投放花种:' + (res.id || '') + '(npcLogicId=' + res.npcLogicId + ')')
       loadInjects()
     } catch (err) {
@@ -569,9 +570,9 @@ export default function Admin() {
       <div className="admin-card admin-rules">
         <h3>投放假炫彩花种</h3>
         <p className="admin-hint">
-          向选定成员的花种页注入一只 7 星特殊花种(花灵 BOSS),携带指定或随机炫彩色卡,
-          卡片与真实花种无异,点开可查看完整色卡。不要求成员在线,不修改真实流量;
-          生命周期由管理员在此手动撤销(见上方「当前注入中」列表)。
+          向选定成员的花种页注入一只假花种(默认 7 星特殊花灵,星级可自定义),携带指定或
+          随机炫彩色卡,卡片与真实花种无异,点开可查看完整色卡。不要求成员在线,不修改
+          真实流量;生命周期由管理员在此手动撤销(见上方「当前注入中」列表)。
         </p>
         <form onSubmit={injectFlower} className="admin-inject-form">
           <select
@@ -589,6 +590,14 @@ export default function Admin() {
             <option value="">选择守护宠物</option>
             {wildOptions && wildOptions.map((o) => (
               <option key={o.base} value={o.base}>{o.name}(#{o.book})</option>
+            ))}
+          </select>
+          <select
+            className="select" value={flStar} onChange={(e) => setFlStar(Number(e.target.value))}
+            title="花种星级(1-7)"
+          >
+            {[1, 2, 3, 4, 5, 6, 7].map((n) => (
+              <option key={n} value={n}>{n} 星{n === 7 ? '(花灵 BOSS)' : ''}</option>
             ))}
           </select>
           <GlassPicker value={flGlass} onChange={setFlGlass} />
