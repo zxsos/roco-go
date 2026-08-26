@@ -51,7 +51,8 @@ export default function EggList() {
     .map((x) => x.e)
     .sort((a, b) => (b.startHatch || 0) - (a.startHatch || 0))
   const bag = withP.filter((x) => !x.e.hatching).map((x) => x.e)
-  const slots = Math.max(HATCH_SLOTS, incubating.length)
+  // 孵蛋器固定 3 格(无论实际在孵几颗),每格三等分,同游戏内孵蛋器。
+  const slots = HATCH_SLOTS
 
   return (
     <div className="eggs-page">

@@ -4,9 +4,8 @@
 .eggs-col-t { font-weight: 600; display: flex; align-items: center; gap: 6px; }
 .eggs-col-t .muted { font-weight: 400; font-size: 13px; }
 
-/* 孵蛋器:在孵的蛋通常只有一两颗,横向流式排布(不满一行不拉满整行) */
-.eggs-incu { display: flex; flex-wrap: wrap; gap: 10px; }
-.eggs-incu .egg-card { flex: 1 1 300px; max-width: 560px; }
+/* 孵蛋器:固定 3 格,每格三等分(与游戏内孵蛋器一致);空格子占位补满三格 */
+.eggs-incu { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
 .eggs-hatched, .eggs-bag { min-width: 0; }
 
 /* 孵蛋器标题旁的提示图标:比数字(13px)小;深色主题下黑色 svg 反白显示 */
@@ -51,9 +50,9 @@
 @media (max-width: 1450px) { .egg-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
 @media (max-width: 1100px) { .egg-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 @media (max-width: 900px) {
-  .eggs-incu .egg-card { flex-basis: 240px; }
   /* 空格子在手机上一个就占一行,却只是说「这一格还能放一颗」——标题的 n/3 已经说清了,
-     故窄屏一律收起(空着几格、还是一颗都没在孵,都不占高度)。 */
+     故窄屏一律收起(空着几格、还是一颗都没在孵,都不占高度)。
+     孵蛋器仍是固定三等分(grid 列不变),只把空位格藏掉,蛋卡片照旧占 1/3 格。 */
   .egg-slot-empty { display: none; }
   .egg-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
@@ -61,14 +60,14 @@
    头部「蛋图 | 名称 | 角标+头像」三段并排放不下,故让名称换到第二行独占整行:
    名称块(egg-title)order:1 排到最后 + flex-basis:100% 自然折行,拿到整卡宽度,
    不至于被省略成两三个字;蛋图与角标组(都是定宽小图)留在第一行两端。
-   孵蛋器那栏不套这套(它在窄屏是整行宽的大卡),故选择器都限定在 .egg-grid 内。 */
+   孵蛋器那栏更窄(固定三等分,每格只剩 ~110px),同样需要折行,故不限定 .egg-grid 内。 */
 @media (max-width: 560px) {
   .egg-grid { gap: 8px; }
-  .egg-grid .egg-card { padding: 8px; }
-  .egg-grid .egg-head { flex-wrap: wrap; gap: 6px; }
-  .egg-grid .egg-marks { margin-left: auto; }
-  .egg-grid .egg-title { order: 1; flex-basis: 100%; }
-  .egg-grid .egg-row-y { display: none; } /* 时间只留「月-日 时:分:秒」,年份省下的宽度够放完分秒 */
+  .egg-grid .egg-card, .eggs-incu .egg-card { padding: 8px; }
+  .egg-grid .egg-head, .eggs-incu .egg-head { flex-wrap: wrap; gap: 6px; }
+  .egg-grid .egg-marks, .eggs-incu .egg-marks { margin-left: auto; }
+  .egg-grid .egg-title, .eggs-incu .egg-title { order: 1; flex-basis: 100%; }
+  .egg-grid .egg-row-y, .eggs-incu .egg-row-y { display: none; } /* 时间只留「月-日 时:分:秒」,年份省下的宽度够放完分秒 */
 }
 
 .egg-card {
