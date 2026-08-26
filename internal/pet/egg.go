@@ -25,6 +25,8 @@ const (
 	OpGetAllHatchStatusRsp    = 0x0312 // ZONE_GET_ALL_HATCH_STATUS_RSP(786), 孵蛋器里各蛋的进度
 	OpCrackEggReq             = 0x030b // ZONE_CRACK_EGG_REQ(779), c2s 破壳(egg_gid + 选用的球)
 	OpShopBuyItemRsp          = 0x0262 // ZONE_SHOP_BUY_ITEM_RSP(610), 商店购买(远行商人的神奇的蛋走这条,不发奖励通知)
+	OpStopHatchReq            = 0x02ff // ZONE_STOP_HATCH_REQ(767), c2s 取出孵蛋器里的蛋(egg_gid)
+	OpStopHatchRsp            = 0x0300 // ZONE_STOP_HATCH_RSP(768), 取出回包
 )
 
 // EggItemType 是精灵蛋在 BAG_ITEM_CONF/BagItem 里的 type 值。
@@ -51,6 +53,19 @@ type Egg struct {
 
 // Hatching 报告这颗蛋是否正在孵蛋器里。
 func (e Egg) Hatching() bool { return e.StartHatch > 0 }
+
+// PruneTakenOut 清理「已被取出孵蛋器」的残留标记。服务器取出蛋(0x0300)时**不清零**
+// start_hatch_time(实测只清 hatched_secs/last_hatch_update_sec),所以背包全量(0x1344/
+// 登录)会把已取出的蛋又标成在孵。判据:入孵时刻残留、且毫无孵化进度、且放入至今已超过
+// 孵满时长——放着早该孵完却零进度,只能是被取出过。此刻把孵化字段全部清零。
+// 刚放入(入孵时刻=现在,差几秒)或正在孵(有进度)的蛋不会命中;放入后立刻取出、时间差
+// 不到孵满时长的,靠 0x0300 的动作清零兜底(见 pipeline.eggs.go)。
+func (e *Egg) PruneTakenOut(now int64) {
+	if e.StartHatch > 0 && e.HatchedSec == 0 && e.HatchUpdate == 0 &&
+		e.MaxSec > 0 && now-int64(e.StartHatch) > int64(e.MaxSec) {
+		e.StartHatch, e.HatchedSec, e.HatchUpdate = 0, 0, 0
+	}
+}
 
 // ParseBagEggs 从背包分页回包(0x1344)取本页的全部精灵蛋,并返回本页页号与总页数
 // (供调用方判断一轮全量是否已收齐,与宠物列表的分页对账同一套路)。
@@ -137,6 +152,16 @@ const FlowReasonHomeLay = 223
 
 // ParseCrackEggReq 取 c2s 破壳请求(0x030b)里的 egg_gid;c2s 有 6 字节子头,故先定位。
 func ParseCrackEggReq(appBody []byte) uint32 {
+	return parseC2SEggGid(appBody)
+}
+
+// ParseStopHatchReq 取 c2s 取出请求(0x02ff)里的 egg_gid(ZoneStopHatchReq.field1)。
+func ParseStopHatchReq(appBody []byte) uint32 {
+	return parseC2SEggGid(appBody)
+}
+
+// parseC2SEggGid 从 c2s 请求 AppBody 里取 field 1 的 egg_gid(跳过 6 字节子头)。
+func parseC2SEggGid(appBody []byte) uint32 {
 	body := appBody
 	if len(body) > c2sSubHeader {
 		body = body[c2sSubHeader:]

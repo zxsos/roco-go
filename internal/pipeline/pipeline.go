@@ -60,6 +60,7 @@ type connState struct {
 	pendantRid int32                     // 最近一次挂件交互(0x0272)的刷新行 id,等回包(0x0273)确认
 	home       *homeState                // 家园小窝图层状态(仅在家园场景内非空,见 home.go)
 	crackEgg   uint32                    // 最近一次破壳请求(0x030b)的 egg_gid,回包确认后把这颗蛋删掉
+	takeEgg    uint32                    // 最近一次取出孵蛋器请求(0x02ff)的 egg_gid,回包确认后清这颗蛋的在孵标记
 	// 游玩会话跟踪(管理后台「游玩记录」,见 playsession.go):last 是该连接最后一条可归属
 	// 消息的墙钟时刻,兜底扫描据此判定下线(长时间无流量);sessionOpen 表示已有进行中会话,
 	// handle 里用它避免每条消息都查库(状态翻转才读写 store)。

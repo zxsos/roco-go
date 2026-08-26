@@ -82,6 +82,29 @@ func (sc *Scoped) DeleteEgg(gid uint32) error {
 	return err
 }
 
+// ClearHatching 按动作语义清一颗蛋的在孵标记:取出孵蛋器(0x0300)回包确认后调用。
+// 服务器不清 start_hatch_time,蛋字段不可信,只有动作是可靠的;读完改完再写回。
+// 本来就不在孵时不动库,返回 false。
+func (sc *Scoped) ClearHatching(gid uint32, now int64) (bool, error) {
+	var data string
+	if err := sc.rdb.QueryRow(`SELECT data FROM eggs WHERE account=? AND gid=?`, sc.account, gid).Scan(&data); err != nil {
+		if err == sql.ErrNoRows {
+			return false, nil
+		}
+		return false, err
+	}
+	var v pet.EggView
+	if json.Unmarshal([]byte(data), &v) != nil {
+		return false, nil
+	}
+	if !v.Hatching {
+		return false, nil
+	}
+	v.Hatching = false
+	v.HatchedSecs, v.HatchUpdate, v.StartHatch = 0, 0, 0
+	return true, sc.UpsertEggs([]*pet.EggView{&v}, now)
+}
+
 // PruneMissingEggs 据一轮完整的背包全量对账:不在背包里的直接删掉。
 // before 之后才首次见到的行放过,避免与同一时刻的新蛋抢跑。
 func (sc *Scoped) PruneMissingEggs(keep map[uint32]bool, before int64) error {

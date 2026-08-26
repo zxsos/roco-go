@@ -16,8 +16,9 @@ import (
 //   - 0x0243 奖励通知:新得的蛋;flow_reason=223 即家园小窝下的蛋,顺手记双亲
 //   - 0x0262 商店购买:远行商人的「神奇的蛋」等,新蛋只在这条回包里下发(不另发奖励通知)
 //   - 0x0164 用道具 / 0x0312 孵化状态:同一颗蛋的进度更新(入孵时刻、已孵秒数)
-//     0x0312 另兼权威对账:顶层 egg_gid[] 是「在孵蛋器里」的唯一口径,取出孵蛋器不另发
-//     清零报文,残留标记靠它兜底纠正(见 applyHatchStatus)
+//   - 0x02ff/0x0300 取出孵蛋器:服务器不清 start_hatch_time(实测只清进度),回包后按
+//     动作清零在孵标记(见 stopHatch);背包全量(0x1344/登录)可能把残留标记回灌,靠
+//     pet.Egg.PruneTakenOut 时间推断兜底、0x0312 对账作最终权威(见 applyHatchStatus)
 //   - 0x030b/0x030c 破壳:请求带 egg_gid,回包一到就把这颗蛋从库里删掉(它已不在背包里)
 //
 // 库里存的就是**背包现状**:页面只看背包,破壳/送人的蛋没人回看,故不留历史行。
@@ -65,8 +66,33 @@ func (p *Pipeline) handleEgg(m capture.Message, acc string) {
 			p.recordEggParents(m.Session, sc, eggs, m.Time)
 		}
 
+	case m.Direction == gcp.C2S && m.Opcode == pet.OpStopHatchReq:
+		if gid := pet.ParseStopHatchReq(m.AppBody); gid != 0 {
+			p.conn(m.Session).takeEgg = gid // 等回包确认取出成功再清
+		}
+
+	case m.Direction == gcp.S2C && m.Opcode == pet.OpStopHatchRsp:
+		p.stopHatch(m, sc, acc)
+
 	case m.Direction == gcp.S2C && m.Opcode == pet.OpGetAllHatchStatusRsp:
 		p.applyHatchStatus(m, sc, acc)
+	}
+}
+
+// stopHatch 处理取出孵蛋器回包(0x0300)。服务器不清 start_hatch_time,蛋字段不可信,
+// 按「动作已确认」语义清零:回包 ret_info.changes 里的蛋仍常规入库(刷新背包侧 update_time,
+// PruneTakenOut 可能已顺带清掉残留),再按 c2s 请求(0x02ff)记下的 gid 动作清零,保证
+// 放入后立刻取出(时间差 < 孵满时长,推断判不出)也能实时清掉。
+func (p *Pipeline) stopHatch(m capture.Message, sc *store.Scoped, acc string) {
+	gid := p.conn(m.Session).takeEgg
+	p.conn(m.Session).takeEgg = 0
+	if eggs := pet.ParseChangedEggs(m.AppBody); len(eggs) > 0 {
+		p.upsertEggs(sc, acc, eggs, m.Time)
+	}
+	if gid != 0 {
+		if changed, err := sc.ClearHatching(gid, m.Time.Unix()); err == nil && changed {
+			p.srv.Hub().Broadcast("eggs", acc, map[string]any{"account": acc})
+		}
 	}
 }
 
@@ -130,11 +156,15 @@ func (p *Pipeline) upsertEggs(sc *store.Scoped, acc string, eggs []pet.Egg, now 
 	if len(eggs) == 0 {
 		return
 	}
+	nowUnix := now.Unix()
 	views := make([]*pet.EggView, 0, len(eggs))
-	for _, e := range eggs {
-		views = append(views, pet.ToEggView(e, p.db))
+	for i := range eggs {
+		// 背包快照(0x1344/登录)里的 start_hatch_time 可能是取出后残留的旧值,时间推断
+		// 兜底清掉,避免重新登录把已取出的蛋又标成在孵(见 pet.Egg.PruneTakenOut)。
+		eggs[i].PruneTakenOut(nowUnix)
+		views = append(views, pet.ToEggView(eggs[i], p.db))
 	}
-	if err := sc.UpsertEggs(views, now.Unix()); err == nil {
+	if err := sc.UpsertEggs(views, nowUnix); err == nil {
 		p.srv.Hub().Broadcast("eggs", acc, map[string]any{"account": acc})
 	}
 }
