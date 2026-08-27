@@ -337,6 +337,14 @@ export const adminPlaySessions = (account = '', limit = 200) =>
       return r.json()
     })
 
+// adminEggStats 查蛋 API(第三方图鉴)使用统计:
+// {keySet,total,todayTotal,todayOK,todayFail,successRate,
+//  daily:[{day,total,ok}], byAccount:[{account,name,total,today}], recent:[{account,name,time,ok,costMs,matches,height,weight}]}。
+export const adminEggStats = () => adminFetch('/api/admin/egg-stats').then(async (r) => {
+  if (!r.ok) throw await adminError(r, '拉取查蛋统计失败')
+  return r.json()
+})
+
 // adminMerchantSubs 远行商人邮箱推送名单:{configured: SMTP 是否已配置, subs:[{email,keywords,created_at}]}。
 export const adminMerchantSubs = () => adminFetch('/api/admin/merchant-subs').then(async (r) => {
   if (!r.ok) throw await adminError(r, '拉取订阅名单失败')

@@ -286,6 +286,20 @@ CREATE TABLE IF NOT EXISTS merchant_notified (
   email TEXT NOT NULL,
   PRIMARY KEY(slot, email)
 );
+
+-- 查蛋 API(第三方图鉴,见 api_egg_query.go)使用统计:每次发起第三方请求记一行,
+-- 管理面板据此看今日消耗/成功率/谁在查。量小(一天几十次),不做清理。
+CREATE TABLE IF NOT EXISTS egg_queries (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  account TEXT NOT NULL DEFAULT '',
+  ts INTEGER NOT NULL,
+  ok INTEGER NOT NULL DEFAULT 0,
+  cost_ms INTEGER NOT NULL DEFAULT 0,
+  matches INTEGER NOT NULL DEFAULT 0,
+  height TEXT NOT NULL DEFAULT '',
+  weight TEXT NOT NULL DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS idx_egg_queries_ts ON egg_queries(ts);
 `)
 	return err
 }

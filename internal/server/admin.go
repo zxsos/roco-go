@@ -215,6 +215,21 @@ func (s *Server) handleAdminPlaySessions(w http.ResponseWriter, r *http.Request)
 	writeJSON(w, map[string]any{"sessions": sessions, "summary": summary})
 }
 
+// handleAdminEggStats 返回查蛋 API(第三方图鉴)使用统计:累计/今日次数、成功率、
+// 近 14 天每日、按账号排行、最近明细。keySet 告知服务端是否配置 -egg-api-key。
+func (s *Server) handleAdminEggStats(w http.ResponseWriter, r *http.Request) {
+	if !s.requireAdmin(w, r) {
+		return
+	}
+	st, err := s.store.EggQueryStats()
+	if err != nil {
+		http.Error(w, err.Error(), 500)
+		return
+	}
+	st.KeySet = s.eggAPIKey != ""
+	writeJSON(w, st)
+}
+
 // requireAdmin 校验管理员会话,未登录则回 401 并返回 false。
 func (s *Server) requireAdmin(w http.ResponseWriter, r *http.Request) bool {
 	if !s.authed(r) {

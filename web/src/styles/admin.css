@@ -1,6 +1,14 @@
 /* 管理员面板:隐式入口(#/admin,导航不显示),首次设置密码后凭密码登录。 */
 
 .admin-page { display: flex; flex-direction: column; align-items: center; padding: 40px 16px; }
+/* 分区标题:把卡片归为「数据统计 / 投放管理 / 账号与规则」三组,长页更易扫读 */
+.admin-section-title {
+  width: 100%; max-width: 640px; margin: 26px 0 10px;
+  font-size: 12px; font-weight: 600; letter-spacing: 0.12em;
+  color: var(--muted); text-transform: uppercase;
+  border-bottom: 1px solid var(--line); padding-bottom: 6px;
+}
+.admin-section-title:first-of-type { margin-top: 4px; }
 .admin-card {
   width: 100%; max-width: 340px; padding: 24px;
   background: var(--bg-1); border: 1px solid var(--line); border-radius: var(--radius-lg);
@@ -28,6 +36,19 @@
 .admin-test-form { display: grid; grid-template-columns: 1fr 1fr auto; gap: 8px; align-items: start; }
 .admin-test-form textarea { grid-column: 1 / -1; resize: vertical; font-family: inherit; line-height: 1.5; }
 .admin-test-form .btn { white-space: nowrap; }
+
+/* —— 查蛋 API 统计 —— */
+.egg-fail { color: var(--danger, #e05656); font-size: 13px; }
+.egg-daily { display: flex; align-items: flex-end; gap: 4px; height: 120px; padding-top: 8px; }
+.egg-daily-col { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px; min-width: 0; }
+.egg-daily-bar {
+  width: 100%; max-width: 26px; height: 96px; border-radius: 4px;
+  background: var(--bg-1); display: flex; flex-direction: column-reverse; overflow: hidden;
+}
+.egg-daily-fill { width: 100%; }
+.egg-daily-fill.ok { background: #4caf50; }
+.egg-daily-fill.fail { background: #e05656; }
+.egg-daily-day { font-size: 11px; color: var(--muted); }
 .admin-rule-list { list-style: none; margin: 4px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
 .admin-rule-list li {
   display: flex; align-items: center; gap: 10px;
