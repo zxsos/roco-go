@@ -26,6 +26,32 @@ const HATCH_SLOTS = 3
 // 这里只规整结尾的重复(中间的「的蛋」是名字本身,不动)。
 const tidyEggName = (name) => (name || '').replace(/的蛋的蛋$/, '的蛋')
 
+// 随机蛋「猜猜孵出谁」查询缓存:同一组身高/体重结果相同,按 `height|weight` 为 key 存
+// localStorage,刷新页面不丢、重复查询直接复用,少烧第三方 token(限流 10 次/分钟)。
+const EGG_GUESS_CACHE_KEY = 'eggGuessCache.v1'
+const EGG_GUESS_CACHE_MAX = 30 // 最多缓存 30 组,超出按最旧淘汰(LRU)
+
+function readEggGuessCache(key) {
+  try {
+    const c = JSON.parse(localStorage.getItem(EGG_GUESS_CACHE_KEY) || '{}')
+    return c[key] && c[key].data ? c[key].data : null
+  } catch { return null }
+}
+
+function writeEggGuessCache(key, data) {
+  try {
+    const c = JSON.parse(localStorage.getItem(EGG_GUESS_CACHE_KEY) || '{}')
+    c[key] = { data, ts: Date.now() }
+    const keys = Object.keys(c)
+    if (keys.length > EGG_GUESS_CACHE_MAX) {
+      // 删最旧的,直到回到上限
+      keys.sort((a, b) => (c[a].ts || 0) - (c[b].ts || 0))
+      keys.slice(0, keys.length - EGG_GUESS_CACHE_MAX).forEach((k) => delete c[k])
+    }
+    localStorage.setItem(EGG_GUESS_CACHE_KEY, JSON.stringify(c))
+  } catch { /* 存满/隐私模式等忽略 */ }
+}
+
 // 孵蛋器状态只由后端 0x0312 对账维护(见 docs/data.md 3.6),故把在孵的蛋缓存到
 // localStorage(按账号隔离):打开页面先用缓存顶住孵蛋器栏,再等后端推送刷新——
 // 后端 hatching 列没变时,缓存就是最后一次 0x0312 的权威结果。
@@ -168,10 +194,25 @@ function EggCard({ egg, now, onPet }) {
   // 随机蛋(神奇的蛋)的「猜猜孵出谁」:后端代理第三方图鉴 API(令牌在服务端,不进浏览器)。
   const [match, setMatch] = useState(null) // {loading,error,data}
   const query = () => {
+    const key = [egg.heightM, egg.weightKg].map((v) => v ?? '').join('|')
+    const hit = readEggGuessCache(key)
+    if (hit) { // 同身高体重查过,直接复用缓存,不再请求第三方
+      setMatch({ loading: false, error: '', data: hit })
+      return
+    }
     setMatch({ loading: true, error: '', data: null })
     queryEggMatch(egg.heightM, egg.weightKg)
-      .then((d) => setMatch({ loading: false, error: '', data: d }))
-      .catch((e) => setMatch({ loading: false, error: e.message || '查询失败', data: null }))
+      .then((d) => { writeEggGuessCache(key, d); setMatch({ loading: false, error: '', data: d }) })
+      .catch((e) => {
+        const msg = e.message || '查询失败'
+        if (/429|请求过于频繁/.test(msg)) {
+          // 限流:不占卡片位置,直接弹警告提醒
+          setMatch(null)
+          window.alert('喂喂喂,当我的Token不要钱吗一分钟只许查10次啊魂淡')
+        } else {
+          setMatch({ loading: false, error: msg, data: null })
+        }
+      })
   }
   return (
     <div className="egg-card">
@@ -232,10 +273,12 @@ function EggCard({ egg, now, onPet }) {
                 ) : (
                   <>
                     <div className="muted egg-guess-line">
-                      匹配 {match.data.data.total} 条,来源 {match.data.data.source || '第三方图鉴'}
+                      匹配 {match.data.data.total} 条,来源 邦邦大王
                     </div>
                     <div className="egg-guess-list">
-                      {match.data.data.matches.map((m) => (
+                      {[...(match.data.data.matches || [])]
+                        .sort((a, b) => (b.score || 0) - (a.score || 0))
+                        .map((m) => (
                         <div key={m.pet_id} className="egg-guess-item">
                           {/^https?:\/\//.test(m.img_name || '')
                             ? <img className="egg-guess-img" src={m.img_name} alt="" loading="lazy" draggable={false} /> : null}
