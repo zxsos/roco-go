@@ -29,8 +29,10 @@ export function MarkIcon({ src, title, fallback, cls }) {
 // glassMask 生成 CSS mask 层的行内样式:按素材 alpha 蒙版填色(color),素材拉伸铺满容器。
 // 与客户端 UMG 一致(见 scripts/gen_glass.py 与 docs/data.md 3.5):
 // 层1 底图 Bg 蒙版填 ui_color_2 → 层2 中层 Bg2 蒙版填 ui_color_1(顶部对齐,图内已含位置)→
-// 层3 粒子大图蒙版填白。
-const glassMask = (img, color) => {
+// 层3 粒子大图蒙版填白。Bg/粒子为满幅(280x154),Bg2 只有上 108px(280x108,顶部对齐,
+// 下面 46px 透明),故 Bg2 高度按 108/154 等比且顶部对齐——若 100% 100% 拉伸会把中层
+// 图案拉到全高导致与游戏构图错位(top 传 true 的层走等比)。
+const glassMask = (img, color, top = false) => {
   const url = `url(${imgURL('dazzling/' + img)})`
   return {
     backgroundColor: color,
@@ -38,8 +40,10 @@ const glassMask = (img, color) => {
     maskImage: url,
     WebkitMaskRepeat: 'no-repeat',
     maskRepeat: 'no-repeat',
-    WebkitMaskSize: '100% 100%',
-    maskSize: '100% 100%',
+    WebkitMaskSize: top ? '100% calc(100% * 108 / 154)' : '100% 100%',
+    maskSize: top ? '100% calc(100% * 108 / 154)' : '100% 100%',
+    WebkitMaskPosition: top ? 'top center' : undefined,
+    maskPosition: top ? 'top center' : undefined,
   }
 }
 
@@ -63,7 +67,7 @@ export function GlassChip({ p, className }) {
       return (
         <span className={className || 'glass-chip'} title="炫彩色卡">
           <i style={glassMask(GLASS_BG, colors[1])} />
-          <i style={glassMask(GLASS_BG2, colors[0])} />
+          <i style={glassMask(GLASS_BG2, colors[0], true)} />
           <i style={glassMask(particle, '#ffffff')} />
         </span>
       )
