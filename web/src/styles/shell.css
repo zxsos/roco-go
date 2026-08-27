@@ -133,15 +133,16 @@ html[data-privacy] .brand { color: var(--fg-dim); }
     background: var(--bar-bg); backdrop-filter: blur(10px);
     border-top: 1px solid var(--line);
   }
-  .tab { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 9px 0; color: var(--fg-dim); transition: color .15s ease; }
+  .tab { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 9px 0; color: var(--fg-dim); background: none; border: none; cursor: pointer; -webkit-appearance: none; appearance: none; transition: color .15s ease; }
   .tab.active { color: var(--accent); }
   .tab-icon { font-size: 19px; }
   .tab-label { font-size: 11px; }
-  /* 底部「我的背包」分组 tab:点击向上弹出子菜单面板(宠物列表/精灵蛋) */
-  .tabgroup { position: relative; flex: 1; }
+  /* 底部「我的背包」分组 tab:点击向上弹出子菜单面板(宠物列表/精灵蛋)。
+     .tabgroup 自身不做定位上下文,面板 absolute 相对 sticky 的 .bottomnav 全宽居中 */
+  .tabgroup { flex: 1; }
   .tabgroup .tab { width: 100%; }
   .tabgroup-pop {
-    position: absolute; bottom: calc(100% + 8px); left: 8px; right: 8px;
+    position: absolute; bottom: calc(100% + 8px); left: 12px; right: 12px;
     background: var(--bar-bg); border: 1px solid var(--line); border-radius: var(--radius);
     box-shadow: 0 -8px 24px rgba(0,0,0,.25); padding: 8px; z-index: 40; backdrop-filter: blur(10px);
     display: flex; flex-direction: column; gap: 2px;
