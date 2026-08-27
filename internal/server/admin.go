@@ -606,17 +606,22 @@ func (s *Server) handleAdminInjectFlower(w http.ResponseWriter, r *http.Request)
 	head := s.db.PetImageByBase(req.Base, false).Head
 	blood := uint32(randRange(1, 24))
 	now := time.Now()
+	// 分组跟随星级:7 星归特殊花种组(specSeedId>0),1-6 星按普通花种组(specSeedId=0)。
+	specSeedID := uint32(0)
+	if star == 7 {
+		specSeedID = 1
+	}
 	f := FlowerItem{
 		ID:          req.Base,
 		Name:        info.Name,
 		Img:         head,
-		Star:        star, // 特殊花灵
+		Star:        star,
 		Blood:       blood,
 		BloodName:   s.db.BloodName(blood),
 		BloodIcon:   s.db.BloodIcon(blood),
 		NpcLogicID:  uint64(now.UnixNano()),
 		EndTs:       uint64(now.Add(3 * 24 * time.Hour).Unix()), // 3 天活动倒计时
-		SpecSeedID:  1,                                          // 归入特殊花种组
+		SpecSeedID:  specSeedID,
 		ActivityID:  1,
 		Detail:      true,
 		Lv:          uint32(randRange(40, 70)),
