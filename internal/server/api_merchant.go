@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
+	"html"
 	"io"
 	"mime"
 	"net/http"
@@ -359,8 +360,52 @@ func merchantSubMatch(keywords string, news []merchantItem) bool {
 	return false
 }
 
+// 发件人显示名(收件端显示「远哥来了 <dobin0@qq.com>」),RFC 2047 编码支持中文。
+const merchantMailFromName = "远哥来了"
+
+// merchantMailHTMLTpl 邮件正文模板:深色暖调背景 + 浅色卡片 + 金色标题栏。
+const merchantMailHTMLTpl = `<!DOCTYPE html>
+<html lang="zh-CN"><body style="margin:0;padding:0;background:#17110a;">
+<div style="background:linear-gradient(160deg,#241809 0%,#3a2a14 55%,#4a3518 100%);padding:36px 16px;font-family:-apple-system,'PingFang SC','Microsoft YaHei',sans-serif;">
+  <div style="max-width:560px;margin:0 auto;background:#fffaf0;border-radius:18px;overflow:hidden;box-shadow:0 12px 40px rgba(0,0,0,.4);">
+    <div style="background:linear-gradient(135deg,#f0b429,#d99a1e);padding:22px 28px;">
+      <div style="font-size:20px;font-weight:800;color:#3a2505;">远行商人</div>
+      <div style="font-size:12px;color:#7a5a15;margin-top:4px;">新货上架提醒</div>
+    </div>
+    <div style="padding:26px 28px;color:#3a2a14;font-size:14px;line-height:1.9;">%s</div>
+    <div style="background:#f3e7cc;padding:14px 28px;font-size:12px;color:#8a6d3b;text-align:center;line-height:1.7;">
+      本邮件由「远行商人」新货提醒自动发送<br>如需退订,请到站点「远行商人」页取消订阅
+    </div>
+  </div>
+</div>
+</body></html>`
+
+// merchantMailFrom 生成带中文显示名的 From 头。
+func (s *Server) merchantMailFrom() string {
+	return mime.QEncoding.Encode("utf-8", merchantMailFromName) + " <" + s.smtpUser + ">"
+}
+
+// merchantMailBody 把纯文本正文转成模板包裹的 HTML(保留换行与前导空格,列表行转 •)。
+func merchantMailBody(body string) string {
+	lines := strings.Split(body, "\n")
+	for i, line := range lines {
+		trimmed := strings.TrimLeft(line, " ")
+		lead := len(line) - len(trimmed)
+		if strings.HasPrefix(trimmed, "- ") {
+			trimmed = "• " + strings.TrimPrefix(trimmed, "- ")
+		}
+		esc := html.EscapeString(trimmed)
+		if lead > 0 {
+			esc = strings.Repeat("&nbsp;", lead) + esc
+		}
+		lines[i] = esc
+	}
+	return fmt.Sprintf(merchantMailHTMLTpl, strings.Join(lines, "<br>"))
+}
+
 // sendMerchantMail 通过 QQ 邮箱 SMTP(465 SSL)发送邮件。subject/body 由调用方拼好
-// (订阅新货提醒 / 管理员测试)。串行发信(smtpMu),避免并发连接被 QQ 邮箱判为异常触发限流。
+// (订阅新货提醒 / 管理员测试),正文渲染为带背景的 HTML。串行发信(smtpMu),
+// 避免并发连接被 QQ 邮箱判为异常触发限流。
 func (s *Server) sendMerchantMail(to, subject, body string) error {
 	s.smtpMu.Lock()
 	defer s.smtpMu.Unlock()
@@ -388,8 +433,8 @@ func (s *Server) sendMerchantMail(to, subject, body string) error {
 	if err != nil {
 		return err
 	}
-	if _, err := fmt.Fprintf(w, "From: %s\r\nTo: %s\r\nSubject: %s\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=UTF-8\r\n\r\n%s",
-		s.smtpUser, to, mime.QEncoding.Encode("utf-8", subject), body); err != nil {
+	if _, err := fmt.Fprintf(w, "From: %s\r\nTo: %s\r\nSubject: %s\r\nMIME-Version: 1.0\r\nContent-Type: text/html; charset=UTF-8\r\n\r\n%s",
+		s.merchantMailFrom(), to, mime.QEncoding.Encode("utf-8", subject), merchantMailBody(body)); err != nil {
 		return err
 	}
 	if err := w.Close(); err != nil {
