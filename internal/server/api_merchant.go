@@ -8,8 +8,8 @@ import (
 	"io"
 	"mime"
 	"net/http"
-	"net/mail"
 	"net/smtp"
+	"net/textproto"
 	"net/url"
 	"strings"
 	"time"
@@ -389,7 +389,7 @@ func (s *Server) sendMerchantMail(to, subject, body string) error {
 	if err != nil {
 		return err
 	}
-	h := mail.Header{}
+	h := textproto.MIMEHeader{}
 	h.Set("From", s.smtpUser)
 	h.Set("To", to)
 	h.Set("Subject", mime.QEncoding.Encode("utf-8", subject))
