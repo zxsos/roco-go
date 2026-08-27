@@ -360,8 +360,6 @@ const WildLayer = React.memo(({ marks, mapPx, wildTip, dist }) => {
       const tip = wildTip === p.id
       const kinds = p.kinds || []
       const rare = kinds.includes('shiny') || kinds.includes('colorful')
-      // 仅炫彩(无异色)时用 CSS mask 渲染的色卡(GlassChip);与异色并存时优先合成图/异色图标。
-      const soloColorful = kinds.includes('colorful') && !kinds.includes('shiny')
       const mark = (kinds.includes('shiny') && kinds.includes('colorful') && icons.shinyColorful) ||
         (kinds.includes('shiny') && icons.shiny) ||
         (kinds.includes('colorful') && icons.colorful)
@@ -377,9 +375,7 @@ const WildLayer = React.memo(({ marks, mapPx, wildTip, dist }) => {
           {p.img ? <img className="map-wild-face" src={imgURL(p.img)} alt="" draggable={false} /> : <span className="map-wild-face-fallback">🐾</span>}
           {rare && mark && (
             <span className={'map-wild-mark map-wild-mark-' + markKind}>
-              {soloColorful
-                ? <GlassChip p={p} className="map-glass-chip" />
-                : <img src={imgURL(mark)} alt="" draggable={false} />}
+              <img src={imgURL(mark)} alt="" draggable={false} />
             </span>
           )}
         </div>,
