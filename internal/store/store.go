@@ -268,6 +268,21 @@ CREATE TABLE IF NOT EXISTS merchant_slots (
   data TEXT NOT NULL DEFAULT '',
   fetched_at INTEGER NOT NULL
 );
+
+-- 远行商人订阅(邮件提醒,见 server/api_merchant.go):email 是玩家填的收件 QQ 邮箱,
+-- keywords 是逗号分隔的商品名关键词(空=该邮箱订阅全部新上架商品);订阅长期有效不退。
+CREATE TABLE IF NOT EXISTS merchant_subs (
+  email TEXT PRIMARY KEY,
+  keywords TEXT NOT NULL DEFAULT '',
+  created_at INTEGER NOT NULL
+);
+-- 已通知记录:同一槽(4h)对同一邮箱只发一次提醒,防止强制刷新/重复回源时重复发信;
+-- 记录随槽缓存一起在写入时清理 2 天前的。
+CREATE TABLE IF NOT EXISTS merchant_notified (
+  slot INTEGER NOT NULL,
+  email TEXT NOT NULL,
+  PRIMARY KEY(slot, email)
+);
 `)
 	return err
 }

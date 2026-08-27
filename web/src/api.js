@@ -160,6 +160,35 @@ export const getMerchant = async (force = false) => {
   return r.json()
 }
 
+// getMerchantSub 查询订阅状态:{configured(服务端是否配了发信邮箱), subscribed, email, keywords}。
+export const getMerchantSub = async (email) => {
+  const r = await fetch('/api/merchant/sub?email=' + encodeURIComponent(email))
+  if (!r.ok) throw new Error('查询订阅失败(' + r.status + ')')
+  return r.json()
+}
+
+// setMerchantSub 订阅/更新:keywords 逗号分隔的商品名关键词,空=全部新上架都提醒。
+export const setMerchantSub = async (email, keywords) => {
+  const r = await fetch('/api/merchant/sub', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, keywords }),
+  })
+  if (!r.ok) {
+    let msg = `订阅失败(${r.status})`
+    try { const t = (await r.text()).trim(); if (t) msg = t } catch { /* 忽略 */ }
+    throw new Error(msg)
+  }
+  return r.json()
+}
+
+// delMerchantSub 退订。
+export const delMerchantSub = async (email) => {
+  const r = await fetch('/api/merchant/sub?email=' + encodeURIComponent(email), { method: 'DELETE' })
+  if (!r.ok) throw new Error('退订失败(' + r.status + ')')
+  return r.json()
+}
+
 // getEvolution 返回某 petbase(base_conf_id)所属进化链(按阶段升序)。
 export const getEvolution = (base) => getJSON('/api/evolution?base=' + base)
 

@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react'
-import { getMerchant } from '../../api'
+import { getMerchant, getMerchantSub, setMerchantSub, delMerchantSub } from '../../api'
 import { fmtTime } from '../../utils/format'
 
 // 远行商人页:展示后端缓存的 4h 轮次数据(令牌在服务端,缓存 2 天,见
@@ -92,6 +92,9 @@ export default function Merchant() {
           </div>
         )}
       </div>
+
+      {/* 订阅卡片:新货上架邮件提醒 */}
+      <SubCard />
 
       {/* 操作条 */}
       <div className="merchant-bar">
@@ -196,6 +199,89 @@ function MerchantItem({ it }) {
           <div className="merchant-item-time" title={range || tLabel}>{tLabel}</div>
         )}
       </div>
+    </div>
+  )
+}
+
+// SubCard 新货邮件提醒订阅:填 QQ 邮箱(可选关键词,空=全部),每轮新货上架后后端发邮件。
+// 服务端未配置发信邮箱(configured=false)时禁用并提示。
+function SubCard() {
+  const [cfg, setCfg] = useState(null) // {configured, subscribed, email, keywords}
+  const [email, setEmail] = useState('')
+  const [kws, setKws] = useState('')
+  const [msg, setMsg] = useState('')
+  const [err, setErr] = useState('')
+  const [busy, setBusy] = useState(false)
+
+  const refresh = useCallback(async (e) => {
+    try {
+      const d = await getMerchantSub(e)
+      setCfg(d)
+      if (d.subscribed) setKws(d.keywords)
+    } catch (e2) { setErr(e2.message) }
+  }, [])
+
+  useEffect(() => {
+    const saved = localStorage.getItem('merchant-sub-email')
+    if (saved) {
+      setEmail(saved)
+      refresh(saved)
+    } else {
+      setCfg({ configured: true, subscribed: false, email: '', keywords: '' })
+    }
+  }, [refresh])
+
+  const save = async (ev) => {
+    ev.preventDefault()
+    const e = email.trim()
+    if (!e.includes('@') || e.length < 5) { setErr('请填写正确的 QQ 邮箱'); return }
+    setBusy(true); setErr(''); setMsg('')
+    try {
+      await setMerchantSub(e, kws.trim())
+      localStorage.setItem('merchant-sub-email', e)
+      setMsg('订阅成功,新货上架后会发邮件到 ' + e)
+      refresh(e)
+    } catch (e2) { setErr(e2.message) } finally { setBusy(false) }
+  }
+
+  const unsub = async () => {
+    const e = email.trim()
+    setBusy(true); setErr(''); setMsg('')
+    try {
+      await delMerchantSub(e)
+      localStorage.removeItem('merchant-sub-email')
+      setKws('')
+      setMsg('已退订')
+      setCfg((c) => ({ ...c, subscribed: false }))
+    } catch (e2) { setErr(e2.message) } finally { setBusy(false) }
+  }
+
+  return (
+    <div className="merchant-sub">
+      <div className="merchant-sub-head">
+        <span className="merchant-sub-title">🔔 新货邮件提醒</span>
+        {cfg && cfg.configured && cfg.subscribed && <span className="merchant-sub-badge">已订阅</span>}
+        {cfg && !cfg.configured && <span className="merchant-sub-warn">服务端未配置发信邮箱,不可用</span>}
+      </div>
+      <p className="merchant-sub-desc">
+        每轮(8/12/16/20 点)有<b>新增商品</b>上架时,自动发邮件到你的 QQ 邮箱;0~8 点打烊不提醒。
+      </p>
+      <form className="merchant-sub-form" onSubmit={save}>
+        <input className="merchant-sub-input" type="email" placeholder="QQ 邮箱(如 123456@qq.com)"
+          value={email} onChange={(e) => setEmail(e.target.value)}
+          disabled={busy || (cfg && !cfg.configured)} required />
+        <input className="merchant-sub-input" placeholder="关键词(逗号分隔,可留空=全部)"
+          value={kws} onChange={(e) => setKws(e.target.value)}
+          disabled={busy || (cfg && !cfg.configured)} />
+        <button type="submit" className="btn" disabled={busy || (cfg && !cfg.configured)}>
+          {cfg && cfg.subscribed ? '更新订阅' : '订阅'}
+        </button>
+        {cfg && cfg.subscribed && (
+          <button type="button" className="btn btn-ghost" onClick={unsub} disabled={busy}>退订</button>
+        )}
+      </form>
+      {msg && <div className="merchant-sub-msg ok">{msg}</div>}
+      {err && <div className="merchant-sub-msg err">{err}</div>}
     </div>
   )
 }
