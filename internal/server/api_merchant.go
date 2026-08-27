@@ -395,7 +395,10 @@ func (s *Server) sendMerchantMail(to, subject, body string) error {
 	h.Set("Subject", mime.QEncoding.Encode("utf-8", subject))
 	h.Set("MIME-Version", "1.0")
 	h.Set("Content-Type", "text/plain; charset=UTF-8")
-	if _, err := w.Write([]byte(h.Encode() + "\r\n" + body)); err != nil {
+	if err := h.Write(w); err != nil {
+		return err
+	}
+	if _, err := w.Write([]byte("\r\n" + body)); err != nil {
 		return err
 	}
 	if err := w.Close(); err != nil {
