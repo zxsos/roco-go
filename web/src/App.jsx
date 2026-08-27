@@ -430,9 +430,6 @@ function AccountItem({ account, cur, hi, uidOf, onChoose, onHover }) {
       <span className="privacy account-item-name">{account.name}</span>
       {account.hasPin && <span className="account-item-pin" title="已设 PIN">🔒</span>}
       <span className="muted privacy account-item-uid">UID:{uidOf(account.account)}</span>
-      {account.coins > 0 && (
-        <span className="muted privacy account-item-coins" title="金币(登录时解析)">🪙 {account.coins.toLocaleString()}</span>
-      )}
     </li>
   )
 }

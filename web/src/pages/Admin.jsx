@@ -924,7 +924,6 @@ export default function Admin() {
               </span>
               <code className="rule-account">{a.name || a.account}</code>
               <span className="rule-note">UID:{(a.account || '').replace(/^UID:/, '')}</span>
-              {a.coins > 0 && <span className="rule-note" title="金币(登录时解析)">🪙 {a.coins.toLocaleString()}</span>}
               {pinEditing === a.account ? (
                 <>
                   <input className="input admin-pin-input" type="password" inputMode="numeric"

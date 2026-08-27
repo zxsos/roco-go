@@ -15,6 +15,13 @@
 .merchant-sub { color: var(--fg-dim); font-size: 13px; margin-top: 3px; }
 .merchant-hero-side { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 
+/* 金币徽标(顶部横幅:当前账号金币,来自登录回包 0x0102 解析) */
+.merchant-coins {
+  padding: 4px 12px; border-radius: 999px; font-size: 12px; font-weight: 700; line-height: 1.4;
+  background: rgba(212, 175, 55, .16); color: #d4af37; border: 1px solid rgba(212, 175, 55, .45);
+  font-variant-numeric: tabular-nums;
+}
+
 /* 营业状态徽标 */
 .merchant-status { padding: 4px 12px; border-radius: 999px; font-size: 12px; font-weight: 700; line-height: 1.4; }
 .merchant-status-ok { background: rgba(40, 167, 69, .14); color: #28a745; border: 1px solid rgba(40, 167, 69, .4); }

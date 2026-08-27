@@ -1,5 +1,5 @@
 import React, { useCallback, useContext, useEffect, useState } from 'react'
-import { getMerchant, getMerchantSub, setMerchantSub, delMerchantSub } from '../../api'
+import { getMerchant, getMerchantSub, setMerchantSub, delMerchantSub, getAccounts } from '../../api'
 import { AccountContext } from '../../context'
 import { fmtTime } from '../../utils/format'
 
@@ -27,7 +27,9 @@ const STATUS = {
 const count = (m) => (m ? (m.item_count ?? ((m.items && m.items.length) || 0)) : 0)
 
 export default function Merchant() {
+  const account = useContext(AccountContext)
   const [d, setD] = useState(null) // {now,day,status,today,prev}
+  const [coins, setCoins] = useState(0) // 当前账号金币(登录时解析,0=未知)
   const [err, setErr] = useState('')
   const [loading, setLoading] = useState(false)
 
@@ -43,6 +45,17 @@ export default function Merchant() {
       setLoading(false)
     }
   }, [])
+
+  // 金币存 accounts.coins,拉账号列表取当前账号的金币(账号切换后重拉)。
+  useEffect(() => {
+    let done = false
+    getAccounts().then((list) => {
+      if (done || !list) return
+      const cur = list.find((a) => a.account === account)
+      setCoins(cur ? cur.coins || 0 : 0)
+    }).catch(() => {})
+    return () => { done = true }
+  }, [account])
 
   useEffect(() => { load(false) }, [load])
 
@@ -78,6 +91,9 @@ export default function Merchant() {
             {m && m.subtitle && <div className="merchant-sub">{m.subtitle}</div>}
           </div>
           <div className="merchant-hero-side">
+            {coins > 0 && (
+              <span className="merchant-coins" title="当前账号金币(登录时解析)">🪙 {coins.toLocaleString()}</span>
+            )}
             <span className={`merchant-status merchant-status-${st.cls}`}>{st.text}</span>
             <span className="merchant-day">{dayText}</span>
             {m && m.round && m.round.countdown && (
