@@ -22,6 +22,10 @@ const SORTS = [
 // 孵蛋器格子数:实测 3 个(玩家上限可能随等级/道具变,故按实际在孵数取大)。
 const HATCH_SLOTS = 3
 
+// 部分异色形态的蛋配置名自带「的蛋」,后端模板({0}的蛋)再拼一层就成了「XX的蛋的蛋」,
+// 这里只规整结尾的重复(中间的「的蛋」是名字本身,不动)。
+const tidyEggName = (name) => (name || '').replace(/的蛋的蛋$/, '的蛋')
+
 // 孵蛋器状态只由后端 0x0312 对账维护(见 docs/data.md 3.6),故把在孵的蛋缓存到
 // localStorage(按账号隔离):打开页面先用缓存顶住孵蛋器栏,再等后端推送刷新——
 // 后端 hatching 列没变时,缓存就是最后一次 0x0312 的权威结果。
@@ -160,13 +164,14 @@ function IncuTitle({ n, slots }) {
 function EggCard({ egg, now, onPet }) {
   const p = hatchProgress(egg, now)
   const src = egg.srcName ? `来源:${egg.srcName}` : ''
+  const name = tidyEggName(egg.name)
   return (
     <div className="egg-card">
       <div className="egg-head">
         <img className="egg-icon" src={imgURL(egg.icon)} alt="" draggable={false} />
         <div className="egg-title">
-          <div className="egg-name" title={[egg.name, egg.species && `孵出 ${egg.species}`, src]
-            .filter(Boolean).join(' · ')}>{egg.name}</div>
+          <div className="egg-name" title={[name, egg.species && `孵出 ${egg.species}`, src]
+            .filter(Boolean).join(' · ')}>{name}</div>
           <div className="egg-tags">
             {(egg.medals || []).map((m) => (
               <span key={m.dim} className="egg-chip" title={`${DIM_NAME[m.dim] || ''}奖牌`}>{m.name}</span>
