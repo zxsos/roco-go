@@ -336,6 +336,24 @@ export const adminPlaySessions = (account = '', limit = 200) =>
       return r.json()
     })
 
+// adminMerchantSubs 远行商人邮箱推送名单:{configured: SMTP 是否已配置, subs:[{email,keywords,created_at}]}。
+export const adminMerchantSubs = () => adminFetch('/api/admin/merchant-subs').then(async (r) => {
+  if (!r.ok) throw await adminError(r, '拉取订阅名单失败')
+  return r.json()
+})
+
+// adminMerchantSubDelete 从推送名单删除某邮箱的订阅。
+export function adminMerchantSubDelete(email) {
+  return adminFetch('/api/admin/merchant-subs?email=' + encodeURIComponent(email), { method: 'DELETE' })
+    .then(async (r) => {
+      if (!r.ok) throw await adminError(r, '删除订阅失败')
+      return r.json()
+    })
+}
+
+// adminTestMail 发送测试邮件验证 SMTP 配置(错误信息透传后端 SMTP 具体报错)。
+export const adminTestMail = (email) => postJSON('/api/admin/merchant-test-mail', { email })
+
 // adminWildPetOptions 可投放的野生宠物形态:{options:[{base,name,book}]}。
 export const adminWildPetOptions = () => adminFetch('/api/admin/wild-pets').then(async (r) => {
   if (!r.ok) throw new Error('拉取形态列表失败(' + r.status + ')')

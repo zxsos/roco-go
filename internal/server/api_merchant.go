@@ -313,7 +313,29 @@ func (s *Server) merchantNotify(slotStart time.Time) {
 		if !merchantSubMatch(sub.Keywords, news) {
 			continue
 		}
-		if err := s.sendMerchantMail(sub.Email, slotStart, out.Data.MerchantName, news); err == nil {
+		var body strings.Builder
+		fmt.Fprintf(&body, "远行商人「%s」上架了新商品!\n\n", out.Data.MerchantName)
+		fmt.Fprintf(&body, "营业日:%s\n", merchantDayStart(slotStart).Format("2006-01-02"))
+		fmt.Fprintf(&body, "本轮:%s ~ %s\n\n", slotStart.Format("15:04"), slotStart.Add(merchantSlotStep).Format("15:04"))
+		body.WriteString("新增商品:\n")
+		for _, it := range news {
+			body.WriteString("- ")
+			body.WriteString(it.Name)
+			if it.Kind != "" {
+				fmt.Fprintf(&body, "(%s)", it.Kind)
+			}
+			fmt.Fprintf(&body, " %d 金币", it.Price)
+			if it.Limit > 0 {
+				fmt.Fprintf(&body, " 限购 %d", it.Limit)
+			}
+			body.WriteByte('\n')
+			if it.TimeLabel != "" {
+				fmt.Fprintf(&body, "  售卖时间:%s\n", it.TimeLabel)
+			}
+		}
+		body.WriteString("\n——\n本邮件由远行商人订阅自动发送;如需退订,请在站点「远行商人」页取消订阅。\n")
+		subject := "远行商人新货上架(" + slotStart.Format("15:04") + " 轮)"
+		if err := s.sendMerchantMail(sub.Email, subject, body.String()); err == nil {
 			s.store.MarkMerchantNotified(slotStart.Unix(), sub.Email)
 		}
 	}
@@ -338,31 +360,9 @@ func merchantSubMatch(keywords string, news []merchantItem) bool {
 	return false
 }
 
-// sendMerchantMail 通过 QQ 邮箱 SMTP(465 SSL)发送提醒邮件。串行发信(smtpMu),
-// 避免并发连接被 QQ 邮箱判为异常触发限流。
-func (s *Server) sendMerchantMail(to string, slotStart time.Time, merchantName string, news []merchantItem) error {
-	var b strings.Builder
-	fmt.Fprintf(&b, "远行商人「%s」上架了新商品!\n\n", merchantName)
-	fmt.Fprintf(&b, "营业日:%s\n", merchantDayStart(slotStart).Format("2006-01-02"))
-	fmt.Fprintf(&b, "本轮:%s ~ %s\n\n", slotStart.Format("15:04"), slotStart.Add(merchantSlotStep).Format("15:04"))
-	b.WriteString("新增商品:\n")
-	for _, it := range news {
-		b.WriteString("- ")
-		b.WriteString(it.Name)
-		if it.Kind != "" {
-			fmt.Fprintf(&b, "(%s)", it.Kind)
-		}
-		fmt.Fprintf(&b, " %d 金币", it.Price)
-		if it.Limit > 0 {
-			fmt.Fprintf(&b, " 限购 %d", it.Limit)
-		}
-		b.WriteByte('\n')
-		if it.TimeLabel != "" {
-			fmt.Fprintf(&b, "  售卖时间:%s\n", it.TimeLabel)
-		}
-	}
-	b.WriteString("\n——\n本邮件由远行商人订阅自动发送;如需退订,请在站点「远行商人」页取消订阅。\n")
-
+// sendMerchantMail 通过 QQ 邮箱 SMTP(465 SSL)发送邮件。subject/body 由调用方拼好
+// (订阅新货提醒 / 管理员测试)。串行发信(smtpMu),避免并发连接被 QQ 邮箱判为异常触发限流。
+func (s *Server) sendMerchantMail(to, subject, body string) error {
 	s.smtpMu.Lock()
 	defer s.smtpMu.Unlock()
 
@@ -392,10 +392,10 @@ func (s *Server) sendMerchantMail(to string, slotStart time.Time, merchantName s
 	h := mail.Header{}
 	h.Set("From", s.smtpUser)
 	h.Set("To", to)
-	h.Set("Subject", mime.QEncoding.Encode("utf-8", "远行商人新货上架("+slotStart.Format("15:04")+" 轮)"))
+	h.Set("Subject", mime.QEncoding.Encode("utf-8", subject))
 	h.Set("MIME-Version", "1.0")
 	h.Set("Content-Type", "text/plain; charset=UTF-8")
-	if _, err := w.Write([]byte(h.Encode() + "\r\n" + b.String())); err != nil {
+	if _, err := w.Write([]byte(h.Encode() + "\r\n" + body)); err != nil {
 		return err
 	}
 	if err := w.Close(); err != nil {
@@ -449,4 +449,80 @@ func (s *Server) handleMerchantSub(w http.ResponseWriter, r *http.Request) {
 	default:
 		http.Error(w, "不支持的请求方法", http.StatusMethodNotAllowed)
 	}
+}
+
+// handleAdminMerchantSubs 管理接口:邮箱推送名单。
+//
+//	GET    /api/admin/merchant-subs → {configured, subs:[{email, keywords, created_at}]}
+//	DELETE /api/admin/merchant-subs?email=xxx → 删除订阅
+func (s *Server) handleAdminMerchantSubs(w http.ResponseWriter, r *http.Request) {
+	if !s.requireAdmin(w, r) {
+		return
+	}
+	switch r.Method {
+	case http.MethodGet:
+		subs, err := s.store.ListMerchantSubs()
+		if err != nil {
+			http.Error(w, "拉取订阅名单失败", http.StatusInternalServerError)
+			return
+		}
+		type subJSON struct {
+			Email     string `json:"email"`
+			Keywords  string `json:"keywords"`
+			CreatedAt int64  `json:"created_at"`
+		}
+		out := make([]subJSON, 0, len(subs))
+		for _, sub := range subs {
+			out = append(out, subJSON{Email: sub.Email, Keywords: sub.Keywords, CreatedAt: sub.CreatedAt})
+		}
+		writeJSON(w, map[string]any{
+			"configured": s.smtpUser != "" && s.smtpPass != "",
+			"subs":       out,
+		})
+	case http.MethodDelete:
+		email := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("email")))
+		if email == "" {
+			http.Error(w, "缺少 email 参数", http.StatusBadRequest)
+			return
+		}
+		if err := s.store.DeleteMerchantSub(email); err != nil {
+			http.Error(w, "删除订阅失败", http.StatusInternalServerError)
+			return
+		}
+		writeJSON(w, map[string]any{"ok": true})
+	default:
+		http.Error(w, "不支持的请求方法", http.StatusMethodNotAllowed)
+	}
+}
+
+// handleAdminMerchantTestMail 管理接口:发送测试邮件,验证 SMTP 配置是否可用。
+// POST {email} → 向指定邮箱发一封测试信;错误信息透传 SMTP 具体报错,便于排障。
+func (s *Server) handleAdminMerchantTestMail(w http.ResponseWriter, r *http.Request) {
+	if !s.requireAdmin(w, r) {
+		return
+	}
+	var req struct {
+		Email string `json:"email"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "参数解析失败", http.StatusBadRequest)
+		return
+	}
+	email := strings.ToLower(strings.TrimSpace(req.Email))
+	if !strings.Contains(email, "@") || len(email) < 5 {
+		http.Error(w, "邮箱格式不正确", http.StatusBadRequest)
+		return
+	}
+	if s.smtpUser == "" || s.smtpPass == "" {
+		http.Error(w, "服务端未配置发件邮箱(-merchant-smtp-user / -merchant-smtp-pass)", http.StatusBadRequest)
+		return
+	}
+	subject := "【测试】远行商人订阅邮件"
+	body := "这是一封测试邮件,说明 QQ 邮箱 SMTP 配置正常,新货提醒可以正常投递。\n\n" +
+		"发送时间:" + time.Now().Format("2006-01-02 15:04:05") + "\n\n——远行商人订阅自动发送"
+	if err := s.sendMerchantMail(email, subject, body); err != nil {
+		http.Error(w, "发送失败:"+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, map[string]any{"ok": true})
 }
