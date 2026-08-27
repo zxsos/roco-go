@@ -400,7 +400,9 @@ func merchantMailBody(body string) string {
 		}
 		lines[i] = esc
 	}
-	return fmt.Sprintf(merchantMailHTMLTpl, strings.Join(lines, "<br>"))
+	// 用 Replace 而非 Sprintf:模板背景渐变色里有裸 %(0%,55%,100%),
+	// Sprintf 会把它当格式 verb 误解析导致正文占位符拿不到参数(%!s(MISSING))。
+	return strings.Replace(merchantMailHTMLTpl, "%s", strings.Join(lines, "<br>"), 1)
 }
 
 // sendMerchantMail 通过 QQ 邮箱 SMTP(465 SSL)发送邮件。subject/body 由调用方拼好
