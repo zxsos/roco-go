@@ -5,7 +5,7 @@ import { fmtTime } from '../../utils/format'
 // 远行商人页:展示后端缓存的 4h 轮次数据(令牌在服务端,缓存 2 天,见
 // internal/server/api_merchant.go)。业务节奏:每天 8 点开张、0 点收摊,8/12/16/20 四个整点
 // 各上架一轮新货并售卖 4 小时;只有 00:00~08:00 是打烊休市(页面此时显示昨日四轮全天回顾)。
-// 刷新按钮只是重拉后端缓存(不烧 token);强制刷新才让后端回源第三方。
+// 刷新按钮只是重拉后端缓存(不烧 token);强制刷新(绕缓存回源第三方)已移到管理面板。
 // 图片字段兼容两种形式:http(s) 外链直接用;否则按本地 /img/ 相对路径解析。
 const imgSrc = (it) => {
   const v = it && it.image
@@ -106,10 +106,6 @@ export default function Merchant() {
         <span className="merchant-btns">
           <button type="button" className="btn" onClick={() => load(false)} disabled={loading}>
             {loading ? '加载中…' : '刷新'}
-          </button>
-          <button type="button" className="btn" onClick={() => load(true)} disabled={loading}
-            title="强制后端重新向第三方抓取(烧对方额度,非必要别点)">
-            强制刷新
           </button>
         </span>
       </div>

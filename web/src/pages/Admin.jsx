@@ -3,7 +3,7 @@ import {
   getAdminStatus, adminSetup, adminLogin, adminLogout,
   getAdminToken, setAdminToken, adminRules, adminSetRule, adminDeleteRule,
   adminStats, adminPlaySessions, adminWildPetOptions, adminInjectWild, adminInjectFlower, adminListInjects, adminRevokeInject,
-  adminMerchantSubs, adminMerchantSubDelete, adminTestMail,
+  adminMerchantSubs, adminMerchantSubDelete, adminTestMail, getMerchant,
   getAccounts, setAccountPin, deleteAccount,
 } from '../api'
 import { GLASS_PARTICLES, GLASS_COLORS, GLASS_HIDDEN } from '../data/glassConf'
@@ -197,6 +197,7 @@ export default function Admin() {
   const [testSubject, setTestSubject] = useState('')
   const [testBody, setTestBody] = useState('')
   const [testBusy, setTestBusy] = useState(false)
+  const [forceBusy, setForceBusy] = useState(false) // 强制刷新商人数据(回源第三方)
 
   useEffect(() => {
     getAdminStatus().then((s) => {
@@ -249,6 +250,20 @@ export default function Admin() {
     setSubErr('')
     adminMerchantSubs().then(setMerchantSubs)
       .catch((err) => { setSubErr(err.message); kickIfUnauthed(err) })
+  }
+
+  // 强制刷新商人数据:绕过后端缓存,强制后端重新向第三方抓取当前轮(烧 token,仅维护用)。
+  const forceMerchant = async () => {
+    setSubErr(''); setSubMsg('')
+    setForceBusy(true)
+    try {
+      const d = await getMerchant(true)
+      setSubMsg('已强制刷新商人数据(' + (d.status === 'open' ? '当前营业中' : '当前打烊') + '),商人页下次打开即为最新。')
+    } catch (err) {
+      setSubErr(err.message || '强制刷新失败')
+    } finally {
+      setForceBusy(false)
+    }
   }
 
   // 发送测试邮件:验证 SMTP 配置(发件邮箱/授权码)是否可用;主题/正文可自填,留空用默认。
@@ -430,7 +445,7 @@ export default function Admin() {
     setInjects(null)
     setMerchantSubs(null)
     setSubErr(''); setSubMsg('')
-    setTestEmail(''); setTestSubject(''); setTestBody(''); setTestBusy(false)
+    setTestEmail(''); setTestSubject(''); setTestBody(''); setTestBusy(false); setForceBusy(false)
   }
 
   if (loading) return <div className="admin-page"><p className="admin-hint">加载中…</p></div>
@@ -726,6 +741,14 @@ export default function Admin() {
             {testBusy ? '发送中…' : '发送测试邮件'}
           </button>
         </form>
+        {/* 强制刷新:回源第三方重抓商人数据(烧对方额度,仅维护用) */}
+        <div className="admin-play-toolbar">
+          <button className="btn" type="button" onClick={forceMerchant} disabled={forceBusy}
+            title="绕过后端缓存,强制后端重新向第三方抓取当前轮商人数据(烧对方额度,非必要别点)">
+            {forceBusy ? '强制刷新中…' : '强制刷新商人数据'}
+          </button>
+          <span className="admin-hint">绕过后端缓存,强制后端重新向第三方抓取当前轮商人数据(烧对方额度,非必要别点)。</span>
+        </div>
         {subErr && <p className="admin-error">{subErr}</p>}
         {subMsg && <p className="admin-hint" style={{ color: 'var(--green, #4caf50)' }}>{subMsg}</p>}
         {merchantSubs === null
