@@ -477,7 +477,21 @@ func (s *Server) handleMerchantSub(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "保存失败", http.StatusInternalServerError)
 			return
 		}
-		writeJSON(w, map[string]any{"ok": true})
+		// 保存成功:自动发送验证邮件,确认收件邮箱可达。发信失败不阻塞订阅(仅提示)。
+		out := map[string]any{"ok": true, "mail_sent": false}
+		if s.smtpUser != "" && s.smtpPass != "" {
+			subject := "【远哥来了】订阅成功验证"
+			body := "你已成功订阅「远行商人」新货提醒!\n\n" +
+				"本邮件用于验证收件邮箱可正常接收提醒,无需回复。\n" +
+				"此后每轮(8/12/16/20 点)有新增商品上架时,会第一时间发邮件通知你。\n\n" +
+				"——远哥来了"
+			if err := s.sendMerchantMail(email, subject, body); err != nil {
+				out["mail_error"] = err.Error()
+			} else {
+				out["mail_sent"] = true
+			}
+		}
+		writeJSON(w, out)
 	case http.MethodDelete:
 		email := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("email")))
 		if err := s.store.DeleteMerchantSub(email); err != nil {
