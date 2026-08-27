@@ -3,8 +3,8 @@ import { getMerchant } from '../../api'
 import { fmtTime } from '../../utils/format'
 
 // 远行商人页:展示后端缓存的 4h 轮次数据(令牌在服务端,缓存 2 天,见
-// internal/server/api_merchant.go)。业务节奏:每天 8 点开张、12 点收摊;营业中显示当前轮,
-// 收摊后(12 点后)显示今日全天回顾,次日 8 点前显示昨日回顾。
+// internal/server/api_merchant.go)。业务节奏:每天 8 点开张、0 点收摊,8/12/16/20 四轮上架;
+// 营业中显示今日已上架轮次,打烊后(0 点到次日 8 点前)显示昨日全天回顾。
 // 刷新按钮只是重拉后端缓存(不烧 token);强制刷新才让后端回源第三方。
 // 图片字段兼容两种形式:http(s) 外链直接用;否则按本地 /img/ 相对路径解析。
 const imgSrc = (it) => {
@@ -19,8 +19,7 @@ const msTime = (ms) => (ms ? fmtTime(ms / 1000) : '')
 // 营业状态 → 徽标文案与样式
 const STATUS = {
   open: { cls: 'ok', text: '营业中' },
-  closed: { cls: 'off', text: '已收摊' },
-  idle: { cls: 'off', text: '未开张' },
+  idle: { cls: 'off', text: '已打烊' },
 }
 
 // count 统计某轮的第三方 item 数(优先 item_count,兜底数 items 数组)。
@@ -60,7 +59,7 @@ export default function Merchant() {
   const m = head && head.merchant
   const total = active.reduce((n, r) => n + count(r.merchant), 0)
   const st = STATUS[d.status] || STATUS.idle
-  const viewTitle = d.status === 'open' ? '今日营业' : d.status === 'closed' ? '今日全天回顾' : '昨日回顾'
+  const viewTitle = d.status === 'open' ? '今日营业' : '昨日回顾'
 
   return (
     <div className="merchant-page">
