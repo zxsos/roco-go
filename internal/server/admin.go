@@ -547,8 +547,8 @@ func (s *Server) handleAdminInjectWild(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, map[string]any{"ok": true, "id": id, "u": u, "v": v})
 }
 
-// handleAdminInjectFlower 向指定成员的花种页注入一只假炫彩花种(花灵 BOSS,7 星特殊花种,
-// 随机血脉/等级,携带管理员指定或随机的炫彩色卡)。不修改游戏真实流量:直接把花种插入
+// handleAdminInjectFlower 向指定成员的花种页注入一只假炫彩花种(花灵 BOSS,默认 7 星特殊花种,
+// 星级可自定义,随机血脉/等级,携带管理员指定或随机的炫彩色卡)。不修改游戏真实流量:直接把花种插入
 // server 缓存的最远花种分组并广播 flowers,花种页立即显示,与真实花种卡片无异。
 // 生命周期:仅由管理员主动撤销(记入 injects,kind=flower,花种不在地图上,无靠近/换场景判定)。
 func (s *Server) handleAdminInjectFlower(w http.ResponseWriter, r *http.Request) {
@@ -558,6 +558,7 @@ func (s *Server) handleAdminInjectFlower(w http.ResponseWriter, r *http.Request)
 	var req struct {
 		Account    string `json:"account"`
 		Base       uint32 `json:"base"`      // 守护宠物 petbase id
+		Star       uint32 `json:"star"`      // 花种星级 1-7;0=默认 7
 		GlassType  int32  `json:"glassType"` // 炫彩色卡类型(1=普通 2=隐藏;0=随机)
 		GlassValue int32  `json:"glassValue"`
 	}
@@ -572,6 +573,13 @@ func (s *Server) handleAdminInjectFlower(w http.ResponseWriter, r *http.Request)
 	}
 	if req.Base == 0 {
 		http.Error(w, "base required", 400)
+		return
+	}
+	star := req.Star
+	if star == 0 {
+		star = 7
+	} else if star > 7 {
+		http.Error(w, "star must be 1-7", 400)
 		return
 	}
 	info, ok := s.db.PetBase(req.Base)
@@ -602,7 +610,7 @@ func (s *Server) handleAdminInjectFlower(w http.ResponseWriter, r *http.Request)
 		ID:          req.Base,
 		Name:        info.Name,
 		Img:         head,
-		Star:        7, // 固定 7 星特殊花种
+		Star:        star, // 特殊花灵
 		Blood:       blood,
 		BloodName:   s.db.BloodName(blood),
 		BloodIcon:   s.db.BloodIcon(blood),
