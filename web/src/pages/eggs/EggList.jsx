@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useContext, useRef } from 'react'
-import { getEggs, subscribe } from '../../api'
+import { getEggs, subscribe, queryEggMatch } from '../../api'
 import { AccountContext } from '../../context'
 import { imgURL } from '../../components/icons'
 import { PetDetailModal } from '../../components/PetDetailModal'
@@ -165,6 +165,14 @@ function EggCard({ egg, now, onPet }) {
   const p = hatchProgress(egg, now)
   const src = egg.srcName ? `来源:${egg.srcName}` : ''
   const name = tidyEggName(egg.name)
+  // 随机蛋(神奇的蛋)的「猜猜孵出谁」:后端代理第三方图鉴 API(令牌在服务端,不进浏览器)。
+  const [match, setMatch] = useState(null) // {loading,error,data}
+  const query = () => {
+    setMatch({ loading: true, error: '', data: null })
+    queryEggMatch(egg.heightM, egg.weightKg)
+      .then((d) => setMatch({ loading: false, error: '', data: d }))
+      .catch((e) => setMatch({ loading: false, error: e.message || '查询失败', data: null }))
+  }
   return (
     <div className="egg-card">
       <div className="egg-head">
@@ -208,6 +216,46 @@ function EggCard({ egg, now, onPet }) {
         <div className="egg-hatch">
           <div className="egg-bar"><div className="egg-bar-fill" style={{ width: p.pct + '%' }} /></div>
           <span className={p.pct >= 100 ? 'val-hot-hi' : undefined}>{p.pct >= 100 ? '可破壳' : p.pct + '%'}</span>
+        </div>
+      )}
+
+      {egg.random && (
+        <div className="egg-guess">
+          {match ? (
+            <div className="egg-guess-res">
+              {match.loading ? <div className="muted egg-guess-line">查询中…</div>
+                : match.error ? (
+                  <div className="egg-guess-line err">
+                    <span>{match.error}</span>
+                    <button className="btn" onClick={() => setMatch(null)}>关闭</button>
+                  </div>
+                ) : (
+                  <>
+                    <div className="muted egg-guess-line">
+                      匹配 {match.data.data.total} 条,来源 {match.data.data.source || '第三方图鉴'}
+                    </div>
+                    <div className="egg-guess-list">
+                      {match.data.data.matches.map((m) => (
+                        <div key={m.pet_id} className="egg-guess-item">
+                          {/^https?:\/\//.test(m.img_name || '')
+                            ? <img className="egg-guess-img" src={m.img_name} alt="" loading="lazy" draggable={false} /> : null}
+                          <div className="egg-guess-txt">
+                            <div className="egg-guess-name">{m.pet_name}
+                              <span className="muted"> {[m.main_type, m.sub_type].filter(Boolean).join('/')}</span>
+                            </div>
+                            <div className="muted">匹配度 {m.score} · {m.hatch_label}</div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    <button className="btn" onClick={() => setMatch(null)}>关闭</button>
+                  </>
+                )}
+            </div>
+          ) : (
+            <button className="btn egg-guess-btn" onClick={query}
+              title="按蛋的身高/体重查第三方图鉴,猜可能孵出谁">猜猜孵出谁</button>
+          )}
         </div>
       )}
 
