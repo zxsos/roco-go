@@ -9,7 +9,6 @@ import (
 	"mime"
 	"net/http"
 	"net/smtp"
-	"net/textproto"
 	"net/url"
 	"strings"
 	"time"
@@ -389,16 +388,8 @@ func (s *Server) sendMerchantMail(to, subject, body string) error {
 	if err != nil {
 		return err
 	}
-	h := textproto.MIMEHeader{}
-	h.Set("From", s.smtpUser)
-	h.Set("To", to)
-	h.Set("Subject", mime.QEncoding.Encode("utf-8", subject))
-	h.Set("MIME-Version", "1.0")
-	h.Set("Content-Type", "text/plain; charset=UTF-8")
-	if err := h.Write(w); err != nil {
-		return err
-	}
-	if _, err := w.Write([]byte("\r\n" + body)); err != nil {
+	if _, err := fmt.Fprintf(w, "From: %s\r\nTo: %s\r\nSubject: %s\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=UTF-8\r\n\r\n%s",
+		s.smtpUser, to, mime.QEncoding.Encode("utf-8", subject), body); err != nil {
 		return err
 	}
 	if err := w.Close(); err != nil {
