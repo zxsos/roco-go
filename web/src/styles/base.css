@@ -112,6 +112,23 @@ input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; margin
 
 .empty { color: var(--fg-dim); text-align: center; padding: 40px; }
 
+/* ---- Toast 轻提示(替代 window.alert 的自制弹层,见 components/toast.jsx) ---- */
+.toast-host {
+  position: fixed; left: 50%; bottom: 24px; z-index: 1000;
+  display: flex; flex-direction: column; align-items: center;
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+.toast {
+  max-width: min(86vw, 420px);
+  background: var(--bg-2); border: 1px solid var(--line); border-radius: var(--radius-lg);
+  box-shadow: var(--shadow);
+  color: var(--fg); padding: 10px 16px; font-size: 13px; line-height: 1.5; text-align: center;
+  opacity: 0; transform: translateY(8px);
+  transition: opacity .2s ease, transform .2s ease;
+}
+.toast.show { opacity: 1; transform: translateY(0); }
+
 /* ---- 系别色 ---- */
 .type {
   display: inline-flex; align-items: center; gap: 3px;
