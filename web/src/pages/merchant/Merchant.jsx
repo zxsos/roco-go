@@ -3,8 +3,8 @@ import { getMerchant } from '../../api'
 import { fmtTime } from '../../utils/format'
 
 // 远行商人页:展示后端缓存的 4h 轮次数据(令牌在服务端,缓存 2 天,见
-// internal/server/api_merchant.go)。业务节奏:每天 8 点开张、0 点收摊,8/12/16/20 四轮上架;
-// 营业中显示今日已上架轮次,打烊后(0 点到次日 8 点前)显示昨日全天回顾。
+// internal/server/api_merchant.go)。业务节奏:每天 8 点开张、0 点收摊,8/12/16/20 四个整点
+// 各上架一轮新货并售卖 4 小时;只有 00:00~08:00 是打烊休市(页面此时显示昨日四轮全天回顾)。
 // 刷新按钮只是重拉后端缓存(不烧 token);强制刷新才让后端回源第三方。
 // 图片字段兼容两种形式:http(s) 外链直接用;否则按本地 /img/ 相对路径解析。
 const imgSrc = (it) => {
@@ -52,37 +52,54 @@ export default function Merchant() {
     return <div className="merchant-page"><div className="empty">{loading ? '加载中…' : ''}</div></div>
   }
 
-  // 回顾视图取哪一天的槽:idle(次日 8 点前)看昨天,其余看今天。
-  const rounds = d.status === 'idle' ? d.prev : d.today
-  const active = (rounds || []).filter((r) => !r.empty) // 有货的轮次
-  const head = active.find((r) => r.merchant) // 第一个有货轮,取商人名/副标题
+  const open = d.status === 'open'
+  // 上架轮(排除 off 打烊槽):营业中看今天,打烊看昨天回顾。
+  const turns = ((open ? d.today : d.prev) || []).filter((r) => !r.off)
+  // 当前轮 = 开始时刻 ≤ now 的最后一轮(都是后端 Unix 秒,直接比较数值,无时区问题)。
+  const curIdx = turns.reduce((last, r, i) => (r.start <= d.now ? i : last), -1)
+  const cur = curIdx >= 0 ? turns[curIdx] : null
+  const active = turns.filter((r) => !r.empty && r.merchant) // 查过且有货的轮
+  // 营业中最新轮在前(玩家最关心当前货),回顾按时间正序。
+  const list = open ? [...active].reverse() : active
+  const head = list[0]
   const m = head && head.merchant
   const total = active.reduce((n, r) => n + count(r.merchant), 0)
   const st = STATUS[d.status] || STATUS.idle
-  const viewTitle = d.status === 'open' ? '今日营业' : '昨日回顾'
+  const dayText = open ? d.day : `昨日 ${d.day}`
 
   return (
     <div className="merchant-page">
-      <div className="panel merchant-head">
-        <div className="merchant-head-main">
-          <div className="merchant-name">{m ? m.merchant_name : '远行商人'}</div>
-          {m && m.subtitle && <div className="merchant-sub">{m.subtitle}</div>}
+      {/* 顶部横幅:商人名 + 营业状态 + 轮次进度 */}
+      <div className={`merchant-hero ${open ? 'is-open' : ''}`}>
+        <div className="merchant-hero-top">
+          <div className="merchant-hero-info">
+            <div className="merchant-name">{m ? m.merchant_name : '远行商人'}</div>
+            {m && m.subtitle && <div className="merchant-sub">{m.subtitle}</div>}
+          </div>
+          <div className="merchant-hero-side">
+            <span className={`merchant-status merchant-status-${st.cls}`}>{st.text}</span>
+            <span className="merchant-day">{dayText}</span>
+            {m && m.round && m.round.countdown && (
+              <span className="merchant-countdown" title="距本轮结束">⏳ {m.round.countdown}</span>
+            )}
+          </div>
         </div>
-        <div className="merchant-round">
-          <span className={`merchant-status merchant-status-${st.cls}`}>{st.text}</span>
-          <span className="merchant-day">{d.day}</span>
-          {m && m.round && m.round.current != null && (
-            <span className="merchant-round-idx">{m.round.current}/{m.round.total}</span>
-          )}
-          {m && m.round && m.round.countdown && (
-            <span className="merchant-round-countdown" title="距本轮结束">⏳ {m.round.countdown}</span>
-          )}
-        </div>
-        <div className="muted merchant-fetched">{m ? `更新于 ${m.fetched_at || '-'}` : ''}</div>
+        {open ? (
+          <RoundSteps turns={turns} curIdx={curIdx} />
+        ) : (
+          <div className="merchant-closed-bar">
+            打烊休市 00:00 ~ 08:00,下一轮 08:00 开张 · 以下为 {d.day} 全天回顾
+          </div>
+        )}
       </div>
 
+      {/* 操作条 */}
       <div className="merchant-bar">
-        <span className="merchant-count">{viewTitle} · 在售 {total} 件</span>
+        <span className="merchant-count">
+          {open && cur
+            ? `第 ${curIdx + 1}/4 轮 · 在售 ${total} 件`
+            : `昨日全天回顾 · 共 ${total} 件`}
+        </span>
         <span className="merchant-btns">
           <button type="button" className="btn" onClick={() => load(false)} disabled={loading}>
             {loading ? '加载中…' : '刷新'}
@@ -94,49 +111,65 @@ export default function Merchant() {
         </span>
       </div>
 
-      {active.length ? (
+      {list.length ? (
         <div className="merchant-rounds">
-          {active.map((r) => <MerchantSection key={r.start} r={r} />)}
+          {list.map((r) => (
+            <MerchantTurn key={r.start} r={r} cur={open && r === cur} />
+          ))}
         </div>
       ) : (
         <div className="empty">该时段暂无数据,后端会按 4h 自动补查,稍后再试</div>
-      )}
-
-      {rounds && rounds.some((r) => r.empty) && (
-        <div className="merchant-off">
-          {rounds.filter((r) => r.empty).map((r) => (
-            <span key={r.start} className="merchant-off-chip">休市 {r.label}</span>
-          ))}
-        </div>
       )}
     </div>
   )
 }
 
-// MerchantSection 单个有货轮次:轮次时段标题 + 该轮商品网格。
-function MerchantSection({ r }) {
+// RoundSteps 四个上架轮次步骤条:8:00 / 12:00 / 16:00 / 20:00。
+// 营业中:已过轮打勾、当前轮高亮、未来轮置灰;打烊回顾:四轮全部完成。
+function RoundSteps({ turns, curIdx }) {
+  return (
+    <div className="merchant-steps">
+      {turns.map((r, i) => {
+        const state = i < curIdx ? 'done' : i === curIdx ? 'cur' : 'todo'
+        return (
+          <div key={r.start} className={`merchant-step ${state}`}>
+            <div className="merchant-step-node">
+              <span className="merchant-step-dot">{state === 'done' ? '✓' : ''}</span>
+            </div>
+            <div className="merchant-step-time">{r.label.split('~')[0]}</div>
+            <div className="merchant-step-cap">{i < curIdx ? '已上架' : i === curIdx ? '售卖中' : '待上架'}</div>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+// MerchantTurn 单个上架轮:轮次头 + 该轮商品网格。
+function MerchantTurn({ r, cur }) {
   const m = r.merchant
   const items = (m && m.items) || []
+  const time = r.label.split('~')[0]
   return (
-    <div className="merchant-round-block">
-      <div className="merchant-round-title">
-        <span className="merchant-round-dot" />
-        <span>{r.label}</span>
-        <span className="merchant-round-sub">第 {count(m)} 件</span>
-        {m && m.round && m.round.label && <span className="muted">· {m.round.label}</span>}
+    <div className={`merchant-turn ${cur ? 'is-cur' : ''}`}>
+      <div className="merchant-turn-head">
+        <span className="merchant-turn-time">{time} 上架</span>
+        {cur && <span className="merchant-turn-cur">当前售卖中</span>}
+        <span className="merchant-turn-range muted">{r.label}</span>
+        <span className="merchant-turn-count">{count(m)} 件</span>
       </div>
       {items.length ? (
         <div className="merchant-grid">
           {items.map((it, i) => <MerchantItem key={it.name + i} it={it} />)}
         </div>
       ) : (
-        <div className="empty">该轮次无商品</div>
+        <div className="empty">该轮暂无商品</div>
       )}
     </div>
   )
 }
 
-// MerchantItem 单个商品卡片:图(外链/本地兼容)+ 名称/类别 + 价格/限购/销售时间。
+// MerchantItem 单个商品卡片:大图 + 名称/类别 + 价格/限购/售卖时间。
 function MerchantItem({ it }) {
   const [imgBad, setImgBad] = useState(false)
   const src = imgSrc(it)
@@ -149,28 +182,19 @@ function MerchantItem({ it }) {
           <img className="merchant-item-img" src={src} alt="" loading="lazy" draggable={false}
             onError={() => setImgBad(true)} />
         ) : (
-          <span className="merchant-item-img-fallback">🛍️</span>
+          <span className="merchant-item-fb">🧳</span>
         )}
       </div>
       <div className="merchant-item-body">
         <div className="merchant-item-name" title={it.name}>{it.name}</div>
-        {it.kind && <div className="muted merchant-item-kind">{it.kind}</div>}
-        <div className="merchant-item-rows">
-          <div className="merchant-item-row">
-            <span className="muted">价格</span>
-            <span className="merchant-price">{it.price} <span className="muted">金币</span></span>
-          </div>
-          <div className="merchant-item-row">
-            <span className="muted">限购</span>
-            <span>{it.limit > 0 ? `${it.limit} 个` : '不限'}</span>
-          </div>
-          {tLabel && (
-            <div className="merchant-item-row merchant-item-time" title={range || tLabel}>
-              <span className="muted">时间</span>
-              <span>{tLabel}</span>
-            </div>
-          )}
+        {it.kind && <span className="merchant-item-kind">{it.kind}</span>}
+        <div className="merchant-item-meta">
+          <span className="merchant-price">{it.price} <span className="merchant-unit">金币</span></span>
+          {it.limit > 0 && <span className="merchant-limit">限购 {it.limit}</span>}
         </div>
+        {tLabel && (
+          <div className="merchant-item-time" title={range || tLabel}>{tLabel}</div>
+        )}
       </div>
     </div>
   )

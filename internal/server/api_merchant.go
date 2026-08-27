@@ -26,12 +26,16 @@ const (
 	merchantCheck    = 15 * time.Minute // 定时器检查间隔
 )
 
-// merchantSlotJSON 单个 4h 槽:empty 表示该槽查过但无货/休市,merchant 是该槽第三方原始 JSON。
+// merchantSlotJSON 单个 4h 槽。性质分两种:
+//   - 上架轮(8/12/16/20):该时段在售卖对应点位上架的商品,empty=查过但无货(不算休市);
+//   - 打烊休市(次日 0/4,off=true):00:00~08:00 收摊打烊,没有在售,也不查询。
+// merchant 是该槽第三方原始 JSON(仅上架轮有货时带)。
 type merchantSlotJSON struct {
 	Start    int64           `json:"start"`
 	End      int64           `json:"end"`
 	Label    string          `json:"label"`
 	Empty    bool            `json:"empty"`
+	Off      bool            `json:"off"` // true=打烊休市时段(0~8 点),不是商品轮
 	Merchant json.RawMessage `json:"merchant,omitempty"`
 }
 
@@ -211,6 +215,8 @@ func (s *Server) merchantSlotsOfDay(day time.Time) []merchantSlotJSON {
 					js.Merchant = json.RawMessage(data)
 				}
 			}
+		} else { // 次日 0/4 槽:00:00~08:00 打烊休市
+			js.Off = true
 		}
 		out = append(out, js)
 	}
