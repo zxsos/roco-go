@@ -190,7 +190,7 @@ export default function Admin() {
   const [pinEditing, setPinEditing] = useState(null) // 正在设 PIN 的账号 key
   const [pinValue, setPinValue] = useState('')
   // 邮箱推送名单(远行商人订阅)+ 测试邮件
-  const [merchantSubs, setMerchantSubs] = useState(null) // {configured, subs:[{email,keywords,created_at}]}
+  const [merchantSubs, setMerchantSubs] = useState(null) // {configured, subs:[{email,account,keywords,created_at}]}
   const [subErr, setSubErr] = useState('')
   const [subMsg, setSubMsg] = useState('')
   const [testEmail, setTestEmail] = useState('')
@@ -759,6 +759,7 @@ export default function Admin() {
               <table className="admin-play-table">
                 <thead>
                   <tr>
+                    <th>账号</th>
                     <th>邮箱</th>
                     <th>关键词</th>
                     <th>订阅时间</th>
@@ -767,7 +768,8 @@ export default function Admin() {
                 </thead>
                 <tbody>
                   {merchantSubs.subs.map((s) => (
-                    <tr key={s.email}>
+                    <tr key={s.account}>
+                      <td>{s.account}</td>
                       <td>{s.email}</td>
                       <td>{s.keywords || <span className="muted">全部</span>}</td>
                       <td>{fmtTime(s.created_at)}</td>

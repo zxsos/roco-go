@@ -443,16 +443,20 @@ func (s *Server) sendMerchantMail(to, subject, body string) error {
 	return c.Quit()
 }
 
-// handleMerchantSub 订阅/退订远行商人邮件提醒(玩家侧登记收件 QQ 邮箱与关键词):
+// handleMerchantSub 订阅/退订远行商人邮件提醒(按当前登录账号绑定,一个账号一个邮箱):
 //
-//	GET    /api/merchant/sub?email=xxx → {configured, subscribed, email, keywords}
+//	GET    /api/merchant/sub → {configured, subscribed, email, keywords}
 //	POST   /api/merchant/sub {email, keywords} → 订阅/更新(关键词逗号分隔,空=全部)
-//	DELETE /api/merchant/sub?email=xxx → 退订
+//	DELETE /api/merchant/sub → 退订
 func (s *Server) handleMerchantSub(w http.ResponseWriter, r *http.Request) {
+	account := s.acct(r)
+	if account == "" {
+		http.Error(w, "缺少账号信息", http.StatusBadRequest)
+		return
+	}
 	switch r.Method {
 	case http.MethodGet:
-		email := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("email")))
-		keywords, ok := s.store.GetMerchantSub(email)
+		email, keywords, ok := s.store.GetMerchantSub(account)
 		writeJSON(w, map[string]any{
 			"configured": s.smtpUser != "" && s.smtpPass != "",
 			"subscribed": ok,
@@ -473,7 +477,7 @@ func (s *Server) handleMerchantSub(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "邮箱格式不正确", http.StatusBadRequest)
 			return
 		}
-		if err := s.store.UpsertMerchantSub(email, strings.TrimSpace(req.Keywords)); err != nil {
+		if err := s.store.UpsertMerchantSub(account, email, strings.TrimSpace(req.Keywords)); err != nil {
 			http.Error(w, "保存失败", http.StatusInternalServerError)
 			return
 		}
@@ -493,8 +497,7 @@ func (s *Server) handleMerchantSub(w http.ResponseWriter, r *http.Request) {
 		}
 		writeJSON(w, out)
 	case http.MethodDelete:
-		email := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("email")))
-		if err := s.store.DeleteMerchantSub(email); err != nil {
+		if err := s.store.DeleteMerchantSub(account); err != nil {
 			http.Error(w, "退订失败", http.StatusInternalServerError)
 			return
 		}
@@ -506,8 +509,8 @@ func (s *Server) handleMerchantSub(w http.ResponseWriter, r *http.Request) {
 
 // handleAdminMerchantSubs 管理接口:邮箱推送名单。
 //
-//	GET    /api/admin/merchant-subs → {configured, subs:[{email, keywords, created_at}]}
-//	DELETE /api/admin/merchant-subs?email=xxx → 删除订阅
+//	GET    /api/admin/merchant-subs → {configured, subs:[{email, account, keywords, created_at}]}
+//	DELETE /api/admin/merchant-subs?email=xxx → 按邮箱删除全部关联订阅
 func (s *Server) handleAdminMerchantSubs(w http.ResponseWriter, r *http.Request) {
 	if !s.requireAdmin(w, r) {
 		return
@@ -521,12 +524,13 @@ func (s *Server) handleAdminMerchantSubs(w http.ResponseWriter, r *http.Request)
 		}
 		type subJSON struct {
 			Email     string `json:"email"`
+			Account   string `json:"account"`
 			Keywords  string `json:"keywords"`
 			CreatedAt int64  `json:"created_at"`
 		}
 		out := make([]subJSON, 0, len(subs))
 		for _, sub := range subs {
-			out = append(out, subJSON{Email: sub.Email, Keywords: sub.Keywords, CreatedAt: sub.CreatedAt})
+			out = append(out, subJSON{Email: sub.Email, Account: sub.Account, Keywords: sub.Keywords, CreatedAt: sub.CreatedAt})
 		}
 		writeJSON(w, map[string]any{
 			"configured": s.smtpUser != "" && s.smtpPass != "",
@@ -538,7 +542,7 @@ func (s *Server) handleAdminMerchantSubs(w http.ResponseWriter, r *http.Request)
 			http.Error(w, "缺少 email 参数", http.StatusBadRequest)
 			return
 		}
-		if err := s.store.DeleteMerchantSub(email); err != nil {
+		if err := s.store.DeleteMerchantSubByEmail(email); err != nil {
 			http.Error(w, "删除订阅失败", http.StatusInternalServerError)
 			return
 		}
