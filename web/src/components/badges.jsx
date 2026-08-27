@@ -47,25 +47,24 @@ const glassMask = (img, color, top = false) => {
   }
 }
 
-// GlassChip 渲染炫彩色卡缩略图:普通炫彩(glassType=1)用 CSS mask 按素材 alpha 蒙版三层填色
-// 合成(Bg 填 ui_color_2 → Bg2 填 ui_color_1 → 粒子染白);隐藏炫彩(glassType=2)直接引用
-// 整图(素材是完整美术图,前端无法重建);配置缺失时退化为原炫彩图标。className 供各场景
-// (列表/详情/地图角标/花种角标)覆盖尺寸。
-export function GlassChip({ p, className }) {
-  const icons = React.useContext(IconsContext)
-  const type = p && p.glassType
-  const value = p && p.glassValue
+// GlassZoom 炫彩色卡放大预览:点遮罩、点关闭按钮或按 Esc 关闭。大图保持 280:154 原始
+// 构图(与 scripts/gen_glass.py 一致),普通炫彩三层合成、隐藏炫彩直接展示整图。
+function GlassZoom({ type, value, onClose }) {
+  React.useEffect(() => {
+    const onKey = (e) => { if (e.key === 'Escape') onClose() }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [onClose])
+  let body
   if (type === 2) {
     const src = GLASS_HIDDEN[value]
-    if (src) {
-      return <img className={className || 'glass-chip'} src={imgURL('dazzling/' + src)} alt="炫彩" title="炫彩色卡" />
-    }
-  } else if (type === 1 && value > 0) {
+    if (src) body = <img className="glass-zoom-card" src={imgURL('dazzling/' + src)} alt="炫彩色卡" />
+  } else {
     const particle = GLASS_PARTICLES[value >> 20]
     const colors = GLASS_COLORS[value & 0xFFFFF]
     if (particle && colors) {
-      return (
-        <span className={className || 'glass-chip'} title="炫彩色卡">
+      body = (
+        <span className="glass-zoom-card">
           <i style={glassMask(GLASS_BG, colors[1])} />
           <i style={glassMask(GLASS_BG2, colors[0], true)} />
           <i style={glassMask(particle, '#ffffff')} />
@@ -73,7 +72,59 @@ export function GlassChip({ p, className }) {
       )
     }
   }
-  return <MarkIcon src={icons.colorful} title="炫彩" fallback="彩" cls="mark-colorful" />
+  if (!body) return null
+  return (
+    <div className="glass-zoom-backdrop" onClick={(e) => { if (e.target === e.currentTarget) onClose() }}>
+      <div className="glass-zoom">
+        {body}
+        <button className="icon-btn glass-zoom-close" onClick={onClose} title="关闭" aria-label="关闭">✕</button>
+      </div>
+    </div>
+  )
+}
+
+// GlassChip 渲染炫彩色卡缩略图:普通炫彩(glassType=1)用 CSS mask 按素材 alpha 蒙版三层填色
+// 合成(Bg 填 ui_color_2 → Bg2 填 ui_color_1 → 粒子染白);隐藏炫彩(glassType=2)直接引用
+// 整图(素材是完整美术图,前端无法重建);配置缺失时退化为原炫彩图标。className 供各场景
+// (列表/详情/地图角标/花种角标)覆盖尺寸。点击色卡弹出 GlassZoom 放大预览(见上)。
+export function GlassChip({ p, className }) {
+  const icons = React.useContext(IconsContext)
+  const [zoom, setZoom] = React.useState(false)
+  const type = p && p.glassType
+  const value = p && p.glassValue
+  let card = null
+  if (type === 2) {
+    const src = GLASS_HIDDEN[value]
+    if (src) card = <img src={imgURL('dazzling/' + src)} alt="炫彩" />
+  } else if (type === 1 && value > 0) {
+    const particle = GLASS_PARTICLES[value >> 20]
+    const colors = GLASS_COLORS[value & 0xFFFFF]
+    if (particle && colors) {
+      card = (
+        <>
+          <i style={glassMask(GLASS_BG, colors[1])} />
+          <i style={glassMask(GLASS_BG2, colors[0], true)} />
+          <i style={glassMask(particle, '#ffffff')} />
+        </>
+      )
+    }
+  }
+  if (!card) return <MarkIcon src={icons.colorful} title="炫彩" fallback="彩" cls="mark-colorful" />
+  return (
+    <>
+      <span
+        className={className || 'glass-chip'}
+        title="炫彩色卡(点击放大)"
+        role="button"
+        tabIndex={0}
+        onClick={() => setZoom(true)}
+        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setZoom(true) } }}
+      >
+        {card}
+      </span>
+      {zoom && <GlassZoom type={type} value={value} onClose={() => setZoom(false)} />}
+    </>
+  )
 }
 
 // Marks 渲染异色/炫彩标记:保留游戏图标(炫彩图标 / 异色炫彩合成图标),并排渲染
