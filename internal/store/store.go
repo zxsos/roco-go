@@ -258,6 +258,16 @@ CREATE TABLE IF NOT EXISTS play_sessions (
 );
 CREATE INDEX IF NOT EXISTS idx_play_sessions_account ON play_sessions(account, login_time);
 CREATE INDEX IF NOT EXISTS idx_play_sessions_login ON play_sessions(login_time);
+
+-- 远行商人第三方数据缓存(见 server/api_merchant.go 的业务模型):slot 是 4h 槽的开始时间戳
+-- (Unix 秒,对齐 8/12/16/20/0/4 点,跨天唯一),empty=1 表示「该槽查过但无货/已收摊」,
+-- data 存第三方原始 JSON;记录只保留 2 天,写入时顺手清理更早的。
+CREATE TABLE IF NOT EXISTS merchant_slots (
+  slot INTEGER PRIMARY KEY,
+  empty INTEGER NOT NULL DEFAULT 0,
+  data TEXT NOT NULL DEFAULT '',
+  fetched_at INTEGER NOT NULL
+);
 `)
 	return err
 }

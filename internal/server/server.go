@@ -52,6 +52,8 @@ type Server struct {
 
 	eggAPIKey string // 第三方图鉴 API 令牌(-egg-api-key),查随机蛋可能物种用;空=不启用
 
+	merchantMu sync.Mutex // 远行商人回源互斥:并发请求/定时任务同时缺缓存时,只放行一次回源(见 api_merchant.go)
+
 	injectMu sync.Mutex
 	injects  map[string][]*injectEntry // 账号 -> 已注入精灵(管理员投放,有生命周期,见 admin.go)
 
@@ -103,6 +105,7 @@ func New(st *store.Store, hub *Hub, db *gamedata.DB, eggAPIKey string) *Server {
 	}
 	s.routes()
 	go s.sweepInjects() // 注入精灵生命周期:玩家靠近 10 秒后自动消失
+	go s.merchantLoop() // 远行商人:按 4h 槽定时回源第三方并缓存(见 api_merchant.go)
 	return s
 }
 
@@ -168,6 +171,7 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("DELETE /api/flowers/slots", s.handleDeleteFlowerSlot)
 	s.mux.HandleFunc("GET /api/eggs", s.handleEggs)
 	s.mux.HandleFunc("GET /api/eggs/query", s.handleEggQuery)
+	s.mux.HandleFunc("GET /api/merchant", s.handleMerchant)
 	s.mux.HandleFunc("GET /api/stream", s.handleStream)
 	s.mux.HandleFunc("POST /api/debug/parse", s.handleDebugParse)
 	// 宠物图片(embed 的 webp,路径如 /img/HeadIcon/3001.webp);长缓存,内容随版本变更。
