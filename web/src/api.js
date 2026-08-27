@@ -352,7 +352,9 @@ export function adminMerchantSubDelete(email) {
 }
 
 // adminTestMail 发送测试邮件验证 SMTP 配置(错误信息透传后端 SMTP 具体报错)。
-export const adminTestMail = (email) => postJSON('/api/admin/merchant-test-mail', { email })
+// subject/body 可自定义,为空则后端用默认标题/内容。
+export const adminTestMail = (email, subject, body) =>
+  postJSON('/api/admin/merchant-test-mail', { email, subject, body })
 
 // adminWildPetOptions 可投放的野生宠物形态:{options:[{base,name,book}]}。
 export const adminWildPetOptions = () => adminFetch('/api/admin/wild-pets').then(async (r) => {

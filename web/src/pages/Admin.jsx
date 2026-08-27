@@ -194,6 +194,8 @@ export default function Admin() {
   const [subErr, setSubErr] = useState('')
   const [subMsg, setSubMsg] = useState('')
   const [testEmail, setTestEmail] = useState('')
+  const [testSubject, setTestSubject] = useState('')
+  const [testBody, setTestBody] = useState('')
   const [testBusy, setTestBusy] = useState(false)
 
   useEffect(() => {
@@ -249,7 +251,7 @@ export default function Admin() {
       .catch((err) => { setSubErr(err.message); kickIfUnauthed(err) })
   }
 
-  // 发送测试邮件:验证 SMTP 配置(发件邮箱/授权码)是否可用。
+  // 发送测试邮件:验证 SMTP 配置(发件邮箱/授权码)是否可用;主题/正文可自填,留空用默认。
   const sendTestMail = async (e) => {
     e.preventDefault()
     setSubErr(''); setSubMsg('')
@@ -257,7 +259,7 @@ export default function Admin() {
     if (!email) return
     setTestBusy(true)
     try {
-      await adminTestMail(email)
+      await adminTestMail(email, testSubject.trim(), testBody.trim())
       setSubMsg('测试邮件已发送到 ' + email + ',请检查收件箱(含垃圾箱)。')
     } catch (err) {
       setSubErr(err.message || '发送失败')
@@ -428,7 +430,7 @@ export default function Admin() {
     setInjects(null)
     setMerchantSubs(null)
     setSubErr(''); setSubMsg('')
-    setTestEmail(''); setTestBusy(false)
+    setTestEmail(''); setTestSubject(''); setTestBody(''); setTestBusy(false)
   }
 
   if (loading) return <div className="admin-page"><p className="admin-hint">加载中…</p></div>
@@ -706,11 +708,19 @@ export default function Admin() {
             <span style={{ color: 'var(--danger, #e5534b)' }}> ⚠ 服务端未配置 SMTP,发送会失败。</span>
           )}
         </p>
-        {/* 测试邮件:验证发件配置 */}
-        <form onSubmit={sendTestMail} className="admin-rule-form">
+        {/* 测试邮件:验证发件配置,主题/正文可自填 */}
+        <form onSubmit={sendTestMail} className="admin-test-form">
           <input
             className="input" type="email" placeholder="测试收件邮箱(如 123@qq.com)" value={testEmail}
             onChange={(e) => setTestEmail(e.target.value)}
+          />
+          <input
+            className="input" placeholder="主题(留空用默认)" value={testSubject}
+            onChange={(e) => setTestSubject(e.target.value)}
+          />
+          <textarea
+            className="input" rows={3} placeholder="邮件内容(留空用默认)" value={testBody}
+            onChange={(e) => setTestBody(e.target.value)}
           />
           <button className="btn primary" type="submit" disabled={!testEmail.trim() || testBusy}>
             {testBusy ? '发送中…' : '发送测试邮件'}

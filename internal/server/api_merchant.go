@@ -496,7 +496,9 @@ func (s *Server) handleAdminMerchantTestMail(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	var req struct {
-		Email string `json:"email"`
+		Email   string `json:"email"`
+		Subject string `json:"subject"`
+		Body    string `json:"body"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "参数解析失败", http.StatusBadRequest)
@@ -511,9 +513,15 @@ func (s *Server) handleAdminMerchantTestMail(w http.ResponseWriter, r *http.Requ
 		http.Error(w, "服务端未配置发件邮箱(-merchant-smtp-user / -merchant-smtp-pass)", http.StatusBadRequest)
 		return
 	}
-	subject := "【测试】远行商人订阅邮件"
-	body := "这是一封测试邮件,说明 QQ 邮箱 SMTP 配置正常,新货提醒可以正常投递。\n\n" +
-		"发送时间:" + time.Now().Format("2006-01-02 15:04:05") + "\n\n——远行商人订阅自动发送"
+	subject := strings.TrimSpace(req.Subject)
+	if subject == "" {
+		subject = "【测试】远行商人订阅邮件"
+	}
+	body := strings.TrimSpace(req.Body)
+	if body == "" {
+		body = "这是一封测试邮件,说明 QQ 邮箱 SMTP 配置正常,新货提醒可以正常投递。\n\n" +
+			"发送时间:" + time.Now().Format("2006-01-02 15:04:05") + "\n\n——远行商人订阅自动发送"
+	}
 	if err := s.sendMerchantMail(email, subject, body); err != nil {
 		http.Error(w, "发送失败:"+err.Error(), http.StatusInternalServerError)
 		return

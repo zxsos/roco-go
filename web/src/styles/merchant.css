@@ -1,6 +1,7 @@
 /* —— 远行商人页(第三方活动 NPC 数据,见 pages/merchant/Merchant.jsx) ——
    业务节奏:8/12/16/20 四轮上架售卖,只有 00:00~08:00 打烊休市。 */
-.merchant-page { max-width: 1080px; }
+/* 桌面端铺满可用宽度,右侧不留白;商品网格按列自适应 */
+.merchant-page { width: 100%; }
 
 /* 顶部横幅:商人名 + 营业状态 + 轮次进度(或打烊提示) */
 .merchant-hero {
