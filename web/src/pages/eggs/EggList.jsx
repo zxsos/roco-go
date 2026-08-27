@@ -208,7 +208,7 @@ function EggCard({ egg, now, onPet }) {
         if (/429|请求过于频繁/.test(msg)) {
           // 限流:不占卡片位置,直接弹警告提醒
           setMatch(null)
-          window.alert('喂喂喂,当我的Token不要钱吗一分钟只许查10次啊魂淡')
+          window.alert('喂喂喂,当我Token不要钱吗,等会再查啊魂淡')
         } else {
           setMatch({ loading: false, error: msg, data: null })
         }
