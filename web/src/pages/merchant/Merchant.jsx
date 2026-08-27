@@ -284,7 +284,7 @@ function SubCard() {
             订阅时需两次输入同一邮箱确认,成功后自动发送验证邮件。
           </p>
           <form className="merchant-sub-form" onSubmit={save}>
-            <input className="merchant-sub-input" type="email" placeholder="收件邮箱(如 name@example.com,不限于 QQ)"
+            <input className="merchant-sub-input" type="email" placeholder="收件邮箱(如 name@example.com)"
               value={email} onChange={(e) => setEmail(e.target.value)}
               disabled={busy || (cfg && !cfg.configured)} required />
             <input className="merchant-sub-input" type="email" placeholder="再次输入同一邮箱确认"
