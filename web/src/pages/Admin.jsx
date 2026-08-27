@@ -489,7 +489,7 @@ export default function Admin() {
 
   if (!authed) {
     return (
-      <div className="admin-page">
+      <div className="admin-page admin-login">
         <div className="admin-card">
           <h2>{configured ? '管理员登录' : '设置管理员密码'}</h2>
           <p className="admin-hint">
@@ -527,14 +527,14 @@ export default function Admin() {
       </div>
 
       <div className="admin-section-title">数据统计</div>
-      <div className="admin-card admin-rules">
+      <div className="admin-card admin-rules admin-wide">
         <h3>成员抓捕图表</h3>
         <p className="admin-hint">所有成员累计抓捕精灵情况(来源:获得宠物事件,近30天时间轴)。</p>
         {statsErr && <p className="admin-error">{statsErr}</p>}
         <AdminCharts data={stats} />
       </div>
 
-      <div className="admin-card admin-rules">
+      <div className="admin-card admin-rules admin-wide">
         <h3>游玩记录</h3>
         <p className="admin-hint">
           自动记录玩家每次上线的起止时间与游玩时长(来源:连接登录/断开与心跳活跃,近14天每日聚合)。
@@ -596,7 +596,7 @@ export default function Admin() {
             )}
       </div>
 
-      <div className="admin-card admin-rules">
+      <div className="admin-card admin-rules admin-wide">
         <h3>查蛋 API 统计</h3>
         <p className="admin-hint">
           孵蛋页「查蛋」代理第三方图鉴,每次查询消耗一次对方 token,统计已发起第三方请求的调用。
@@ -838,7 +838,7 @@ export default function Admin() {
             )}
       </div>
 
-      <div className="admin-card admin-rules">
+      <div className="admin-card admin-rules admin-wide">
         <h3>邮箱推送名单(远行商人订阅)</h3>
         <p className="admin-hint">
           玩家在「远行商人」页登记新货邮件提醒后,名单出现在这里。每轮(8/12/16/20 点)新增商品
