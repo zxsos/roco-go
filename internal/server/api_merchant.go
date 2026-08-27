@@ -363,10 +363,10 @@ func merchantSubMatch(keywords string, news []merchantItem) bool {
 // 发件人显示名(收件端显示「远哥来了 <dobin0@qq.com>」),RFC 2047 编码支持中文。
 const merchantMailFromName = "远哥来了"
 
-// merchantMailHTMLTpl 邮件正文模板:深色暖调背景 + 浅色卡片 + 金色标题栏。
+// merchantMailHTMLTpl 邮件正文模板:纯白背景 + 浅色卡片 + 金色标题栏。
 const merchantMailHTMLTpl = `<!DOCTYPE html>
-<html lang="zh-CN"><body style="margin:0;padding:0;background:#17110a;">
-<div style="background:linear-gradient(160deg,#241809 0%,#3a2a14 55%,#4a3518 100%);padding:36px 16px;font-family:-apple-system,'PingFang SC','Microsoft YaHei',sans-serif;">
+<html lang="zh-CN"><body style="margin:0;padding:0;background:#ffffff;">
+<div style="background:#ffffff;padding:36px 16px;font-family:-apple-system,'PingFang SC','Microsoft YaHei',sans-serif;">
   <div style="max-width:560px;margin:0 auto;background:#fffaf0;border-radius:18px;overflow:hidden;box-shadow:0 12px 40px rgba(0,0,0,.4);">
     <div style="background:linear-gradient(135deg,#f0b429,#d99a1e);padding:22px 28px;">
       <div style="font-size:20px;font-weight:800;color:#3a2505;">远行商人</div>
