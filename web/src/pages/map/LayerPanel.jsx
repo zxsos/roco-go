@@ -159,6 +159,18 @@ export default function LayerPanel({ pois, wilds, paint, routes, collapsed, onCl
               <span>收集路线</span>
               <span className="map-route-count">{routes.marks.length}/{routes.kinds.length}<i className="muted">▾</i></span>
             </button>
+            {routes.open && (
+              <div className="map-route-follow">
+                <button className={'map-collect-btn' + (routes.follow ? ' on' : '')}
+                  onClick={routes.toggleFollow} aria-pressed={routes.follow} aria-label="跟走模式开关"
+                  title="开启后走到点位附近,该点之前的线自动隐藏,只留剩余路线和下一目标">✓</button>
+                <span className="map-layer-name">跟走模式</span>
+                <span className="muted">{routes.follow ? '到点即隐藏' : '显示全部'}</span>
+                <button className="map-collect-btn" onClick={() => {
+                  if (window.confirm('重置所有路线的跟走进度?')) routes.resetProgress()
+                }} title="重置跟走进度" aria-label="重置进度">↺</button>
+              </div>
+            )}
             {routes.open && routes.kinds.map((r) => (
               <div className="map-route-row" key={r.name}
                 title={r.short}>
@@ -167,7 +179,7 @@ export default function LayerPanel({ pois, wilds, paint, routes, collapsed, onCl
                   aria-label={`${r.short}开关`} aria-pressed={r.on}>✓</button>
                 <span className="map-wild-swatch" style={{ borderColor: r.color }} />
                 <span className="map-layer-name">{r.short}</span>
-                <span className="muted">{r.count}</span>
+                <span className="muted">{routes.follow && r.progress >= 0 ? `${r.progress + 1}/${r.count}` : r.count}</span>
               </div>
             ))}
           </div>
