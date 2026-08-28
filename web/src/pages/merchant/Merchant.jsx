@@ -23,8 +23,16 @@ const STATUS = {
   idle: { cls: 'off', text: '已打烊' },
 }
 
+// 后端 merchant 槽存的是第三方原始响应(带 code/msg/data 壳,见 api_merchant.go
+// PutMerchantSlot(string(body))),业务字段(merchant_name/items/round…)都在 data 里。
+// unwrap 取出 data 层;老缓存可能直接存裸 data,typeof 判断兜底兼容。
+const unwrap = (m) => (m && m.data && typeof m.data === 'object' ? m.data : m)
+
 // count 统计某轮的第三方 item 数(优先 item_count,兜底数 items 数组)。
-const count = (m) => (m ? (m.item_count ?? ((m.items && m.items.length) || 0)) : 0)
+const count = (raw) => {
+  const m = unwrap(raw)
+  return m ? (m.item_count ?? ((m.items && m.items.length) || 0)) : 0
+}
 
 export default function Merchant() {
   const [d, setD] = useState(null) // {now,day,status,today,prev}
@@ -79,7 +87,7 @@ export default function Merchant() {
   // 营业中最新轮在前(玩家最关心当前货),回顾按时间正序。
   const list = open ? [...active].reverse() : active
   const head = list[0]
-  const m = head && head.merchant
+  const m = head && unwrap(head.merchant)
   const total = active.reduce((n, r) => n + count(r.merchant), 0)
   const st = STATUS[d.status] || STATUS.idle
   const dayText = open ? d.day : `昨日 ${d.day}`
@@ -166,7 +174,7 @@ function RoundSteps({ turns, curIdx }) {
 
 // MerchantTurn 单个上架轮:轮次头 + 该轮商品网格。
 function MerchantTurn({ r, cur }) {
-  const m = r.merchant
+  const m = unwrap(r.merchant)
   const items = (m && m.items) || []
   const time = r.label.split('~')[0]
   return (
