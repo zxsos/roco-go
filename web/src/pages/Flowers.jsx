@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useContext, useMemo, useCallback } from 'react'
 import { getFlowers, getFlowerSlots, deleteFlowerSlot, subscribe } from '../api'
 import { AccountContext, IconsContext } from '../context'
-import { fmtTime } from '../utils/format'
+import { fmtTime, maskUid } from '../utils/format'
 import { ImgAvatar } from '../components/icons'
 import { GlassChip, MarkIcon } from '../components/badges'
 
@@ -57,7 +57,7 @@ export default function Flowers() {
       if (worlds) {
         const list = Object.entries(worlds).map(([key, w]) => ({
           key,
-          name: key === 'self' ? '自己世界' : key.startsWith('owner:') ? '好友 UID:' + key.slice(6) : key,
+          name: key === 'self' ? '自己世界' : key.startsWith('owner:') ? '好友 UID:' + maskUid(key.slice(6)) : key,
           ts: (w && w.ts) || 0,
           flowers: (w && w.flowers) || [],
         }))
@@ -99,15 +99,15 @@ export default function Flowers() {
   const viewOptions = useMemo(() => {
     const real = slots || []
     if (real.some((s) => s.key === curKey)) return real
-    return [{ key: '__current__', name: curOwnerID ? `当前世界 (${curOwnerID})` : '当前世界', flowers }, ...real]
+    return [{ key: '__current__', name: curOwnerID ? `当前世界 (${maskUid(curOwnerID)})` : '当前世界', flowers }, ...real]
   }, [slots, curKey, curOwnerID, flowers])
   // 当前视图:__current__=实时当前世界;否则选中的存档槽。花种按特殊(最多 3 只)/普通(最多 20 只)分组展示。
   const view = useMemo(() => {
     if (selKey !== '__current__') {
       const sel = slots && slots.find((s) => s.key === selKey)
-      if (sel) return { name: sel.key === 'self' && myUID ? `自己世界 (${myUID})` : sel.name, flowers: sel.flowers || [] }
+      if (sel) return { name: sel.key === 'self' && myUID ? `自己世界 (${maskUid(myUID)})` : sel.name, flowers: sel.flowers || [] }
     }
-    return { name: curOwnerID ? `当前世界 (${curOwnerID})` : '当前世界', flowers }
+    return { name: curOwnerID ? `当前世界 (${maskUid(curOwnerID)})` : '当前世界', flowers }
   }, [selKey, slots, flowers, curOwnerID, myUID])
   const viewSpecials = view.flowers.filter((f) => f.specSeedId > 0)
   const viewNormals = view.flowers.filter((f) => !(f.specSeedId > 0))
@@ -130,7 +130,7 @@ export default function Flowers() {
         >
           {viewOptions.map((s) => (
             <option key={s.key} value={s.key}>
-              {s.key === 'self' && myUID ? `自己世界 (${myUID})` : s.name} ({s.flowers.length})
+              {s.key === 'self' && myUID ? `自己世界 (${maskUid(myUID)})` : s.name} ({s.flowers.length})
             </option>
           ))}
         </select>
