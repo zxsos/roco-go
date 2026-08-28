@@ -168,6 +168,16 @@ export function useRoutes(account, pos) {
     })
   }, [])
 
+  // 一键全开/全关:全开 = 勾选所有路线,全关 = 全部取消,均持久化
+  const setAll = useCallback((on) => {
+    setRoutes((prev) => {
+      const next = new Set(on ? prev.map((r) => r.name) : [])
+      onRef.current = next
+      localStorage.setItem(ROUTES_LS_KEY, JSON.stringify([...next]))
+      return prev.map((r) => ({ ...r, on }))
+    })
+  }, [])
+
   const toggleFollow = useCallback(() => {
     setFollow((f) => {
       const nf = !f
@@ -195,7 +205,7 @@ export function useRoutes(account, pos) {
     follow,
   })), [routes, progress, follow])
 
-  return { kinds, marks, open, toggleOpen: () => setOpen((o) => !o), toggle, follow, toggleFollow, resetProgress, nearM, setNearM }
+  return { kinds, marks, open, toggleOpen: () => setOpen((o) => !o), toggle, setAll, follow, toggleFollow, resetProgress, nearM, setNearM }
 }
 
 // RouteLayer 把路线画进 .map-world:一条路线一个折线 <path> + 起终点圆。

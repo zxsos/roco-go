@@ -343,6 +343,17 @@
   color: var(--fg-dim); font-variant-numeric: tabular-nums;
 }
 .map-route-count i { font-style: normal; color: var(--fg); }
+/* 路线组头:折叠按钮 + 右侧一键全开/全关 */
+.map-routes-head { display: flex; align-items: center; gap: 6px; }
+.map-routes-head .map-medal-toggle { flex: 1; min-width: 0; }
+.map-routes-all { display: inline-flex; gap: 4px; flex: none; }
+.map-routes-all button {
+  padding: 2px 8px; font-size: 11px; line-height: 1.5;
+  border: 1px solid var(--line); border-radius: 6px;
+  background: transparent; color: var(--fg-dim); cursor: pointer;
+  transition: background .15s ease, color .15s ease;
+}
+.map-routes-all button:hover { background: rgba(127, 127, 127, .12); color: var(--fg); }
 .map-medal-row { display: flex; align-items: center; gap: 8px; padding: 4px 10px; font-size: 13px;
   animation: map-medal-row-in .25s ease-out; }
 @keyframes map-medal-row-in { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
