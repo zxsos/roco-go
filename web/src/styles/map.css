@@ -337,6 +337,12 @@
 .map-medal-toggle .muted { transition: transform .22s ease; display: inline-block; }
 .map-medal-toggle[aria-expanded="true"] .muted { transform: rotate(0deg); }
 .map-medal-toggle:not([aria-expanded="true"]) .muted { transform: rotate(-90deg); }
+/* 「跑图路线」折叠按钮的计数:数字保持水平,只让箭头旋转,避免数字跟着转出按钮。 */
+.map-route-count {
+  display: inline-flex; align-items: center; gap: 6px;
+  color: var(--fg-dim); font-variant-numeric: tabular-nums;
+}
+.map-route-count i { font-style: normal; color: var(--fg); }
 .map-medal-row { display: flex; align-items: center; gap: 8px; padding: 4px 10px; font-size: 13px;
   animation: map-medal-row-in .25s ease-out; }
 @keyframes map-medal-row-in { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }

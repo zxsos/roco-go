@@ -157,7 +157,7 @@ export default function LayerPanel({ pois, wilds, paint, routes, collapsed, onCl
             <button className="map-medal-toggle" onClick={routes.toggleOpen} aria-expanded={routes.open}
               title="B站泽口博士的收集路线(1~20 号收集片区/精灵球/冲刺),可叠加多条">
               <span>收集路线</span>
-              <span className="muted">{routes.marks.length}/{routes.kinds.length} ▾</span>
+              <span className="map-route-count">{routes.marks.length}/{routes.kinds.length}<i className="muted">▾</i></span>
             </button>
             {routes.open && routes.kinds.map((r) => (
               <div className="map-route-row" key={r.name}
