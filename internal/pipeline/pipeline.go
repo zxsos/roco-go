@@ -19,6 +19,7 @@ import (
 	"github.com/whoisnian/rocom-capture/internal/scene"
 	"github.com/whoisnian/rocom-capture/internal/server"
 	"github.com/whoisnian/rocom-capture/internal/store"
+	"github.com/whoisnian/rocom-capture/internal/wire"
 )
 
 // grace 是「初始快照」的判定余量(秒):add_time 早于服务启动前 grace 的宠物视为存量仓库,
@@ -310,6 +311,15 @@ func (p *Pipeline) registerLogin(m capture.Message) {
 		name = acc
 	}
 	p.st.UpsertAccount(acc, name)
+	// 临时诊断:打印登录包里 field1 varint 数量 ≥ 20 的子消息结构,定位 vitem_info
+	// 的真实字段号/槽数(金币解析不命中时看这里,定位后移除)。
+	wire.Walk(m.AppBody, func(v []byte) bool {
+		if n1 := len(wire.FieldVarints(v, 1)); n1 >= 20 {
+			log.Printf("金币诊断: field1 varint=%d, field2 varint=%d, field3 varint=%d",
+				n1, len(wire.FieldVarints(v, 2)), len(wire.FieldVarints(v, 3)))
+		}
+		return true
+	})
 	if coins, ok := pet.ParseLoginCoins(m.AppBody); ok {
 		log.Printf("登录回包解析金币 [%s] coins=%d", acc, coins)
 		if err := p.st.SetAccountCoins(acc, coins); err != nil {
