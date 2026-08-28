@@ -16,6 +16,7 @@ const NAV = [
     children: [
       { to: '/pets', label: '宠物列表', icon: '🐾' },
       { to: '/eggs', label: '精灵蛋', icon: '🥚' },
+      { to: '/handbook', label: '炫彩图鉴', icon: '✨' },
       { to: '/events', label: '捕获事件', icon: '🔔' },
     ],
   },
