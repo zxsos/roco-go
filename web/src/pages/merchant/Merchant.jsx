@@ -49,11 +49,14 @@ export default function Merchant() {
   // 金币存 accounts.coins,拉账号列表取当前账号的金币(账号切换后重拉)。
   useEffect(() => {
     let done = false
+    console.log('[Merchant] 当前账号 account =', account)
     getAccounts().then((list) => {
       if (done || !list) return
+      console.log('[Merchant] 账号列表 =', list)
       const cur = list.find((a) => a.account === account)
+      console.log('[Merchant] 匹配账号 cur =', cur, '→ 金币 =', cur && cur.coins)
       setCoins(cur ? cur.coins || 0 : 0)
-    }).catch(() => {})
+    }).catch((e) => console.log('[Merchant] 拉账号列表失败:', e))
     return () => { done = true }
   }, [account])
 
