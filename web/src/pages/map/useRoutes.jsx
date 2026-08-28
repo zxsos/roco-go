@@ -53,11 +53,11 @@ export function useRoutes(account, pos) {
   const [follow, setFollow] = useState(() => loadJSON(FOLLOW_LS_KEY, false))
   const [progress, setProgress] = useState(() => loadJSON(PROGRESS_LS_KEY, {}))
   const onRef = useRef(loadKeys())
-  const lastRef = useRef(null) // 上次推进进度时的玩家世界坐标,避免重复计算
+  const lastCheckRef = useRef(0) // 上次判定时间戳,时间节流用
 
   useEffect(() => {
     onRef.current = loadKeys() // 每次进场景重新读一次用户记忆
-    lastRef.current = null
+    lastCheckRef.current = 0
     if (res !== SCENE) { setRoutes([]); return }
     let alive = true
     fetch('/route-map/data/index.json', { cache: 'no-store' })
@@ -85,9 +85,13 @@ export function useRoutes(account, pos) {
   // 支持传送跨点,又不会因路线绕圈回起点而误判。
   useEffect(() => {
     if (!follow || res !== SCENE || !pos || pos.x == null || pos.y == null) return
+    // 时间节流:2 秒内最多判定一次。不用位移防抖——玩家在点周围绕圈/折返时
+    // 直线位移很小会被一直拦截,导致「走了好久才触发」;时间节流保证原地徘徊
+    // 也会周期性检查,只要在 NEAR 半径内就推进。
+    const now = Date.now()
+    if (now - lastCheckRef.current < 2000) return
+    lastCheckRef.current = now
     const px = pos.x, py = pos.y
-    if (lastRef.current && Math.hypot(px - lastRef.current[0], py - lastRef.current[1]) < NEAR * SIDE / GRID * 0.5) return
-    lastRef.current = [px, py]
     const pc = toCanvas(px, py)
     setProgress((prev) => {
       let next = null
