@@ -6,7 +6,8 @@ import (
 	"google.golang.org/protobuf/encoding/protowire"
 )
 
-// buildVitemInfo 拼 vitem_info 消息:field1=82 槽 vitem_list,field2=6 槽 liabilities_num。
+// buildVitemInfo 拼 vitem_info 消息:field1=82 槽 vitem_list,field2=81 槽 liabilities_num
+// (槽数按 2026-08 线上实际值;旧版为 6 槽,解析不应依赖具体槽数)。
 func buildVitemInfo(list []uint64) []byte {
 	add := func(b []byte, n protowire.Number, v uint64) []byte {
 		return protowire.AppendVarint(protowire.AppendTag(b, n, protowire.VarintType), v)
@@ -15,7 +16,7 @@ func buildVitemInfo(list []uint64) []byte {
 	for _, v := range list {
 		b = add(b, 1, v)
 	}
-	for i := 0; i < 6; i++ {
+	for i := 0; i < 81; i++ {
 		b = add(b, 2, uint64(i))
 	}
 	return b
