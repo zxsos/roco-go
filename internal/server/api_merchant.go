@@ -36,6 +36,11 @@ const (
 	merchantSmtpHost = "smtp.qq.com"    // QQ 邮箱 SMTP(465 SSL)
 )
 
+// merchantLoc 固定北京时间(UTC+8):游戏按北京时间 8 点开张,第三方时间戳也是北京时区语义
+// (fetched_at 为 UTC 的 8 点 = 北京 8 点)。不依赖服务器本地时区——云服务器常默认 UTC,
+// 会导致 slot 与营业状态整体错位 8 小时(UTC 凌晨被误判「打烊」,永远不回源)。
+var merchantLoc = time.FixedZone("CST", 8*3600)
+
 // merchantSlotJSON 单个 4h 槽。性质分两种:
 //   - 上架轮(8/12/16/20):该时段在售卖对应点位上架的商品,empty=查过但无货(不算休市);
 //   - 打烊休市(次日 0/4,off=true):00:00~08:00 收摊打烊,没有在售,也不查询。
@@ -58,9 +63,10 @@ type merchantRespJSON struct {
 	Prev   []merchantSlotJSON `json:"prev"`  // 仅 status=idle 时填充:昨日的 6 个槽(回顾用)
 }
 
-// merchantDayStart 返回 t 所在营业日的 0 点。
+// merchantDayStart 返回 t 所在营业日的 0 点(按北京时间计算)。
 func merchantDayStart(t time.Time) time.Time {
-	return time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, t.Location())
+	t = t.In(merchantLoc)
+	return time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, merchantLoc)
 }
 
 // merchantDaySlots 返回营业日 6 个槽的开始时刻(对齐 8 点:8/12/16/20/0/4)。
@@ -75,10 +81,10 @@ func merchantDaySlots(day time.Time) []time.Time {
 	}
 }
 
-// merchantDayStatus 返回当前时刻的营业状态:
+// merchantDayStatus 返回当前时刻的营业状态(按北京时间判定):
 // open=营业中(8 点至次日 0 点前,显示今日已上架轮次),idle=打烊休市(0 点后到次日 8 点前,显示昨日回顾)。
 func merchantDayStatus(now time.Time) string {
-	if now.Hour() < merchantOpenHour {
+	if now.In(merchantLoc).Hour() < merchantOpenHour {
 		return "idle"
 	}
 	return "open"
