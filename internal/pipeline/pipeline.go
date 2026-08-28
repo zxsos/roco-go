@@ -4,7 +4,6 @@
 package pipeline
 
 import (
-	"bytes"
 	"encoding/hex"
 	"fmt"
 	"log"
@@ -20,7 +19,6 @@ import (
 	"github.com/whoisnian/rocom-capture/internal/scene"
 	"github.com/whoisnian/rocom-capture/internal/server"
 	"github.com/whoisnian/rocom-capture/internal/store"
-	"github.com/whoisnian/rocom-capture/internal/wire"
 )
 
 // grace 是「初始快照」的判定余量(秒):add_time 早于服务启动前 grace 的宠物视为存量仓库,
@@ -312,21 +310,6 @@ func (p *Pipeline) registerLogin(m capture.Message) {
 		name = acc
 	}
 	p.st.UpsertAccount(acc, name)
-	// 临时诊断:按金币值反查定位 vitem_info。19517164 的 varint 编码为 EC 9D A7 09,
-	// 全文搜索含该字节序列的 length-delimited 子消息并打印,绕过特征猜测,定位后移除。
-	wire.Walk(m.AppBody, func(v []byte) bool {
-		if len(v) > 2000 {
-			return true
-		}
-		if bytes.Contains(v, []byte{0xec, 0x9d, 0xa7, 0x09}) {
-			h := len(v)
-			if h > 400 {
-				h = 400
-			}
-			log.Printf("金币诊断: 命中金币编码 len=%d hex=%x", len(v), v[:h])
-		}
-		return true
-	})
 	if coins, ok := pet.ParseLoginCoins(m.AppBody); ok {
 		log.Printf("登录回包解析金币 [%s] coins=%d", acc, coins)
 		if err := p.st.SetAccountCoins(acc, coins); err != nil {
