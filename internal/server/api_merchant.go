@@ -8,6 +8,7 @@ import (
 	"html"
 	"io"
 	"mime"
+	"net"
 	"net/http"
 	"net/smtp"
 	"net/url"
@@ -135,9 +136,13 @@ func (s *Server) merchantEnsure(now time.Time, force ...bool) {
 	}
 	s.merchantMu.Unlock()
 
-	for _, st := range notify {
-		s.merchantNotify(st)
-	}
+	// 订阅邮件在后台 goroutine 发:SMTP 偶发慢/挂连接,同步发会阻塞「强制刷新」的 HTTP
+	// 响应(前端 fetch 一直等)。sendMerchantMail 自带整体 deadline,这里异步双保险。
+	go func() {
+		for _, st := range notify {
+			s.merchantNotify(st)
+		}
+	}()
 }
 
 // merchantCached 判断某槽是否已有缓存记录(empty 也算,避免反复查空)。
@@ -428,11 +433,18 @@ func merchantMailBody(body string) string {
 // sendMerchantMail 通过 QQ 邮箱 SMTP(465 SSL)发送邮件。subject/body 由调用方拼好
 // (订阅新货提醒 / 管理员测试),正文渲染为带背景的 HTML。串行发信(smtpMu),
 // 避免并发连接被 QQ 邮箱判为异常触发限流。
+// 整体 deadline 兜底:QQ SMTP 偶发挂连接(网络波动/被限流),TLS 拨号限 10s,
+// 连接建立后全程 I/O 限 20s,避免调用方(管理页强制刷新等)无限等待。
 func (s *Server) sendMerchantMail(to, subject, body string) error {
 	s.smtpMu.Lock()
 	defer s.smtpMu.Unlock()
 
-	conn, err := tls.Dial("tcp", merchantSmtpHost+":465", &tls.Config{ServerName: merchantSmtpHost})
+	dialer := &net.Dialer{Timeout: 10 * time.Second}
+	conn, err := tls.DialWithDialer(dialer, "tcp", merchantSmtpHost+":465", &tls.Config{ServerName: merchantSmtpHost})
+	if err != nil {
+		return err
+	}
+	conn.SetDeadline(time.Now().Add(20 * time.Second))
 	if err != nil {
 		return err
 	}
