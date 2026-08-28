@@ -73,11 +73,21 @@ function GlassZoom({ type, value, onClose }) {
     }
   }
   if (!body) return null
+  // 拦截触摸/点击冒泡:色卡嵌在宿主(宠物列表卡片/详情弹窗)内部,移动端触摸事件会冒泡到
+  // 宿主的长按(宠物列表 450ms 弹菜单)与点击(selectPet/详情弹窗遮罩关闭)逻辑,
+  // 导致点遮罩关闭时误弹菜单或连底层弹窗一起关。这里统一 stopPropagation 隔离。
+  const stop = (e) => e.stopPropagation()
   return (
-    <div className="glass-zoom-backdrop" onClick={(e) => { if (e.target === e.currentTarget) onClose() }}>
+    <div
+      className="glass-zoom-backdrop"
+      onClick={(e) => { stop(e); if (e.target === e.currentTarget) onClose() }}
+      onTouchStart={stop}
+      onTouchMove={stop}
+      onTouchEnd={stop}
+    >
       <div className="glass-zoom">
         {body}
-        <button className="icon-btn glass-zoom-close" onClick={onClose} title="关闭" aria-label="关闭">✕</button>
+        <button className="icon-btn glass-zoom-close" onClick={(e) => { stop(e); onClose() }} title="关闭" aria-label="关闭">✕</button>
       </div>
     </div>
   )
