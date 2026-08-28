@@ -99,10 +99,10 @@ export default function App() {
       if (!cur || !list.some((a) => a.account === cur)) {
         if (target) { setCurrentAccount(target); setAccount(target) }
       }
-      // 首屏 PIN 拦截:默认账号有 PIN 且本会话未解锁
+      // 首屏 PIN 拦截:默认账号有 PIN 且本会话未解锁(管理员已认证则直接放行)
       if (target) {
         const acc = list.find((a) => a.account === target)
-        if (acc?.hasPin && sessionStorage.getItem('pin:' + target) !== '1') {
+        if (acc?.hasPin && sessionStorage.getItem('pin:' + target) !== '1' && sessionStorage.getItem('admin-unlocked') !== '1') {
           setPendingAccount(target)
           setPinDialog({ mode: 'verify', account: target, name: acc.name, hasPin: true })
         }
@@ -130,12 +130,13 @@ export default function App() {
   }
 
   // 切换账号:若目标账号设了 PIN 且本会话未解锁,弹 PIN 框;否则直接切。
+  // 管理员已认证(admin-unlocked)时无视 PIN 直接放行。
   // (下方 <main key={account}> 据此重挂各页,让其以新账号重新拉数据)。
   const switchAccount = (a) => {
     if (!a || a === account) return
     const target = accounts.find((x) => x.account === a)
     const hasPin = target?.hasPin
-    const unlocked = sessionStorage.getItem('pin:' + a) === '1'
+    const unlocked = sessionStorage.getItem('pin:' + a) === '1' || sessionStorage.getItem('admin-unlocked') === '1'
     if (hasPin && !unlocked) {
       setPendingAccount(a)
       setPinDialog({ mode: 'verify', account: a, name: target?.name, hasPin: true })
