@@ -194,7 +194,9 @@ export default function LayerPanel({ pois, wilds, paint, routes, collapsed, onCl
                 <button className={'map-collect-btn' + (r.on ? ' on' : '')}
                   onClick={() => routes.toggle(r.name)}
                   aria-label={`${r.short}开关`} aria-pressed={r.on}>✓</button>
-                <span className="map-wild-swatch" style={{ borderColor: r.color }} />
+                <button className="map-route-swatch" style={{ background: r.color }}
+                  onClick={() => routes.cycleColor(r.name)}
+                  title="点击换色:自动挑选与地图背景/旧色/其它路线对比明显的颜色" aria-label={`${r.short}换色`} />
                 <span className="map-layer-name">{r.short}</span>
                 <span className="muted">{routes.follow && r.progress >= 0 ? `${r.progress + 1}/${r.count}` : r.count}</span>
               </div>
