@@ -20,7 +20,6 @@ import (
 	"github.com/whoisnian/rocom-capture/internal/server"
 	"github.com/whoisnian/rocom-capture/internal/store"
 	"github.com/whoisnian/rocom-capture/internal/wire"
-	"google.golang.org/protobuf/encoding/protowire"
 )
 
 // grace 是「初始快照」的判定余量(秒):add_time 早于服务启动前 grace 的宠物视为存量仓库,
@@ -312,25 +311,33 @@ func (p *Pipeline) registerLogin(m capture.Message) {
 		name = acc
 	}
 	p.st.UpsertAccount(acc, name)
-	// 临时诊断:定位 vitem_info(金币)真实结构。真实 wire 与游戏描述符存在版本偏移
-	// (实测 field1=80 而非 dump 的 81,field2 计数为 0 而非 81),打印候选子消息的
-	// 各字段号 varint/bytes 分布,定位后移除。
+	// 临时诊断:定位 vitem_info(金币,应含 19517164,wire 编码 EC 9D A7 09)真实结构。
+	// 打印 field1 varint∈[50,120] 候选的前 8 个展开值 + 原始 hex,确认槽数与金币下标后移除。
 	wire.Walk(m.AppBody, func(v []byte) bool {
 		n1 := len(wire.FieldVarints(v, 1))
-		if n1 < 50 || n1 > 200 {
+		if n1 < 50 || n1 > 120 || len(v) > 400 {
 			return true
 		}
+		fv := wire.FieldVarints(v, 1)
 		var sb strings.Builder
-		fmt.Fprintf(&sb, "len=%d", len(v))
-		for f := protowire.Number(1); f <= 6; f++ {
-			if nv := len(wire.FieldVarints(v, f)); nv > 0 {
-				fmt.Fprintf(&sb, " f%d:var=%d", f, nv)
+		fmt.Fprintf(&sb, "n1=%d len=%d head=[", n1, len(v))
+		for i, x := range fv {
+			if i >= 8 {
+				sb.WriteString("…")
+				break
 			}
-			if nb := len(wire.Subs(v, f)); nb > 0 {
-				fmt.Fprintf(&sb, " f%d:sub=%d", f, nb)
+			if i > 0 {
+				sb.WriteByte(',')
 			}
+			fmt.Fprintf(&sb, "%d", x)
 		}
-		log.Printf("金币诊断: field1 varint=%d %s", n1, sb.String())
+		sb.WriteString("] hex=")
+		h := len(v)
+		if h > 160 {
+			h = 160
+		}
+		fmt.Fprintf(&sb, "%x", v[:h])
+		log.Printf("金币诊断: %s", sb.String())
 		return true
 	})
 	if coins, ok := pet.ParseLoginCoins(m.AppBody); ok {
