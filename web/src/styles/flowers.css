@@ -111,6 +111,12 @@
 }
 .flower-left.ended { color: var(--red); font-weight: 600; }
 
+/* 花种挑战次数:本账号按品种累计,花种消失后仍保留 */
+.flower-challenge {
+  font-size: 12px; font-weight: 600; color: var(--accent, var(--green));
+  font-variant-numeric: tabular-nums; white-space: nowrap;
+}
+
 /* 0x0338 详情行:点过地图花种后出现,等级/炫彩/绑定宠物/奖牌小胶囊 */
 .flower-detail {
   display: flex; flex-wrap: wrap; gap: 4px; margin-top: 2px;

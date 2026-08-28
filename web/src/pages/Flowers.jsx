@@ -240,6 +240,11 @@ function FlowerCard({ f, now }) {
           ) : (
             <span className="muted">结束 {fmtTime(f.endTs)}</span>
           )}
+          {f.challengeCount > 0 && (
+            <span className="muted flower-challenge" title="本账号累计挑战该花种品种的次数,花种消失后保留">
+              挑战 {f.challengeCount} 次
+            </span>
+          )}
         </div>
         {hasDetail && (
           <div className="flower-detail">
