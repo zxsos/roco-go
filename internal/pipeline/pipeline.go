@@ -4,6 +4,7 @@
 package pipeline
 
 import (
+	"bytes"
 	"encoding/hex"
 	"fmt"
 	"log"
@@ -311,27 +312,19 @@ func (p *Pipeline) registerLogin(m capture.Message) {
 		name = acc
 	}
 	p.st.UpsertAccount(acc, name)
-	// 临时诊断:定位 vitem_info(金币,19517164)真实结构。实测 field1 是 80 个 vitem
-	// 子消息(每项 f1=序号,f2=值),dump 的 vitem_list 顺序是按描述符解码的假象。
-	// 打印各 vitem 子消息的 f1/f2,确认金币所在项的下标后移除。
+	// 临时诊断:按金币值反查定位 vitem_info。19517164 的 varint 编码为 EC 9D A7 09,
+	// 全文搜索含该字节序列的 length-delimited 子消息并打印,绕过特征猜测,定位后移除。
 	wire.Walk(m.AppBody, func(v []byte) bool {
-		n1 := len(wire.FieldVarints(v, 1))
-		if n1 < 50 || n1 > 120 || len(v) > 400 {
+		if len(v) > 2000 {
 			return true
 		}
-		var sb strings.Builder
-		items := wire.Subs(v, 1)
-		fmt.Fprintf(&sb, "subs=%d len=%d", len(items), len(v))
-		for i, it := range items {
-			if i >= 8 {
-				sb.WriteString(" …")
-				break
+		if bytes.Contains(v, []byte{0xec, 0x9d, 0xa7, 0x09}) {
+			h := len(v)
+			if h > 400 {
+				h = 400
 			}
-			f1, _ := wire.Varint(it, 1)
-			f2, _ := wire.Varint(it, 2)
-			fmt.Fprintf(&sb, " [%d:f1=%d,f2=%d]", i, f1, f2)
+			log.Printf("金币诊断: 命中金币编码 len=%d hex=%x", len(v), v[:h])
 		}
-		log.Printf("金币诊断: %s", sb.String())
 		return true
 	})
 	if coins, ok := pet.ParseLoginCoins(m.AppBody); ok {
