@@ -27,7 +27,6 @@ const STATUS = {
 const count = (m) => (m ? (m.item_count ?? ((m.items && m.items.length) || 0)) : 0)
 
 export default function Merchant() {
-  const account = useContext(AccountContext)
   const [d, setD] = useState(null) // {now,day,status,today,prev}
   const [coins, setCoins] = useState(0) // 当前账号金币(登录时解析,0=未知)
   const [err, setErr] = useState('')
@@ -46,19 +45,20 @@ export default function Merchant() {
     }
   }, [])
 
-  // 金币存 accounts.coins,拉账号列表取当前账号的金币(账号切换后重拉)。
+  // 金币存 accounts.coins,拉账号列表取「最近活跃/在线」账号(不锁定某个 UID,
+  // 游戏里切换账号后金币会自动跟随当前在玩的号;后端按 updated_at 倒序)。
   useEffect(() => {
     let done = false
-    console.log('[Merchant] 当前账号 account =', account)
+    console.log('[Merchant] 拉账号列表取金币…')
     getAccounts().then((list) => {
       if (done || !list) return
       console.log('[Merchant] 账号列表 =', list)
-      const cur = list.find((a) => a.account === account)
-      console.log('[Merchant] 匹配账号 cur =', cur, '→ 金币 =', cur && cur.coins)
+      const cur = list.find((a) => a.online) || list[0]
+      console.log('[Merchant] 取最近活跃/在线账号 cur =', cur, '→ 金币 =', cur && cur.coins)
       setCoins(cur ? cur.coins || 0 : 0)
     }).catch((e) => console.log('[Merchant] 拉账号列表失败:', e))
     return () => { done = true }
-  }, [account])
+  }, [])
 
   useEffect(() => { load(false) }, [load])
 
