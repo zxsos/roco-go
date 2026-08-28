@@ -15,6 +15,7 @@ import Leaderboard from './pages/leaderboard/Leaderboard'
 import Admin from './pages/Admin'
 // 样式按「基础 → 壳 → 共用面板/部件 → 各页」顺序引入(同名选择器的层叠顺序有意义)。
 import './styles/base.css'
+import './styles/dropdown.css'
 import './styles/shell.css'
 import './styles/panel.css'
 import './styles/pet.css'
