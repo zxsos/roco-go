@@ -170,7 +170,8 @@ func (s *Server) merchantFetch(slotStart time.Time) (bool, bool) {
 	if err != nil || resp.StatusCode != http.StatusOK {
 		return false, false
 	}
-	// 校验并判定有货/无货:code==0 且 data.items 非空视为有货,其余(无货/业务错误)记空。
+	// 校验并判定有货/无货:第三方成功码不统一,实测 code=0 与 code=200 都表示成功,
+	// 故 code∈{0,200} 且 data.items 非空视为有货,其余(无货/业务错误)记空。
 	var out struct {
 		Code int `json:"code"`
 		Data struct {
@@ -180,7 +181,7 @@ func (s *Server) merchantFetch(slotStart time.Time) (bool, bool) {
 	if err := json.Unmarshal(body, &out); err != nil {
 		return false, false
 	}
-	empty := out.Code != 0 || len(out.Data.Items) == 0
+	empty := !((out.Code == 0 || out.Code == 200) && len(out.Data.Items) > 0)
 	if err := s.store.PutMerchantSlot(slotStart.Unix(), empty, string(body)); err != nil {
 		return false, false
 	}
@@ -229,6 +230,10 @@ func (s *Server) merchantSlotsOfDay(day time.Time) []merchantSlotJSON {
 		}
 		if i < 4 { // 8/12/16/20 四轮读缓存
 			if empty, data, ok := s.store.GetMerchantSlot(st.Unix()); ok {
+				// 自动修正历史误判:此前 code==200 被当失败写成 empty,读缓存时按原始 body 重新判定有货。
+				if empty && merchantBodyHasItems(data) {
+					empty = false
+				}
 				js.Empty = empty
 				if !empty {
 					js.Merchant = json.RawMessage(data)
@@ -240,6 +245,21 @@ func (s *Server) merchantSlotsOfDay(day time.Time) []merchantSlotJSON {
 		out = append(out, js)
 	}
 	return out
+}
+
+// merchantBodyHasItems 判断缓存的第三方原始 JSON 是否实际有货:
+// code∈{0,200}(第三方成功码不统一)且 data.items 非空。用于读取缓存时修正历史误判的空标记。
+func merchantBodyHasItems(data string) bool {
+	var out struct {
+		Code int `json:"code"`
+		Data struct {
+			Items []json.RawMessage `json:"items"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal([]byte(data), &out); err != nil {
+		return false
+	}
+	return (out.Code == 0 || out.Code == 200) && len(out.Data.Items) > 0
 }
 
 // merchantItem 第三方 items 中订阅邮件需要的字段。
