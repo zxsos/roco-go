@@ -1,5 +1,6 @@
 import React from 'react'
 import { imgURL } from '../../components/icons'
+import { confirmDialog } from '../../components/confirm'
 import { WILD_LAYERS, MEDAL_FILTERS } from './useWildPets'
 
 // LayerPanel 图层侧栏:POI 图层开关;可收集图层(眠枭之星/不咕钟零件)行右侧另有收集模式小开关
@@ -167,7 +168,8 @@ export default function LayerPanel({ pois, wilds, paint, routes, collapsed, onCl
                 <span className="map-layer-name">跟走模式</span>
                 <span className="muted">{routes.follow ? '到点即隐藏' : '显示全部'}</span>
                 <button className="map-collect-btn" onClick={() => {
-                  if (window.confirm('重置所有路线的跟走进度?')) routes.resetProgress()
+                  confirmDialog({ message: '重置所有路线的跟走进度?', okText: '重置', danger: true })
+                    .then((ok) => ok && routes.resetProgress())
                 }} title="重置跟走进度" aria-label="重置进度">↺</button>
               </div>
             )}
