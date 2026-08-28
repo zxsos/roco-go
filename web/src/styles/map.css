@@ -15,10 +15,18 @@
   box-shadow: var(--shadow);
   backdrop-filter: blur(6px) saturate(1.2);
   overflow-y: auto; padding: 0 14px 14px;
-  transform: translateX(-100%); transition: transform .25s ease;
+  transform: translateX(-100%); transition: transform .32s cubic-bezier(.32, .72, 0, 1);
 }
 .map-filters:not(.collapsed) { transform: none; }
-/* 标题栏吸顶(渐变底边)、底部「查看地图」吸底;长面板滚动时始终可见 */
+/* 抽屉滑出时内容逐组淡入上浮(stagger),与整体位移叠加出层次;收起时随抽屉滑走,不播动画 */
+@keyframes map-filters-in {
+  from { opacity: 0; transform: translateX(-16px); }
+  to { opacity: 1; transform: none; }
+}
+.map-filters:not(.collapsed) .filter-group { animation: map-filters-in .34s ease-out both; }
+.map-filters:not(.collapsed) .filter-group:nth-of-type(2) { animation-delay: .05s; }
+.map-filters:not(.collapsed) .filter-group:nth-of-type(3) { animation-delay: .1s; }
+/* 标题栏吸顶(渐变底边);长面板滚动时始终可见 */
 .map-filters .filters-bar {
   display: flex; align-items: center; justify-content: space-between;
   position: sticky; top: 0; z-index: 1; background: var(--bg-1);
@@ -34,11 +42,6 @@
   -webkit-background-clip: text; background-clip: text; color: transparent;
 }
 .map-filters .filters-title-ic { font-size: 16px; -webkit-text-fill-color: initial; filter: drop-shadow(0 0 4px rgba(76, 141, 255, .4)); }
-.map-filters .filters-foot {
-  display: flex; gap: 10px; position: sticky; bottom: 0; background: var(--bg-1);
-  padding: 10px 0 2px; margin-top: 4px; border-top: 1px solid var(--line);
-}
-.map-filters .filters-foot .btn { flex: 1; }
 /* 抽屉遮罩:盖住地图,点它关抽屉。独立兄弟节点(非 .map-filters 后代),单独类不与宠物列表共用。 */
 .map-filters-backdrop {
   display: block; position: fixed; inset: 0; z-index: 39; background: rgba(0, 0, 0, .45);

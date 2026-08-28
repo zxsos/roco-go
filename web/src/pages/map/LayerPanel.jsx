@@ -17,7 +17,7 @@ export default function LayerPanel({ pois, wilds, paint, collapsed, onClose }) {
       <aside className={'filters map-filters' + (collapsed ? ' collapsed' : '')}>
         <div className="filters-bar">
           <span className="filters-title">
-            <span className="filters-title-ic">🗺️</span>图层
+            <span className="filters-title-ic">⚙️</span>设置
           </span>
           {/* ✕ 关抽屉;右上角 ☰ 再打开 */}
           <button className="icon-btn map-sidebar-close" onClick={onClose} aria-label="关闭图层">✕</button>
@@ -162,9 +162,6 @@ export default function LayerPanel({ pois, wilds, paint, collapsed, onClose }) {
               if (window.confirm('清空本场景已涂的区域?重来一遍要重新走。')) paint.reset()
             }} disabled={!paint.available} title="重置本场景的涂色" aria-label="重置涂色">↺</button>
           </div>
-        </div>
-        <div className="filters-foot">
-          <button className="btn primary" onClick={onClose}>查看地图</button>
         </div>
       </aside>
     </>
