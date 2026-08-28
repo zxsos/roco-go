@@ -34,6 +34,55 @@ const count = (raw) => {
   return m ? (m.item_count ?? ((m.items && m.items.length) || 0)) : 0
 }
 
+// 标准售卖时段(北京时间):8/12/16/20 四轮,各 4 小时。
+const SLOTS = ['08:00-12:00', '12:00-16:00', '16:00-20:00', '20:00-24:00']
+
+// parseSlots 解析商品售卖时段:优先用第三方 time_label("08:00-12:00 / …"),
+// 解析失败时按 start_time/end_time(毫秒,北京时间)推断为单个时段串。
+const parseSlots = (it) => {
+  const raw = it && it.time_label
+  if (raw) {
+    const slots = String(raw).split('/').map((s) => s.trim()).filter((s) => /^\d{2}:\d{2}-\d{2}:\d{2}$/.test(s))
+    if (slots.length) return slots
+  }
+  const st = it && it.start_time, et = it && it.end_time
+  if (!st || !et) return []
+  const bj = (ms) => {
+    const d = new Date(ms + 8 * 3600 * 1000) // 加 8h 读 UTC 组件 = 北京时间
+    return `${String(d.getUTCHours()).padStart(2, '0')}:${String(d.getUTCMinutes()).padStart(2, '0')}`
+  }
+  const s = bj(st)
+  let e = bj(et)
+  if (e === '00:00') e = '24:00' // 结束恰在北京午夜 → 按 24:00
+  return s === e ? [] : [`${s}-${e}`]
+}
+
+// groupBySlot 把商品按时段分栏:覆盖全部四段的商品归「全天」栏(不重复进各时段栏),
+// 其余按各自时段归栏;时段串不在标准四段内的归「其他」栏。
+function groupBySlot(items) {
+  const groups = SLOTS.map((s) => ({ slot: s, items: [] }))
+  const allDay = []
+  const other = []
+  for (const it of items) {
+    const slots = parseSlots(it)
+    if (slots.length && SLOTS.every((s) => slots.includes(s))) {
+      allDay.push(it)
+      continue
+    }
+    let hit = false
+    for (const s of slots) {
+      const g = groups.find((x) => x.slot === s)
+      if (g) { g.items.push(it); hit = true }
+    }
+    if (!hit) other.push(it)
+  }
+  return {
+    allDay,
+    groups: groups.filter((g) => g.items.length),
+    other,
+  }
+}
+
 export default function Merchant() {
   const [d, setD] = useState(null) // {now,day,status,today,prev}
   const [coins, setCoins] = useState(0) // 当前账号金币(登录时解析,0=未知)
@@ -172,11 +221,13 @@ function RoundSteps({ turns, curIdx }) {
   )
 }
 
-// MerchantTurn 单个上架轮:轮次头 + 该轮商品网格。
+// MerchantTurn 单个上架轮:轮次头 + 按售卖时段分栏的商品网格(全天商品单独一栏)。
 function MerchantTurn({ r, cur }) {
   const m = unwrap(r.merchant)
   const items = (m && m.items) || []
   const time = r.label.split('~')[0]
+  const { allDay, groups, other } = groupBySlot(items)
+  const has = allDay.length > 0 || groups.length > 0 || other.length > 0
   return (
     <div className={`merchant-turn ${cur ? 'is-cur' : ''}`}>
       <div className="merchant-turn-head">
@@ -185,9 +236,41 @@ function MerchantTurn({ r, cur }) {
         <span className="merchant-turn-range muted">{r.label}</span>
         <span className="merchant-turn-count">{count(m)} 件</span>
       </div>
-      {items.length ? (
-        <div className="merchant-grid">
-          {items.map((it, i) => <MerchantItem key={it.name + i} it={it} />)}
+      {has ? (
+        <div className="merchant-slots">
+          {allDay.length > 0 && (
+            <div className="merchant-slot">
+              <div className="merchant-slot-head">
+                <span className="merchant-slot-time merchant-slot-all">全天 08:00-24:00</span>
+                <span className="merchant-slot-count">{allDay.length} 件</span>
+              </div>
+              <div className="merchant-grid">
+                {allDay.map((it, i) => <MerchantItem key={it.name + i} it={it} />)}
+              </div>
+            </div>
+          )}
+          {groups.map((g) => (
+            <div className="merchant-slot" key={g.slot}>
+              <div className="merchant-slot-head">
+                <span className="merchant-slot-time">{g.slot}</span>
+                <span className="merchant-slot-count">{g.items.length} 件</span>
+              </div>
+              <div className="merchant-grid">
+                {g.items.map((it, i) => <MerchantItem key={it.name + i} it={it} />)}
+              </div>
+            </div>
+          ))}
+          {other.length > 0 && (
+            <div className="merchant-slot">
+              <div className="merchant-slot-head">
+                <span className="merchant-slot-time">其他时段</span>
+                <span className="merchant-slot-count">{other.length} 件</span>
+              </div>
+              <div className="merchant-grid">
+                {other.map((it, i) => <MerchantItem key={it.name + i} it={it} />)}
+              </div>
+            </div>
+          )}
         </div>
       ) : (
         <div className="empty">该轮暂无商品</div>
