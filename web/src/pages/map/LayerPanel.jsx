@@ -173,6 +173,15 @@ export default function LayerPanel({ pois, wilds, paint, routes, collapsed, onCl
                 }} title="重置跟走进度" aria-label="重置进度">↺</button>
               </div>
             )}
+            {routes.open && routes.follow && (
+              <div className="map-route-range">
+                <span className="map-layer-name">判定范围</span>
+                <input type="range" min={10} max={50} step={5} value={routes.nearM}
+                  onChange={(e) => routes.setNearM(Number(e.target.value))}
+                  title="走到目标点该距离内即判定到达,隐藏已走线路" aria-label="到达判定半径" />
+                <span className="muted">{routes.nearM}m</span>
+              </div>
+            )}
             {routes.open && routes.kinds.map((r) => (
               <div className="map-route-row" key={r.name}
                 title={r.short}>

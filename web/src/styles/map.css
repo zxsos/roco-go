@@ -541,5 +541,19 @@
 }
 .map-route-follow .map-collect-btn { width: 24px; }
 .map-route-follow .map-layer-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* 判定范围滑块:跟走开启时显示,拖动实时生效并持久化 */
+.map-route-range {
+  display: flex; align-items: center; gap: 8px; padding: 0 10px 4px;
+  font-size: 12px; color: var(--fg-dim);
+}
+.map-route-range .map-layer-name { flex: none; }
+.map-route-range input[type="range"] {
+  flex: 1; min-width: 0; height: 4px; cursor: pointer;
+  accent-color: var(--accent, #4da3ff);
+}
+.map-route-range .muted {
+  min-width: 34px; text-align: right;
+  font-variant-numeric: tabular-nums; color: var(--fg);
+}
 
 /* 右上角图层入口按钮(主页面 .map-ctrl 内的 ☰):复用 .map-btn */

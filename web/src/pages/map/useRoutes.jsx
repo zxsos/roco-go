@@ -10,13 +10,16 @@ import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 const ROUTES_LS_KEY = 'map.routeLayers'
 const FOLLOW_LS_KEY = 'map.routeFollow'
 const PROGRESS_LS_KEY = 'map.routeProgress'
+const NEAR_M_LS_KEY = 'map.routeNearM'
 const SCENE = 10003 // 卡洛西亚大陆(路线数据只在该场景有意义)
 const GRID = 8192
 // 10003 底图投影参数(与 names.json maps[10003] 一致):世界坐标 cm → 画布坐标
 const OX = 306000
 const OY = 408000
 const SIDE = 408000
-const NEAR = 100 // 到达判定半径:画布单位 ≈ 100/8192*408000 ≈ 50m(相邻路线点间距中位 ~45;判定已改时间节流,不靠位移防抖,半径可收紧)
+// 到达判定半径由用户调节:范围 10~50m(米 → 画布单位 ×2,即 50m=100 画布单位)
+const NEAR_MIN_M = 10
+const NEAR_MAX_M = 50
 const LOOKAHEAD = 30 // 前瞻窗口:传送跨点时从当前进度向后扫多少个点找最近点
 const TELEPORT = 300 // 相邻点距离超过该画布单位(≈150m)判定为直接传送,路线在此断开不画直线
 
@@ -88,6 +91,10 @@ export function useRoutes(account, pos) {
   const [open, setOpen] = useState(false)  // 图层面板展开
   const [follow, setFollow] = useState(() => loadJSON(FOLLOW_LS_KEY, false))
   const [progress, setProgress] = useState(() => loadJSON(PROGRESS_LS_KEY, {}))
+  const [nearM, setNearMState] = useState(() => {
+    const v = loadJSON(NEAR_M_LS_KEY, NEAR_MAX_M)
+    return Math.min(NEAR_MAX_M, Math.max(NEAR_MIN_M, v))
+  })
   const onRef = useRef(loadKeys())
   const lastCheckRef = useRef(0) // 上次判定时间戳,时间节流用
 
@@ -139,7 +146,7 @@ export function useRoutes(account, pos) {
         const end = Math.min(r.points.length, from + LOOKAHEAD)
         for (let i = from; i < end; i++) {
           const p = r.points[i]
-          if (Math.hypot(p.x - pc[0], p.y - pc[1]) < NEAR) {
+          if (Math.hypot(p.x - pc[0], p.y - pc[1]) < nearM * 2) { // 米 → 画布单位(1m = 2 单位)
             if (i !== cur) (next ??= { ...prev })[r.name] = i
             break
           }
@@ -148,7 +155,7 @@ export function useRoutes(account, pos) {
       if (next) localStorage.setItem(PROGRESS_LS_KEY, JSON.stringify(next))
       return next || prev
     })
-  }, [pos, follow, routes, res])
+  }, [pos, follow, routes, res, nearM])
 
   const toggle = useCallback((name) => {
     setRoutes((prev) => {
@@ -174,6 +181,13 @@ export function useRoutes(account, pos) {
     localStorage.removeItem(PROGRESS_LS_KEY)
   }, [])
 
+  // 判定半径(米):夹取到 10~50,持久化
+  const setNearM = useCallback((m) => {
+    const v = Math.min(NEAR_MAX_M, Math.max(NEAR_MIN_M, m))
+    setNearMState(v)
+    localStorage.setItem(NEAR_M_LS_KEY, JSON.stringify(v))
+  }, [])
+
   const kinds = useMemo(() => routes.map((r) => ({ ...r, progress: progress[r.name] ?? -1 })), [routes, progress])
   const marks = useMemo(() => routes.filter((r) => r.on).map((r) => ({
     ...r,
@@ -181,7 +195,7 @@ export function useRoutes(account, pos) {
     follow,
   })), [routes, progress, follow])
 
-  return { kinds, marks, open, toggleOpen: () => setOpen((o) => !o), toggle, follow, toggleFollow, resetProgress }
+  return { kinds, marks, open, toggleOpen: () => setOpen((o) => !o), toggle, follow, toggleFollow, resetProgress, nearM, setNearM }
 }
 
 // RouteLayer 把路线画进 .map-world:一条路线一个折线 <path> + 起终点圆。
