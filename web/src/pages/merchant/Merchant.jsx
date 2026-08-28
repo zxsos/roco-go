@@ -85,7 +85,7 @@ function groupBySlot(items) {
 
 export default function Merchant() {
   const [d, setD] = useState(null) // {now,day,status,today,prev}
-  const [coins, setCoins] = useState(0) // 当前账号金币(登录时解析,0=未知)
+  const [coins, setCoins] = useState(null) // 当前账号金币:null=未同步,数字=已同步(含 0)
   const [err, setErr] = useState('')
   const [loading, setLoading] = useState(false)
 
@@ -111,8 +111,9 @@ export default function Merchant() {
       if (done || !list) return
       console.log('[Merchant] 账号列表 =', list)
       const cur = list.find((a) => a.online) || list[0]
-      console.log('[Merchant] 取最近活跃/在线账号 cur =', cur, '→ 金币 =', cur && cur.coins)
-      setCoins(cur ? cur.coins || 0 : 0)
+      // hasCoins=false 表示该账号从未解析到金币(没重登游戏),显示「待同步」而非隐藏徽标。
+      console.log('[Merchant] 取最近活跃/在线账号 cur =', cur, '→ 金币 =', cur && cur.coins, 'hasCoins =', cur && cur.hasCoins)
+      setCoins(cur && cur.hasCoins ? cur.coins : null)
     }).catch((e) => console.log('[Merchant] 拉账号列表失败:', e))
     return () => { done = true }
   }, [])
@@ -151,8 +152,10 @@ export default function Merchant() {
             {m && m.subtitle && <div className="merchant-sub">{m.subtitle}</div>}
           </div>
           <div className="merchant-hero-side">
-            {coins > 0 && (
-              <span className="merchant-coins" title="当前账号金币(登录时解析)">🪙 {coins.toLocaleString()}</span>
+            {coins !== null ? (
+              <span className="merchant-coins" title="当前账号金币(每次登录游戏时同步)">🪙 {coins.toLocaleString()}</span>
+            ) : (
+              <span className="merchant-coins merchant-coins-unk" title="尚未同步到金币,请重新登录游戏后刷新">🪙 待同步</span>
             )}
             <span className={`merchant-status merchant-status-${st.cls}`}>{st.text}</span>
             <span className="merchant-day">{dayText}</span>

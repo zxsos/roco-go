@@ -21,6 +21,11 @@
   background: rgba(212, 175, 55, .16); color: #d4af37; border: 1px solid rgba(212, 175, 55, .45);
   font-variant-numeric: tabular-nums;
 }
+/* 未同步态(该账号从未解析到金币,待玩家重新登录游戏):淡金、虚框、可悬停查看提示 */
+.merchant-coins-unk {
+  background: transparent; color: rgba(212, 175, 55, .55); border-style: dashed;
+  cursor: help;
+}
 
 /* 营业状态徽标 */
 .merchant-status { padding: 4px 12px; border-radius: 999px; font-size: 12px; font-weight: 700; line-height: 1.4; }

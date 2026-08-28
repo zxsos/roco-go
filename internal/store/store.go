@@ -190,7 +190,7 @@ CREATE TABLE IF NOT EXISTS pet_medal (
 
 CREATE TABLE IF NOT EXISTS accounts (
   account TEXT PRIMARY KEY, name TEXT, updated_at INTEGER, pin_hash TEXT,
-  coins INTEGER NOT NULL DEFAULT 0
+  coins INTEGER NOT NULL DEFAULT 0, has_coins INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS idx_accounts_updated_at ON accounts(updated_at DESC);
 -- 连接会话:key 是会话密钥(供重启后对存活连接续解,见 docs/architecture.md 3),
@@ -309,6 +309,12 @@ CREATE INDEX IF NOT EXISTS idx_egg_queries_ts ON egg_queries(ts);
 	// 老库平滑升级:accounts 补 coins 列(金币)。历史库无此列,直接 ALTER 加列;
 	// 新库建表已含该列,SQLite 报 duplicate column 可忽略。避免强迫删库(删库会丢 PIN)。
 	if _, err := s.db.Exec(`ALTER TABLE accounts ADD COLUMN coins INTEGER NOT NULL DEFAULT 0`); err != nil &&
+		!strings.Contains(err.Error(), "duplicate column") {
+		return err
+	}
+	// 老库补 has_coins 列:区分「从未解析到金币(未知)」与「解析到 0(真没钱)」,
+	// 前端据此显示「待同步」而非把徽标直接隐藏。
+	if _, err := s.db.Exec(`ALTER TABLE accounts ADD COLUMN has_coins INTEGER NOT NULL DEFAULT 0`); err != nil &&
 		!strings.Contains(err.Error(), "duplicate column") {
 		return err
 	}
