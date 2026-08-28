@@ -18,14 +18,50 @@ const OY = 408000
 const SIDE = 408000
 const NEAR = 100 // 到达判定半径:画布单位 ≈ 100/8192*408000 ≈ 50m(相邻路线点间距中位 ~45;判定已改时间节流,不靠位移防抖,半径可收紧)
 const LOOKAHEAD = 30 // 前瞻窗口:传送跨点时从当前进度向后扫多少个点找最近点
+const TELEPORT = 300 // 相邻点距离超过该画布单位(≈150m)判定为直接传送,路线在此断开不画直线
 
+// 路线随机配色。池子人工筛过,色相避开地图上已有标记:
+// 玩家箭头红 / 奖牌四色(大块头红 ff5252、小不点橙 ff9100、婉转声绿 2e7d32、
+// 粗嗓门浅蓝 40c4ff) / 野生污染紫 c792ea / 异色白。#HUE_BAN 再兜底过滤一遍。
 const PALETTE = [
-  '#e63946', '#499ed5', '#26890c', '#ffb000', '#9c27b0', '#00897b', '#ff5722',
-  '#795548', '#3f51b5', '#00796b', '#e91e63', '#18ffff', '#8bc34a', '#fff176',
-  '#ab47bc', '#607d8b', '#ff7043', '#1de9b6', '#d500f9', '#c5e1a5', '#ff6f00',
-  '#00bcd4', '#d32f2f', '#76ff03', '#7c4dff', '#26a69a', '#ef5350', '#5c6bc0',
-  '#ffca28', '#42a5f5', '#ef6c00', '#66bb6a', '#ec407a', '#29b6f6',
+  // 青绿/青(避开粗嗓门浅蓝 180-220 色相,取更绿或更暗的青)
+  '#00695c', '#00796b', '#00897b', '#26a69a', '#4db6ac', '#1de9b6', '#80cbc4', '#b2dfdb',
+  // 蓝/靛(色相 >220,避开浅蓝禁区)
+  '#283593', '#3949ab', '#3f51b5', '#5c6bc0', '#7986cb', '#9fa8da',
+  // 玫红/粉(色相 320-345,偏紫,与正红箭头/大块头红可区分)
+  '#ec407a', '#f06292', '#f48fb1', '#e91e63', '#d81b60',
+  // 黄绿/黄(色相 48-95,低于婉转声绿 95-155 禁区)
+  '#aeea00', '#c0ca33', '#cddc39', '#d4e157', '#ffeb3b', '#fff176', '#fff59d',
 ]
+// 地图已有标记的色相禁区(度,含边界):红(箭头/大块头)、橙(小不点)、绿(婉转声)、浅蓝(粗嗓门)、紫(污染)
+const HUE_BAN = [[345, 360], [0, 22], [22, 48], [95, 155], [180, 220], [250, 290]]
+const hexHue = (hex) => {
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex)
+  if (!m) return -1
+  const n = parseInt(m[1], 16)
+  const r = n >> 16 & 255, g = n >> 8 & 255, b = n & 255
+  const max = Math.max(r, g, b), min = Math.min(r, g, b)
+  if (max === min) return -1 // 灰/白/黑无色相
+  const d = max - min
+  let h
+  if (max === r) h = (g - b) / d + (g < b ? 6 : 0)
+  else if (max === g) h = (b - r) / d + 2
+  else h = (r - g) / d + 4
+  return h * 60
+}
+const ROUTE_COLORS = PALETTE.filter((c) => {
+  const h = hexHue(c)
+  return !HUE_BAN.some(([a, b]) => h >= a && h <= b)
+})
+// Fisher-Yates 洗牌:每次进场景随机顺序分配,同时开多条路线颜色互不相同且不撞地图标记
+const shuffle = (arr) => {
+  const a = [...arr]
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1))
+    ;[a[i], a[j]] = [a[j], a[i]]
+  }
+  return a
+}
 
 const loadKeys = () => {
   try {
@@ -63,6 +99,7 @@ export function useRoutes(account, pos) {
     fetch('/route-map/data/index.json', { cache: 'no-store' })
       .then((r) => r.json())
       .then(async (names) => {
+        const colors = shuffle(ROUTE_COLORS) // 每次进场景随机色序,避免固定分配
         const list = await Promise.all(names.map(async (name, i) => {
           const d = await fetch('/route-map/data/' + encodeURIComponent(name), { cache: 'no-store' }).then((r) => r.json())
           return {
@@ -70,7 +107,7 @@ export function useRoutes(account, pos) {
             short: name.replace(/\.json$/, ''),
             count: d.points.length,
             points: d.points,
-            color: PALETTE[i % PALETTE.length],
+            color: colors[i % colors.length],
             on: onRef.current.has(name),
           }
         }))
@@ -150,14 +187,23 @@ export function useRoutes(account, pos) {
 // RouteLayer 把路线画进 .map-world:一条路线一个折线 <path> + 起终点圆。
 // SVG 无 viewBox,width/height=mapPx,用户坐标即底图像素(与其它标记同一坐标系)。
 // 跟走模式下只画 progress 之后的线:起点圆换成「已到达点」,下一目标点画高亮大圆。
+// 传送打断:相邻点距离 > TELEPORT 判定为直接传送(不画那条笔直长线),在传送落点用
+// 路线同色画一个「下一起点」菱形标记,提示从这里继续走。
 export const RouteLayer = React.memo(({ marks, mapPx }) => {
   const geo = React.useMemo(() => marks.map((r) => {
     const from = r.follow && r.progress >= 0 ? Math.min(r.progress, r.points.length - 1) : 0
     const pts = r.points.slice(from)
+    // 传送断点:相邻两点距离 > TELEPORT。断点 i 表示 pts[i] 是传送落点(新一段的起点)
+    const teleports = []
+    for (let i = 1; i < pts.length; i++) {
+      if (Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y) > TELEPORT) teleports.push(i)
+    }
+    // 折线:在断点处断开重起 M(不画传送那条笔直长线),正常段连 L
+    const teleSet = new Set(teleports)
     const d = pts.map((p, i) =>
-      `${i ? 'L' : 'M'}${(p.x / GRID * mapPx).toFixed(1)} ${(p.y / GRID * mapPx).toFixed(1)}`).join('')
+      `${i === 0 || teleSet.has(i) ? 'M' : 'L'}${(p.x / GRID * mapPx).toFixed(1)} ${(p.y / GRID * mapPx).toFixed(1)}`).join('')
     const s = pts[0]
-    const e = r.points[r.points.length - 1]
+    const e = pts[pts.length - 1]
     const nx = r.follow && r.progress >= 0 && r.progress + 1 < r.points.length ? r.points[r.progress + 1] : null
     return {
       key: r.name,
@@ -165,6 +211,7 @@ export const RouteLayer = React.memo(({ marks, mapPx }) => {
       color: r.color,
       sx: s.x / GRID * mapPx, sy: s.y / GRID * mapPx,
       ex: e.x / GRID * mapPx, ey: e.y / GRID * mapPx,
+      teleports: teleports.map((i) => ({ x: pts[i].x / GRID * mapPx, y: pts[i].y / GRID * mapPx })),
       nx: nx && { x: nx.x / GRID * mapPx, y: nx.y / GRID * mapPx },
       showStart: !r.follow || r.progress < 0, // 跟走开始后起点圆消失,改由到达点标记
     }
@@ -178,6 +225,13 @@ export const RouteLayer = React.memo(({ marks, mapPx }) => {
             <path d={g.d} fill="none" stroke={g.color} strokeWidth={2.5}
               strokeLinejoin="round" strokeLinecap="round" opacity={0.9} />
           )}
+          {/* 传送落点:路线色菱形 + 白描边 + 白点,表示「从上一段直接传送到此,从这继续走」 */}
+          {g.teleports.map((t, i) => (
+            <g key={i} transform={`translate(${t.x} ${t.y}) rotate(45)`}>
+              <rect x={-5} y={-5} width={10} height={10} fill={g.color} stroke="#fff" strokeWidth={1.8} opacity={0.95} />
+              <rect x={-1.5} y={-1.5} width={3} height={3} fill="#fff" />
+            </g>
+          ))}
           {g.showStart && (
             <circle cx={g.sx} cy={g.sy} r={6} fill="#fff" stroke="#000" strokeWidth={1.5} />
           )}
