@@ -336,6 +336,17 @@ CREATE TABLE IF NOT EXISTS flower_challenges (
   updated_at INTEGER,
   PRIMARY KEY(account, npc_cfg_id, blood)
 );
+
+-- 图鉴炫彩收集(见 pet/handbook.go):解析登录包 PlayerPetInfo.pet_handbook,按账号记录
+-- 每个品种(pet_base_id)抓到过哪些炫彩变体(glass_type 普通/隐藏 + glass_value),
+-- 登录时整体替换(数据仅登录包携带)。
+CREATE TABLE IF NOT EXISTS handbook_glass (
+  account TEXT NOT NULL,
+  pet_base_id INTEGER NOT NULL,
+  glass_type INTEGER NOT NULL,
+  glass_value INTEGER NOT NULL,
+  PRIMARY KEY(account, pet_base_id, glass_type, glass_value)
+);
 `)
 	if err != nil {
 		return err
