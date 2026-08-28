@@ -2,8 +2,8 @@ import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { imgURL } from '../../components/icons'
 
 // —— 跑图收集路线图层(仅 10003 卡洛西亚大陆)——
-// 路线数据是 B站泽口博士的收集路线,与页面 /route-map/ 共用同一份静态 JSON:
-//   web/public/route-map/data/index.json(文件名列表) + 各路线 JSON。
+// 路线数据是 B站泽口博士的收集路线,静态 JSON 在 web/public/route-map/data/:
+//   index.json(文件名列表) + 各路线 JSON。
 // 路线坐标为 8192x8192 画布,归一化 u=x/8192 后与底图投影对齐,前端只负责开关与摆放。
 // 开关选择存 localStorage,与 POI 图层记忆互不干扰。
 // 跟走模式:玩家位置(pos 世界坐标,cm)换算回 8192 画布,与路线点比距离;
