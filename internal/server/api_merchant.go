@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"html"
 	"io"
+	"log"
 	"mime"
 	"net"
 	"net/http"
@@ -170,15 +171,22 @@ func (s *Server) merchantFetch(slotStart time.Time) (bool, bool) {
 	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, merchantFetchURL+"?"+params.Encode(), nil)
 	if err != nil {
+		log.Printf("merchantFetch 构造请求失败: %v", err)
 		return false, false
 	}
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
+		log.Printf("merchantFetch 请求失败: %v", err)
 		return false, false
 	}
 	defer resp.Body.Close()
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20)) // 上限 1MB
-	if err != nil || resp.StatusCode != http.StatusOK {
+	if err != nil {
+		log.Printf("merchantFetch 读响应失败: %v", err)
+		return false, false
+	}
+	if resp.StatusCode != http.StatusOK {
+		log.Printf("merchantFetch HTTP %d, 响应前 200 字节: %q", resp.StatusCode, truncateBytes(body, 200))
 		return false, false
 	}
 	// 校验并判定有货/无货:第三方成功码不统一,实测 code=0 与 code=200 都表示成功,
@@ -190,13 +198,26 @@ func (s *Server) merchantFetch(slotStart time.Time) (bool, bool) {
 		} `json:"data"`
 	}
 	if err := json.Unmarshal(body, &out); err != nil {
+		log.Printf("merchantFetch JSON 解析失败: %v, 响应前 200 字节: %q", err, truncateBytes(body, 200))
 		return false, false
 	}
 	empty := !((out.Code == 0 || out.Code == 200) && len(out.Data.Items) > 0)
+	if empty {
+		log.Printf("merchantFetch 第三方返回无货: code=%d items=%d", out.Code, len(out.Data.Items))
+	}
 	if err := s.store.PutMerchantSlot(slotStart.Unix(), empty, string(body)); err != nil {
+		log.Printf("merchantFetch 写槽缓存失败: %v", err)
 		return false, false
 	}
 	return true, empty
+}
+
+// truncateBytes 截断字节串用于日志(避免刷屏),超长时加省略号。
+func truncateBytes(b []byte, n int) string {
+	if len(b) <= n {
+		return string(b)
+	}
+	return string(b[:n]) + "…"
 }
 
 // handleMerchant 返回当前营业日的槽缓存与状态,玩家打开页面时按当前时间补查缺失槽。
