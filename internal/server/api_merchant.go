@@ -496,11 +496,37 @@ func merchantMailBody(body string, imgs *[]merchantMailImg) string {
 		if lead > 0 {
 			esc = strings.Repeat("&nbsp;", lead) + esc
 		}
-		lines[i] = esc
+		// 单行断到 ≤850 字节:防止某一行本身(商品名/描述极端长)超限。
+		lines[i] = merchantMailWrap(esc, 850)
 	}
+	// 行间用 <br>\r\n 连接而非裸 <br>:HTML 里 CRLF 渲染为空白,不产生可见换行
+	// (可见换行由 <br> 负责),但能让每条商品独占一行,避免商品一多整段正文
+	// 拼成一个超 998 字节的巨型单行触发 RFC 5321 拒绝。
 	// 用 Replace 而非 Sprintf:模板背景渐变色里有裸 %(0%,55%,100%),
 	// Sprintf 会把它当格式 verb 误解析导致正文占位符拿不到参数(%!s(MISSING))。
-	return strings.Replace(merchantMailHTMLTpl, "%s", strings.Join(lines, "<br>"), 1)
+	return strings.Replace(merchantMailHTMLTpl, "%s", strings.Join(lines, "<br>\r\n"), 1)
+}
+
+// merchantMailWrap 把转义后的单行 HTML 在累计字节 ≥ maxBytes 处插入 CRLF 断行,
+// 防止极端长行(超长商品名/描述)突破 RFC 5321 的 998 字节单行限制。
+// 断点落在 rune 边界,不断开 UTF-8 字符;HTML 里裸 CRLF 渲染为空白,
+// 不产生可见换行(可见换行由 <br> 负责),对收件端视觉无影响。
+func merchantMailWrap(s string, maxBytes int) string {
+	if len(s) <= maxBytes {
+		return s
+	}
+	var b strings.Builder
+	var n int
+	for _, r := range s {
+		size := len(string(r))
+		if n > 0 && n+size > maxBytes {
+			b.WriteString("\r\n")
+			n = 0
+		}
+		b.WriteRune(r)
+		n += size
+	}
+	return b.String()
 }
 
 // merchantMailEscaped 转义一行文本,并把行内的 @img:<path> 商品图标记替换成 <img>(不转义)。
