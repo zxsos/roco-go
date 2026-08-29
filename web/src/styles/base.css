@@ -24,32 +24,6 @@
      各处半透明工具栏引用此变量,主题切换时一并跟随。 */
   --bar-bg: rgba(22, 27, 34, .92);
   --bar-hover: rgba(255, 255, 255, .05);
-}
-
-/* 亮色主题:html[data-theme="light"] 时覆写变量。默认(auto)跟随浏览器,由 App.jsx
-   据 prefers-color-scheme 在 <html> 上挂 data-theme。亮色取柔和的浅灰底 + 深灰字,
-   强调色稍加深以保证白底对比度。 */
-:root[data-theme="light"] {
-  --bg: #f6f7f9;
-  --bg-1: #ffffff;
-  --bg-2: #eef1f4;
-  --bg-3: #e3e8ed;
-  --line: #d4dae0;
-  --line-soft: #e3e8ed;
-  --fg: #1f2328;
-  --fg-dim: #656d76;
-  --accent: #2f6fdb;
-  --accent-soft: rgba(47, 111, 219, .12);
-  --gold: #b88200;
-  --green: #1a7f37;
-  --red: #cf222e;
-  --red-hi: #e5534b; /* 亮色下 hover 用略深的一档(白底上再亮会看不清) */
-  --danger: #cf222e;
-  --shadow: 0 4px 16px rgba(0, 0, 0, .12);
-  --shadow-sm: 0 2px 8px rgba(0, 0, 0, .08);
-  --bar-bg: rgba(255, 255, 255, .9);
-  --bar-hover: rgba(0, 0, 0, .05);
-  --hero-tint: rgba(56, 65, 90, .12); /* 亮色下只留极淡的一层,见暗色处注释 */
 
   /* —— 语义色:数据可视化的固定配色,**不随亮/暗主题变化** —— */
   /* 这些色对应游戏内的具体含义(奖牌、传送门、花种星级、性别、稀有度…),玩家靠颜色辨认,
@@ -133,6 +107,33 @@
   --z-toast: 1000;     /* 轻提示 */
   --z-confirm: 1001;   /* 确认框 */
   --z-loading: 1002;   /* 全屏加载遮罩 */
+}
+
+/* 亮色主题:html[data-theme="light"] 时覆写变量。默认(auto)跟随浏览器,由 App.jsx
+   据 prefers-color-scheme 在 <html> 上挂 data-theme。亮色取柔和的浅灰底 + 深灰字,
+   强调色稍加深以保证白底对比度。 */
+:root[data-theme="light"] {
+  --bg: #f6f7f9;
+  --bg-1: #ffffff;
+  --bg-2: #eef1f4;
+  --bg-3: #e3e8ed;
+  --line: #d4dae0;
+  --line-soft: #e3e8ed;
+  --fg: #1f2328;
+  --fg-dim: #656d76;
+  --accent: #2f6fdb;
+  --accent-soft: rgba(47, 111, 219, .12);
+  --gold: #b88200;
+  --green: #1a7f37;
+  --red: #cf222e;
+  --red-hi: #e5534b; /* 亮色下 hover 用略深的一档(白底上再亮会看不清) */
+  --danger: #cf222e;
+  --shadow: 0 4px 16px rgba(0, 0, 0, .12);
+  --shadow-sm: 0 2px 8px rgba(0, 0, 0, .08);
+  --bar-bg: rgba(255, 255, 255, .9);
+  --bar-hover: rgba(0, 0, 0, .05);
+  --hero-tint: rgba(56, 65, 90, .12); /* 亮色下只留极淡的一层,见暗色处注释 */
+
 }
 
 * { box-sizing: border-box; }
