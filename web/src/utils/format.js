@@ -55,13 +55,17 @@ export function fmtClock(ts) {
   return `${pad2(d.getHours())}:${pad2(d.getMinutes())}:${pad2(d.getSeconds())}`
 }
 
-// maskUid 把 UID 半隐藏显示:保留前 3 后 3,中间以 ＊＊＊ 代替(1234567890 → 123＊＊＊890)。
+// maskUid 把 UID 半隐藏显示:保留前 3 后 3,中间按实际位数打星(1234567890 → 123****890)。
 // 用于花种页「当前世界/自己世界/好友槽名」等展示位,防止完整 UID 被旁观者直接看到;
 // 位数不足 7 位时整体隐藏意义不大,原样返回。
+//
+// 星号一律用**半角** `*` 且数量 = 实际隐藏位数,与 maskEmail 保持同一种风格:
+// 早先用固定 3 个全角 `＊`(U+FF0A),与前后的数字/中文混排时字形和宽度都对不齐,
+// 看着像乱码;全角星号在等宽字体下还会占两格,下拉里各条更对不齐。
 export function maskUid(uid) {
   const s = String(uid || '')
   if (s.length <= 6) return s
-  return s.slice(0, 3) + '＊＊＊' + s.slice(-3)
+  return s.slice(0, 3) + '*'.repeat(s.length - 6) + s.slice(-3)
 }
 
 // maskEmail 邮箱脱敏:local 保留前 2 与末 1,中间打星;local 过短(≤2)只留首位,域名完整保留。
