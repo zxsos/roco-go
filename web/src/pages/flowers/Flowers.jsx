@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useContext, useMemo, useCallback } from 'react'
 import { getFlowers, getFlowerSlots, deleteFlowerSlot, subscribe } from '../../api'
 import { AccountContext, IconsContext } from '../../context'
-import { fmtTime, maskUid } from '../../utils/format'
+import { fmtTime } from '../../utils/format'
 import { useAsyncData, useInterval } from '../../hooks/useAsyncData'
 import { ImgAvatar } from '../../components/icons'
 import { GlassChip, MarkIcon } from '../../components/badges'
@@ -13,10 +13,15 @@ import Dropdown from '../../components/Dropdown'
 // (游戏内每打开一次花种面板,服务器就会整组重发 0x0375)。
 // 游戏内点击地图上的花种时,服务器会额外下发 0x0338 单只详情(等级/炫彩/绑定宠物/奖牌),
 // 由后端合并进对应卡片后经同一 SSE 刷新;未点过的花种这些字段为空。
-// 槽名里的 UID 片段。复用已有的截图防泄机制(见 shell.css 的 html[data-privacy] .privacy):
-// 默认常驻模糊,点顶栏品牌名「妙妙屋」才解除 —— 与账号下拉里的 UID 同一种处理,
-// 免得截个图就把好友 UID 全漏出去。等宽字体则让各条的星号段宽度一致、下拉里对得齐。
-const SlotUid = ({ uid }) => <span className="privacy slot-uid">{maskUid(uid)}</span>
+// 槽名里的 UID 片段:**只挂 .privacy,不做文字脱敏**。
+//
+// 与账号下拉保持一致(AccountSelect.jsx:87 的 account-item-uid 也是 uidOf(...) + .privacy):
+// 本项目的截图防泄规范是「遮罩即保护,不重复脱敏」——默认常驻模糊,点顶栏品牌名
+// 「妙妙屋」才解除。脱敏与遮罩叠着用会废掉这个开关:默认糊着时星号看不见(多余),
+// 而解除后(用户正是想确认「这是哪个好友」)看到的仍是 839***713,还是认不出来。
+//
+// 等宽字体是为了多条槽名的 UID 段宽度一致、下拉里对得齐。
+const SlotUid = ({ uid }) => <span className="privacy slot-uid">{uid}</span>
 
 // 槽展示名:一律由前端按 key 现算,**不用**后端 /api/flowers/slots 返回的 name 字段。
 // 原因:后端 flowerSlotName 拼的是原始 uid(如「好友 UID:839694713」未脱敏),而 SSE 广播
