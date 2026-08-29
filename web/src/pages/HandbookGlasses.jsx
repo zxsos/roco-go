@@ -1,4 +1,5 @@
-import React, { useEffect, useState, useContext, useMemo } from 'react'
+import React, { useEffect, useState, useContext, useMemo, useRef } from 'react'
+import { toPng } from 'html-to-image'
 import { getHandbookGlasses } from '../api'
 import { IconsContext } from '../context'
 import { imgURL } from '../components/icons'
@@ -19,6 +20,37 @@ export default function HandbookGlasses() {
   const icons = useContext(IconsContext)
   const [data, setData] = useState(null) // null=加载中,其余为 glasses 数组
   const [err, setErr] = useState('')
+  const [exporting, setExporting] = useState(false)
+  const shareRef = useRef(null) // 分享导出用的隐藏 DOM
+
+  // 分享图片:把「主色分组」排版(横向色卡、纵向分组竖排)导出为一张 PNG。
+  // 分享节点平时 visibility:hidden + left:-10000px 不占位,html-to-image 会原样
+  // 复制该样式导致导出空白,故导出前临时改为可见并移到视口左上角(z-index -1,
+  // 被页面背景盖住,用户看不到闪动),导出完成后恢复。
+  const exportShare = async () => {
+    const node = shareRef.current
+    if (!node || exporting) return
+    setExporting(true)
+    node.style.visibility = 'visible'
+    node.style.left = '0'
+    node.style.top = '0'
+    try {
+      const url = await toPng(node, { pixelRatio: 2, backgroundColor: '#0e1116', cacheBust: true })
+      const a = document.createElement('a')
+      a.href = url
+      const d = new Date()
+      const ymd = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`
+      a.download = `炫彩图鉴_${ymd}.png`
+      a.click()
+    } catch (e) {
+      alert('导出失败,请重试')
+    } finally {
+      node.style.visibility = ''
+      node.style.left = ''
+      node.style.top = ''
+      setExporting(false)
+    }
+  }
 
   useEffect(() => {
     let dead = false
@@ -84,6 +116,11 @@ export default function HandbookGlasses() {
       <div className="hb-head">
         <h2 className="hb-title">✨ 炫彩图鉴</h2>
         <span className="hb-note">数据来自登录包快照(每次登录更新),非实时</span>
+        {stats && stats.species > 0 && (
+          <button className="btn hb-share-btn" onClick={exportShare} disabled={exporting}>
+            {exporting ? '生成中…' : '分享图片'}
+          </button>
+        )}
       </div>
 
       {data === null ? (
@@ -177,6 +214,40 @@ export default function HandbookGlasses() {
           )}
         </>
       )}
+
+      {/* 分享导出 DOM:平时隐藏不占位,点击分享时临时移到视口内导出。
+          排版与「按主色分组」一致:横向是主色调(色卡一排),纵向分组竖着排完。 */}
+      <div className="hb-share" ref={shareRef}>
+        <div className="hb-share-head">
+          <div className="hb-share-title">✨ 炫彩图鉴</div>
+          <div className="hb-share-sub">
+            按主色调分布 · 共 {stats ? stats.species : 0} 品种 / 普通 {stats ? stats.common : 0} / 隐藏 {stats ? stats.hidden : 0}
+          </div>
+        </div>
+        {majorGroups && majorGroups.map((g) => (
+          <div className="hb-share-group" key={g.major}>
+            <div className="hb-share-group-head">
+              <span className="hb-share-dot" style={{ background: g.major }} />
+              <span className="hb-share-group-name">{g.name}<em>{g.major}</em></span>
+              <span className="hb-share-count">{g.cards.length} 色卡 · {g.pets.length} 品种</span>
+            </div>
+            <div className="hb-share-cards">
+              {g.cards.map((v) => <GlassChip key={v} p={{ glassType: 1, glassValue: v }} className="share-chip" />)}
+            </div>
+            <div className="hb-share-bar">
+              {g.pets.map((p) => (
+                <span className="hb-share-pet" key={p.base}>
+                  <img className="share-head" src={imgURL(p.head)} alt="" loading="lazy" />
+                  <span className="hb-share-pet-cards">
+                    {p.values.map((v) => <GlassChip key={v} p={{ glassType: 1, glassValue: v }} className="share-chip-sm" />)}
+                  </span>
+                  <span className="hb-share-pet-name">{p.name}</span>
+                </span>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
     </div>
   )
 }
