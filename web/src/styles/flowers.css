@@ -48,12 +48,11 @@
   display: flex; flex-direction: column; align-items: flex-start; gap: 2px;
   margin-top: 4px; min-width: 0;
 }
+/* 同样**不加矩形装饰**(原因见 .glass-chip 的注释):素材是椭圆,
+   border-radius / border / box-shadow 会在椭圆外留下一圈毛边。 */
 .flower-glass-chip {
   position: relative; display: block; overflow: hidden;
   width: 100%; max-width: 140px; aspect-ratio: 280 / 154;
-  border-radius: 6px;
-  border: 1px solid rgba(255, 255, 255, .14);
-  box-shadow: 0 1px 6px rgba(0, 0, 0, .4);
 }
 .flower-glass-chip > img { width: 100%; height: 100%; object-fit: cover; }
 .flower-glass-t {
