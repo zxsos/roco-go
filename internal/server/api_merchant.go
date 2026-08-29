@@ -95,13 +95,38 @@ func merchantDayStatus(now time.Time) string {
 	return "open"
 }
 
-// merchantLoop 定时补查:每 15 分钟检查一次当前槽,未缓存则回源(8 点开张后自动完成首次查询)。
+// merchantLoop 定时补查:每 15 分钟检查一次当前槽,未缓存则回源(8 点开张后自动完成首次查询);
+// 随后补扫当日有货槽重发未投递的订阅提醒(兜底首次发信失败/事后补发)。
 func (s *Server) merchantLoop() {
 	s.merchantEnsure(time.Now())
 	t := time.NewTicker(merchantCheck)
 	defer t.Stop()
 	for range t.C {
-		s.merchantEnsure(time.Now())
+		now := time.Now()
+		s.merchantEnsure(now)
+		s.merchantResend(now)
+	}
+}
+
+// merchantResend 补扫本营业日已开始的有货槽,对「未通知且关键词命中」的订阅重发提醒。
+// 用于兜底首次发信失败(SMTP 瞬断/授权码过期/被限流)与事后补发(如服务 8 点后才启动、
+// 当天漏看)。幂等:merchantNotify 内部按 merchant_notified 去重,已发过的槽自动跳过,
+// 不会重复打扰;SMTP 未配置或打烊(0-8 点)时直接返回。
+func (s *Server) merchantResend(now time.Time) {
+	if s.smtpUser == "" || s.smtpPass == "" {
+		return
+	}
+	if merchantDayStatus(now) == "idle" {
+		return
+	}
+	for _, st := range merchantDaySlots(merchantDayStart(now)) {
+		if st.After(now) {
+			break // 只扫已开始的槽(8/12/16/20 中开始时刻 ≤ now 的)
+		}
+		if empty, _, ok := s.store.GetMerchantSlot(st.Unix()); !ok || empty {
+			continue // 未回源或无货,无提醒可发
+		}
+		s.merchantNotify(st)
 	}
 }
 
@@ -398,6 +423,10 @@ func (s *Server) merchantNotify(slotStart time.Time) {
 		subject := "远行商人新货上架(" + slotStart.Format("15:04") + " 轮)"
 		if err := s.sendMerchantMail(sub.Email, subject, body.String()); err == nil {
 			s.store.MarkMerchantNotified(slotStart.Unix(), sub.Email)
+		} else {
+			// 发信失败不 Mark:补扫(merchantResend)或下次触发仍会重试。
+			// 之前这里是静默吞错,查无可查(邮件没到 = 授权码过期/被限流/网络瞬断都无痕迹)。
+			log.Printf("merchantNotify 发信失败 slot=%s to=%s: %v", slotStart.Format("15:04"), sub.Email, err)
 		}
 	}
 }
