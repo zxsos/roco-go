@@ -78,7 +78,7 @@ export default function HandbookGlasses() {
                       <span className="hb-book">图鉴 #{it.book}</span>
                     </div>
                     <div className="hb-cards">
-                      {it.common.length > 0 && (
+                      {(it.common || []).length > 0 && (
                         <span className="hb-group">
                           <span className="hb-group-label">普通</span>
                           {it.common.map((v) => (
@@ -86,7 +86,7 @@ export default function HandbookGlasses() {
                           ))}
                         </span>
                       )}
-                      {it.hidden.length > 0 && (
+                      {(it.hidden || []).length > 0 && (
                         <span className="hb-group">
                           <span className="hb-group-label">隐藏</span>
                           {it.hidden.map((v) => (
