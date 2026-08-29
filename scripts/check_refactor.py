@@ -38,8 +38,18 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 
+# BASE_REV 是「拆分前」的基线修订,原始文件从它读取。
+#
+# 必须是固定的 commit 而非 HEAD:拆分提交后 HEAD 里已无那些原文件,
+# 用 HEAD 会让脚本失效(且只在提交后才暴露)。
+# f920b87 = 后端重构前的 master(含 admin.go 793 行 / api_merchant.go 988 行)。
+BASE_REV = "f920b87"
+
 # 原文件(相对仓库根) -> 拆分后的新文件列表
-# 原文件已删除,内容从 git 历史取(故只能校验已提交的拆分)。
+#
+# 原文件已删除,内容从 git 历史的 BASE_REV 取。故 BASE_REV **必须**指向拆分前的修订
+# (如 0c7a8b7),不能写 HEAD —— 拆分一旦提交,HEAD 里就没有这些文件了,
+# 脚本会以「读 git 历史失败」退出。这个坑在拆分提交后才会暴露。
 REFACTORS = {
     "internal/server/admin.go": [
         "internal/server/admin.go",
@@ -137,10 +147,16 @@ def norm_doc(lines):
 
 
 def git_show(path):
-    r = subprocess.run(["git", "show", f"HEAD:{path}"], cwd=ROOT,
+    r = subprocess.run(["git", "show", f"{BASE_REV}:{path}"], cwd=ROOT,
                        capture_output=True, text=True)
     if r.returncode != 0:
-        sys.exit(f"读 git 历史 {path} 失败(该文件未提交过?): {r.stderr.strip()}")
+        sys.exit(
+            f"读基线 {BASE_REV}:{path} 失败: {r.stderr.strip()}\n"
+            f"提示:BASE_REV 必须指向**拆分前**的修订。拆分提交后 HEAD 里就没有这些原文件了,\n"
+            f"若你把 BASE_REV 改成了 HEAD,改回拆分前的 commit 即可。\n"
+            f"可用 git log --oneline 找到拆分前的修订,再用 "
+            f"git cat-file -e <rev>:{path} 确认它含该文件。"
+        )
     return r.stdout
 
 
