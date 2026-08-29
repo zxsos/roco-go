@@ -1,0 +1,97 @@
+# rocom-capture 客户端代理配置
+# 服务端:103.236.77.188:11443 (hysteria2)
+#
+# 使用前必看:
+#   1. 需开启 TUN/增强模式,否则抓不到游戏流量(iOS 小火箭本身即 VPN,无需设置)
+#   2. 防火墙放行 UDP 11443(不是 TCP)
+#   3. 服务端 rocom-capture 必须加 -skip-self-ip=false,否则抓不到包
+#   4. PACKAGE-NAME / PROCESS-NAME 仅 Android + PC 有效;
+#      iOS 沙盒限制拿不到包名,小火箭导入时会自动降级为只用 DST-PORT,属正常
+
+port: 7890
+socks-port: 7891
+allow-lan: false
+mode: rule
+log-level: warning
+ipv6: false
+external-controller: 127.0.0.1:9090
+
+tun:
+  enable: true
+  stack: system
+  dns-hijack:
+    - 198.18.0.2:53
+  auto-route: true
+  auto-detect-interface: true
+
+dns:
+  enable: true
+  listen: 127.0.0.1:1053
+  enhanced-mode: fake-ip
+  fake-ip-range: 198.18.0.1/16
+  default-nameserver:
+    - 223.5.5.5
+    - 119.29.29.29
+  nameserver:
+    - https://doh.pub/dns-query
+    - https://dns.alidns.com/dns-query
+
+proxies:
+  - name: "ROCOM hy2"
+    type: hysteria2
+    server: "103.236.77.188"
+    port: 11443
+    password: "改成你的密码"
+    udp: false
+    skip-cert-verify: true   # 自签证书;挂域名+正规证书后改 false 并加 sni
+
+  - name: "SOCKS5 通道"
+    type: socks5
+    server: "103.236.77.188"
+    port: 10809
+    udp: false          # 服务端支持 UDP associate 时可改 true(QUIC/DNS 需要)
+    username: "改成你的用户名"
+    password: "改成你的密码"
+
+proxy-groups:
+  - name: "抓包通道"
+    type: select
+    proxies:
+      - "ROCOM hy2"
+      - DIRECT
+
+  - name: "代理通道"
+    type: select
+    proxies:
+      - "SOCKS5 通道"
+      - DIRECT
+
+rules:
+  # 按包名/进程名精确匹配(AND 需 Clash.Meta / fclash;iOS 不支持,见文件头注 4)
+
+  # Windows
+  - AND,((PROCESS-NAME,nrc-win64-shipping.exe),(DST-PORT,8195)),抓包通道
+
+  # macOS PlayCover(包名与安卓相同)
+  - AND,((PROCESS-NAME,com.tencent.nrc),(DST-PORT,8195)),抓包通道
+
+  # Android
+  - AND,((PACKAGE-NAME,com.tencent.nrc),(DST-PORT,8195)),抓包通道
+
+  # 兜底:上面都没匹配上(如 iOS)仍靠端口抓到,别删
+  - DST-PORT,8195,抓包通道
+
+  - IP-CIDR,192.168.0.0/16,DIRECT,no-resolve
+  - IP-CIDR,10.0.0.0/8,DIRECT,no-resolve
+  - IP-CIDR,172.16.0.0/12,DIRECT,no-resolve
+  - IP-CIDR,100.64.0.0/10,DIRECT,no-resolve
+  - IP-CIDR,127.0.0.0/8,DIRECT,no-resolve
+  - IP-CIDR,224.0.0.0/4,DIRECT,no-resolve
+  - GEOIP,CN,DIRECT
+  - MATCH,DIRECT
+
+  # 「代理通道」默认不接任何流量(未出现在上面的规则里)。
+  # 想让非游戏流量走 socks5 时,把上面 MATCH,DIRECT 改成 MATCH,代理通道。
+  # 也可按域名细分,例如:
+  #   - DOMAIN-SUFFIX,github.com,代理通道
+  #   - DOMAIN-SUFFIX,google.com,代理通道
