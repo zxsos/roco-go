@@ -88,7 +88,7 @@ const ellipsisText = (ctx, text, maxW) => {
   return s + '…'
 }
 
-// 单张卡片:真实炫彩色卡(普通三层合成 / 隐藏整图)+ 圆形白底头像镶嵌 + 白字名字
+// 单张卡片:真实炫彩色卡(普通三层合成 / 隐藏整图)+ 左上角透明背景头像 + 白字名字
 const drawGlassCard = (ctx, x, y, w, h, card, imgs) => {
   ctx.save()
   roundRectPath(ctx, x, y, w, h, 13)
@@ -108,22 +108,13 @@ const drawGlassCard = (ctx, x, y, w, h, card, imgs) => {
     if (pimg) drawMaskLayer(ctx, x, y, w, h, pimg, '#ffffff', false)
   }
   ctx.restore()
+  // 头像:直接画在左上角(保留图片透明背景,不加白底圆),contain 等比不裁切
   const head = imgs.get(imgURL(card.head))
   if (head) {
-    const cx = x + w / 2
-    const cy = y + h * 0.44
-    const r = 21
-    ctx.save()
-    ctx.beginPath()
-    ctx.arc(cx, cy, r, 0, Math.PI * 2)
-    ctx.fillStyle = '#fff'
-    ctx.fill()
-    ctx.clip()
-    const s = Math.min(36 / head.naturalWidth, 36 / head.naturalHeight)
+    const s = Math.min(34 / head.naturalWidth, 34 / head.naturalHeight)
     const dw = head.naturalWidth * s
     const dh = head.naturalHeight * s
-    ctx.drawImage(head, cx - dw / 2, cy - dh / 2, dw, dh)
-    ctx.restore()
+    ctx.drawImage(head, x + 5, y + 5, dw, dh)
   }
   if (card.name) {
     ctx.save()
