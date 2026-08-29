@@ -3,8 +3,8 @@ import { toPng } from 'html-to-image'
 import { getHandbookGlasses } from '../api'
 import { IconsContext } from '../context'
 import { imgURL } from '../components/icons'
-import { GlassChip } from '../components/badges'
-import { GLASS_COLORS } from '../data/glassConf'
+import { GlassChip, glassMask } from '../components/badges'
+import { GLASS_COLORS, GLASS_PARTICLES, GLASS_HIDDEN } from '../data/glassConf'
 
 // 主色(ui_color_1)→ 显示名。11 种主色按 GLASS_COLORS 键序(见 web/src/data/glassConf.js)。
 const MAJOR_NAMES = {
@@ -13,6 +13,30 @@ const MAJOR_NAMES = {
   '#aedfae': '淡绿', '#a8e5e5': '淡青', '#dbbceb': '淡紫',
   '#fdcdd3': '淡粉', '#f1d397': '淡黄',
 }
+
+// 分享图 8 个颜色分类(图例/列):6 个彩色系 + 黑白 + 赛季彩色。
+// 彩色系的代表色即列底色与图例圆点色;赛季彩色用多彩渐变。
+const SHARE_COLS = [
+  { key: 'blue', name: '蓝', color: '#4f6ff0' },
+  { key: 'cyan', name: '青', color: '#35c4dd' },
+  { key: 'green', name: '绿', color: '#67c94f' },
+  { key: 'yellow', name: '黄', color: '#f2c531' },
+  { key: 'pink', name: '粉', color: '#f2799e' },
+  { key: 'purple', name: '紫', color: '#a86df2' },
+  { key: 'mono', name: '黑白', color: '#7d8694' },
+  { key: 'season', name: '赛季', color: 'linear-gradient(135deg,#f2c531,#f2799e,#a86df2,#35c4dd)' },
+]
+// 11 种主色(ui_color_1)→ 分享图分类:按色相归入蓝/青/绿/黄/粉/紫。
+const MAJOR_TO_SHARE = {
+  '#3c32cf': 'blue', '#bac8fb': 'blue',
+  '#3ed7d7': 'cyan', '#a8e5e5': 'cyan',
+  '#83d256': 'green', '#aedfae': 'green',
+  '#f1d397': 'yellow',
+  '#e5576f': 'pink', '#fdcdd3': 'pink',
+  '#b869ed': 'purple', '#dbbceb': 'purple',
+}
+// 每列底部留白,让 8 列底部高度参差不齐(数量本就不同 + 留白差异,错落不齐)。
+const SHARE_COL_GAP = [8, 24, 14, 30, 10, 26, 16, 32]
 
 // 炫彩图鉴:按品种聚合展示本账号收集到的普通/隐藏炫彩色卡。
 // 数据来自登录包 pet_handbook(每次登录时快照更新),点击色卡可放大预览。
@@ -35,7 +59,7 @@ export default function HandbookGlasses() {
     node.style.left = '0'
     node.style.top = '0'
     try {
-      const url = await toPng(node, { pixelRatio: 2, backgroundColor: '#0e1116', cacheBust: true })
+      const url = await toPng(node, { pixelRatio: 2, backgroundColor: '#ffffff', cacheBust: true })
       const a = document.createElement('a')
       a.href = url
       const d = new Date()
@@ -109,6 +133,45 @@ export default function HandbookGlasses() {
       }))
       // 组序按组内最小配色 id(与 GLASS_COLORS 键序一致)
       .sort((a, b) => (a.cards[0] & 0xFFFFF) - (b.cards[0] & 0xFFFFF))
+  }, [data])
+
+  // 分享图 8 列数据:每列一个颜色分类,列内垂直堆叠该分类下的宠物卡片。
+  // 卡片粒度 = (宠物 × 分类):同一宠物有多个同分类炫彩只取第一张,跨分类
+  // (不同色系的炫彩)可出现在多列;普通炫彩按主色归入 6 个彩色系,隐藏炫彩
+  // 1000 归黑白、1/2/3 赛季归赛季彩色。
+  const shareCols = useMemo(() => {
+    if (!data) return null
+    const cols = SHARE_COLS.map((c) => ({ key: c.key, name: c.name, color: c.color, cards: [] }))
+    const seen = cols.map(() => new Set()) // 每列按 base 去重
+    for (const it of data) {
+      for (const v of it.common || []) {
+        const colors = GLASS_COLORS[v & 0xFFFFF]
+        if (!colors) continue
+        const key = MAJOR_TO_SHARE[colors[0]]
+        if (!key) continue
+        const ci = SHARE_COLS.findIndex((c) => c.key === key)
+        const s = seen[ci]
+        if (s.has(it.base)) continue
+        s.add(it.base)
+        cols[ci].cards.push({
+          base: it.base, book: it.book, name: it.name, head: it.head,
+          particle: GLASS_PARTICLES[v >> 20], // 卡片装饰粒子
+        })
+      }
+      for (const v of it.hidden || []) {
+        const key = v === 1000 ? 'mono' : 'season'
+        const ci = SHARE_COLS.findIndex((c) => c.key === key)
+        const s = seen[ci]
+        if (s.has(it.base)) continue
+        s.add(it.base)
+        cols[ci].cards.push({
+          base: it.base, book: it.book, name: it.name, head: it.head,
+          hidden: GLASS_HIDDEN[v], // 隐藏炫彩整图作卡片装饰
+        })
+      }
+    }
+    for (const c of cols) c.cards.sort((a, b) => a.base - b.base)
+    return cols
   }, [data])
 
   return (
@@ -216,37 +279,39 @@ export default function HandbookGlasses() {
       )}
 
       {/* 分享导出 DOM:平时隐藏不占位,点击分享时临时移到视口内导出。
-          排版与「按主色分组」一致:横向是主色调(色卡一排),纵向分组竖着排完。 */}
+          白色干净背景:顶部图例(8 个颜色分类圆点),下方 8 列垂直卡片列表
+          (每列一个分类,列内垂直堆叠彩色圆角卡片:粒子装饰 + 内嵌宠物头像),
+          每列数量不等 + 底部留白差异形成参差,页面底部灰色小字水印。 */}
       <div className="hb-share" ref={shareRef}>
-        <div className="hb-share-head">
-          <div className="hb-share-title">✨ 炫彩图鉴</div>
-          <div className="hb-share-sub">
-            按主色调分布 · 共 {stats ? stats.species : 0} 品种 / 普通 {stats ? stats.common : 0} / 隐藏 {stats ? stats.hidden : 0}
+        <div className="share-head">
+          <div className="share-title">✨ 炫彩图鉴</div>
+          <div className="share-legend">
+            {shareCols && shareCols.map((c) => (
+              <span className="share-legend-item" key={c.key}>
+                <i className="share-legend-dot" style={{ background: c.color }} />
+                {c.name}
+              </span>
+            ))}
           </div>
         </div>
-        {majorGroups && majorGroups.map((g) => (
-          <div className="hb-share-group" key={g.major}>
-            <div className="hb-share-group-head">
-              <span className="hb-share-dot" style={{ background: g.major }} />
-              <span className="hb-share-group-name">{g.name}<em>{g.major}</em></span>
-              <span className="hb-share-count">{g.cards.length} 色卡 · {g.pets.length} 品种</span>
-            </div>
-            <div className="hb-share-cards">
-              {g.cards.map((v) => <GlassChip key={v} p={{ glassType: 1, glassValue: v }} className="share-chip" />)}
-            </div>
-            <div className="hb-share-bar">
-              {g.pets.map((p) => (
-                <span className="hb-share-pet" key={p.base}>
-                  <img className="share-head" src={imgURL(p.head)} alt="" loading="lazy" />
-                  <span className="hb-share-pet-cards">
-                    {p.values.map((v) => <GlassChip key={v} p={{ glassType: 1, glassValue: v }} className="share-chip-sm" />)}
-                  </span>
-                  <span className="hb-share-pet-name">{p.name}</span>
-                </span>
+        <div className="share-cols">
+          {shareCols && shareCols.map((c, i) => (
+            <div className="share-col" key={c.key} style={{ paddingBottom: SHARE_COL_GAP[i] }}>
+              {c.cards.map((card) => (
+                <div className="share-card" key={card.base} style={{ background: c.color }}>
+                  {card.hidden ? (
+                    <img className="share-card-bg" src={imgURL('dazzling/' + card.hidden)} alt="" loading="lazy" />
+                  ) : card.particle ? (
+                    <i className="share-card-bg" style={glassMask(card.particle, 'rgba(255,255,255,.55)')} />
+                  ) : null}
+                  <img className="share-card-head" src={imgURL(card.head)} alt={card.name} loading="lazy" />
+                  <span className="share-card-name">{card.name}</span>
+                </div>
               ))}
             </div>
-          </div>
-        ))}
+          ))}
+        </div>
+        <div className="share-watermark">洛克王国·世界 · 炫彩图鉴 · 数据来自登录包快照</div>
       </div>
     </div>
   )
