@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useContext, useMemo } from 'react'
 import { getHandbookGlasses } from '../api'
-import { IconsContext } from '../context'
+import { AccountNameContext, IconsContext } from '../context'
 import { imgURL } from '../components/icons'
 import { GlassChip } from '../components/badges'
 import { GLASS_BG, GLASS_BG2, GLASS_PARTICLES, GLASS_COLORS, GLASS_HIDDEN } from '../data/glassConf'
@@ -147,13 +147,15 @@ const drawLegendDot = (ctx, cx, cy, r, col) => {
   ctx.restore()
 }
 
-// 白色背景 900px 分享图:标题 + 8 色图例 + 8 列瀑布(列顶齐列底参差)+ 底部灰色水印
-const drawShareCanvas = (cols, imgs) => {
+// 白色背景 900px 分享图:标题「xx的炫彩色卡统计」+ 总数 + 8 色图例 +
+// 8 列瀑布(列顶齐列底参差)+ 底部灰色水印
+const drawShareCanvas = (cols, imgs, owner, total) => {
   const W = SHARE_W
   const colW = (W - SHARE_PAD * 2 - SHARE_COLS_GAP * (cols.length - 1)) / cols.length
   const cardH = colW * 154 / 280
   const titleY = 26 + 19
-  const legendY = titleY + 10 + 9
+  const statY = titleY + 12 // 「共收集 N 张炫彩色卡」
+  const legendY = statY + 9 + 9
   const colTop = legendY + 9 + 16
   const colBottom = cols.map((c, i) => {
     const n = c.cards.length
@@ -169,12 +171,16 @@ const drawShareCanvas = (cols, imgs) => {
   ctx.scale(SHARE_SCALE, SHARE_SCALE)
   ctx.fillStyle = '#fff'
   ctx.fillRect(0, 0, W, H)
-  // 标题
+  // 标题:xx的炫彩色卡统计(xx=当前账号,未登录时显示「我的」)
   ctx.font = `800 24px ${SHARE_FONT}`
   ctx.textAlign = 'center'
   ctx.textBaseline = 'alphabetic'
   ctx.fillStyle = '#222'
-  ctx.fillText('✨ 炫彩图鉴', W / 2, titleY)
+  ctx.fillText(`${owner}的炫彩色卡统计`, W / 2, titleY)
+  // 总数:共收集 N 张炫彩色卡
+  ctx.font = `400 13px ${SHARE_FONT}`
+  ctx.fillStyle = '#888'
+  ctx.fillText(`共收集 ${total} 张炫彩色卡`, W / 2, statY)
   // 图例(整体居中):8 个颜色分类圆点 + 名字
   ctx.font = `400 13px ${SHARE_FONT}`
   const items = cols.map((c) => ({ c, w: 13 + 5 + ctx.measureText(c.name).width + 16 }))
@@ -206,6 +212,7 @@ const drawShareCanvas = (cols, imgs) => {
 }
 
 export default function HandbookGlasses() {
+  const accountName = useContext(AccountNameContext) // 当前账号昵称,分享图标题「xx的炫彩色卡统计」用
   const icons = useContext(IconsContext)
   const [data, setData] = useState(null) // null=加载中,其余为 glasses 数组
   const [err, setErr] = useState('')
@@ -234,7 +241,8 @@ export default function HandbookGlasses() {
       }
       const imgs = new Map()
       await Promise.all([...srcs].map(async (src) => { imgs.set(src, await loadImg(src)) }))
-      const url = drawShareCanvas(shareCols, imgs)
+      const total = shareCols.reduce((s, c) => s + c.cards.length, 0)
+      const url = drawShareCanvas(shareCols, imgs, accountName || '我的', total)
       const a = document.createElement('a')
       a.href = url
       const d = new Date()
