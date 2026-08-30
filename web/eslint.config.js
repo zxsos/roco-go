@@ -49,7 +49,7 @@ export default [
     // 用 playwright 的验收脚本是**双环境**:顶层跑 Node,而 page.evaluate / addInitScript
     // 的回调体是序列化后放进浏览器执行的 —— 里面用的 window / document / location 是
     // 浏览器的。故两套全局都要给,否则这些浏览器侧代码会被误报 no-undef。
-    files: ['scripts/verify-*-browser.mjs'],
+    files: ['scripts/*-browser.mjs', 'scripts/motion-report.mjs'],
     languageOptions: {
       ecmaVersion: 'latest',
       sourceType: 'module',
