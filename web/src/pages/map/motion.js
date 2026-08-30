@@ -24,7 +24,16 @@ export const defaultZoom = (p) => ZOOM_DEFAULTS[p && p.sceneResId] || ZOOM_FALLB
 // path(后端投影自 move_seg_list)补报上来:箭头届时沿这条**真实曲线**滑回正轨(GLIDE 秒内追平),
 // 而不是直线跳过去。转向本身最多晚一个心跳(~3s)才可见,那是游戏的上报节奏决定的,任何画法都提前
 // 不了(实测:此时直线外推仍是各策略中最准的,阻尼/定住/圆弧都更差)。见 docs/protocol.md 6。
-const MAX_EXTRAP = 3.5 // 外推上限(秒):超过心跳间隔仍无新包(抓包中断/掉线)就停住,免得一路飘走
+// —— 外推的速度衰减 ——
+// 原先是「硬截断」:Math.min(t, MAX_EXTRAP)——3.5s 内照常匀速外推,到点一刀切零。两个毛病:
+//   1. 心跳 2.5-3s 时余量只剩 0.5-1s,丢一个包就触发;实测最大间隔 3.05s,已逼近阈值;
+//   2. 玩家若在心跳空窗中途减速停下,箭头会以**全速**一路外推过去,再被 stop 包拽回来
+//      ——实测(本次抓包)这贡献了 p90 9.4m / 最大 15.1m 的过冲。
+// 改为速度指数衰减:位移 = ∫v·e^(-t/τ)dt = v·τ·(1-e^(-t/τ)),外推总位移**上限恒为 v·τ**,
+// 不再随时间线性累积。取 τ=0.25s:6m/s 时最多外推 1.5m(原为 2.5s×6 = 15m)。
+// 代价:长心跳的直线巡航里箭头不到 1s 就慢下来,落后于真人——但落后可用下面的轨迹回放补回,
+// 过冲却只能靠"先画错再拽回"补救,后者才是"不跟手"的观感来源。
+const EXTRAP_TAU = 0.25
 
 // 沿真实轨迹追平的时长(秒)。
 //
@@ -57,6 +66,13 @@ export const SMOOTH_TAU = 0.12 // 误差收敛时间常数(秒):新包与外推�
 const TAU_RATIO = 3 // 峰值修正速度 = 实际速度 × TAU_RATIO
 const TAU_MAX = 1.2
 // tauFor 按落差与速度算收敛时间常数。落差或速度为 0 时回退基准 τ。
+//
+// 注:stop 包(本次抓包占 33%)不带速度,此判据为假 → τ 退到最短的 0.12s。看着像缺陷,
+// 实测改掉它反而更差:给 stop 包换用「上一锚点速度(带衰减记忆)」当参考后,
+// 峰值修正速度按 vref×TAU_RATIO 水涨船高(最大 117→139 m/s),停下过冲 p50 0.6→3.2m,
+// 整体偏差均值 7.5→8.3m。原因是慢一拍的 τ 会让上一轮误差还没收敛就撞上下一个包,
+// 残余误差层层叠加。故保持原样 —— 这一处已被 EXTRAP_TAU 的改动间接治好
+// (外推不再一路飘,落差本身变小,除 0.12 也就不猛了:每帧最大位移 21.1→2.6m)。
 const tauFor = (gap, speed) =>
   (gap > 0 && speed > 0) ? clamp((gap / speed) / TAU_RATIO, SMOOTH_TAU, TAU_MAX) : SMOOTH_TAU
 // 衰减截止倍数:dt 超过 8τ 后 decay 直接归零。原因——e^(-dt/τ) 永不为 0,亚像素小数经 snap 的
@@ -93,11 +109,13 @@ const pathAt = (path, cum, r) => {
 
 // posAt 是锚点在其之后 dt 秒的应有位置(不含误差修正):先回放真实轨迹(有的话),再按速度外推。
 // 回放时长取锚点自带的 glide(按跨度自适应,见 glideFor),不再用固定常量。
+// 外推段按速度衰减积分(见 EXTRAP_TAU),不再用 Math.min(t, MAX_EXTRAP) 硬截断。
 export const posAt = (a, dt) => {
   const g = a.glide || GLIDE_MIN
   if (a.cum && dt < g) return pathAt(a.path, a.cum, easeOut(dt / g))
   const t = dt - (a.cum ? g : 0) // 回放结束时正好停在上报位置,由此继续外推
-  const ex = Math.min(t, MAX_EXTRAP)
+  if (t <= 0) return { u: a.u, v: a.v }
+  const ex = EXTRAP_TAU * (1 - Math.exp(-t / EXTRAP_TAU))
   return { u: a.u + a.vu * ex, v: a.v + a.vv * ex }
 }
 
