@@ -97,6 +97,39 @@ function paintFill(bits, gw, gh, ver) {
   return paintCanvas
 }
 
+// —— 头像四周羽化 ——
+// 与 map.css 的 .map-wild-face / .map-nest img 同一视觉:径向遮罩,中心 60% 全不透明、
+// 到圆周渐变到透明,让头像融入底图而不是硬切一个圆。
+//
+// canvas 没有 mask,故在离屏画布上先画头像、再用 destination-out 擦掉边缘。
+// **不能直接对主画布做 destination-out** —— 那会把已经画好的底图一起擦出洞,
+// 故必须先在离屏画布上合成好,再整体 drawImage 过去。
+const FEATHER = 64 // 离屏画布边长:固定值,不随标记尺寸变,免得每次重设尺寸重新分配
+let featherCanvas = null
+function featheredAvatar(im, scale) {
+  if (!featherCanvas) {
+    featherCanvas = document.createElement('canvas')
+    featherCanvas.width = featherCanvas.height = FEATHER
+  }
+  const c = featherCanvas.getContext('2d')
+  if (!c) return im // 拿不到 2d 上下文(极罕见):退回原图,不羽化
+  c.clearRect(0, 0, FEATHER, FEATHER)
+  const r = FEATHER / 2
+  c.save()
+  c.beginPath(); c.arc(r, r, r, 0, TAU); c.clip()
+  const dw = FEATHER * scale
+  c.drawImage(im, (FEATHER - dw) / 2, (FEATHER - dw) / 2, dw, dw)
+  // 擦边缘:内圈(60% 半径)alpha 0 不擦,到圆周 alpha 1 全擦,中间线性过渡
+  c.globalCompositeOperation = 'destination-out'
+  const g = c.createRadialGradient(r, r, r * 0.6, r, r, r)
+  g.addColorStop(0, 'rgba(0,0,0,0)')
+  g.addColorStop(1, 'rgba(0,0,0,1)')
+  c.fillStyle = g
+  c.fillRect(0, 0, FEATHER, FEATHER) // 被 clip 限制在圆内,圆外本就透明
+  c.restore()
+  return featherCanvas
+}
+
 // —— 外环解析:把 wildRing 产出的 box-shadow 翻成可画的圆环 ——
 // wildRing(见 wildMatch.js)把叠加的类别描边写成 box-shadow,形如:
 //   "0 0 0 3px #ff5252, 0 0 0 6px #40c4ff, 0 0 8px 1px #ff5252"
@@ -321,13 +354,10 @@ function drawNests(ctx, snap, focus, mapPx, w, h, palette) {
       ctx.fillStyle = palette.bg1
       ctx.beginPath(); ctx.arc(s.x, s.y, r, 0, TAU); ctx.fill()
       if (im) {
-        ctx.save()
-        ctx.beginPath(); ctx.arc(s.x, s.y, r - 2, 0, TAU); ctx.clip()
-        // 头像资源四周自带透明留白,放大 1.3 撑满内圆(与 .map-wild.rare 的头像同处理)
-        const scale = 1.3
-        const dw = (r - 2) * 2 * scale
-        ctx.drawImage(im, s.x - dw / 2, s.y - dw / 2, dw, dw)
-        ctx.restore()
+        // 头像资源四周自带透明留白,放大 1.3 撑满内圆(与 .map-wild.rare 的头像同处理);
+        // 羽化同样作用于住户头像(与 CSS 一致),蛋图标不在此列(它是单独画的)。
+        const cr = r - 2
+        ctx.drawImage(featheredAvatar(im, 1.3), s.x - cr, s.y - cr, cr * 2, cr * 2)
       }
       ctx.lineWidth = 2
       ctx.strokeStyle = palette.gold
@@ -378,9 +408,9 @@ function drawWilds(ctx, snap, focus, mapPx, w, h, palette) {
     ctx.save()
     ctx.beginPath(); ctx.arc(s.x, s.y, clipR, 0, TAU); ctx.clip()
     if (im) {
-      const scale = rare ? 1.3 : 1
-      const dw = clipR * 2 * scale
-      ctx.drawImage(im, s.x - dw / 2, s.y - dw / 2, dw, dw)
+      // 羽化后的头像自带圆形(边缘已渐隐),无需再 clip 裁圆
+      ctx.drawImage(featheredAvatar(im, rare ? 1.3 : 1),
+        s.x - clipR, s.y - clipR, clipR * 2, clipR * 2)
     } else {
       // 缺图回退 emoji(与 .map-wild-face-fallback 一致)
       ctx.fillStyle = palette.fg

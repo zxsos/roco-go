@@ -187,7 +187,15 @@
 }
 /* 悬停或点中时放大一点并提亮描边,进一步确认指到了哪一只(标记只有 30px,挨得近时有用)。 */
 .map-wild:hover, .map-wild.tip { transform: translate(-50%, -50%) scale(1.15); filter: drop-shadow(0 0 4px rgba(255, 255, 255, .5)); }
-.map-wild-face { width: 100%; height: 100%; object-fit: cover; display: block; }
+/* 头像四周羽化:径向遮罩让边缘渐隐,融入底图而不是硬切一个圆。
+   中心 60% 保持全不透明(主体要看清),外圈 40% 渐变到透明。
+   稀有度靠**外圈描边/光环**区分,故只羽化头像图片本身,边框保持清晰——
+   若连边框一起羽化,异色/炫彩与普通宠在小尺寸下就分不出来了。 */
+.map-wild-face {
+  width: 100%; height: 100%; object-fit: cover; display: block;
+  -webkit-mask-image: radial-gradient(circle at 50% 50%, #000 60%, transparent 100%);
+  mask-image: radial-gradient(circle at 50% 50%, #000 60%, transparent 100%);
+}
 .map-wild-face-fallback { font-size: 16px; line-height: 1; }
 
 /* —— 异色/炫彩稀有标记:放大头像 + 渐变旋转光环 + 发光脉动 + 角标徽章 ——
@@ -531,6 +539,13 @@
 }
 @keyframes map-nest-bob { 0%, 100% { box-shadow: 0 0 0 0 rgba(245, 185, 66, 0); } 50% { box-shadow: 0 0 0 4px rgba(245, 185, 66, .18); } }
 .map-nest img { width: 100%; height: 100%; object-fit: cover; display: block; border-radius: 50%; }
+/* 住户头像同样羽化(与野生宠标记同一处理,参数一致)。
+   **蛋图标除外**:它只有 20px,且是「窝上有没有蛋」的标识,羽化会糊成一团,
+   必须保持清晰可辨——注意它靠 :not() 排除,不能反过来写成「给某类加」。 */
+.map-nest img:not(.map-nest-egg) {
+  -webkit-mask-image: radial-gradient(circle at 50% 50%, #000 60%, transparent 100%);
+  mask-image: radial-gradient(circle at 50% 50%, #000 60%, transparent 100%);
+}
 /* 空窝:虚线圈 + 一个「空」字。背景**半透明**——相邻两窝在地图上只隔几十像素,
    实心底色会糊成一团黑;小一圈也是为了不抢住户的注意力。 */
 .map-nest.empty {
