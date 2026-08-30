@@ -1399,7 +1399,26 @@ s2c 0x1346 DATA 明文 body
     **仅在 0x1888 解析**(其他 opcode 的子消息易误判为 PetBoxPetChange)。
   - **队位**:队伍变更/盒子操作回包(`CarriesTeam`:登录/6272-6292/524-527)常一并刷新完整队伍快照,
     复用 `ParseTeams` 整体 `ReplacePetTeams`。
+  - **两表必须互清**(在队宠物不在盒子里,二者互斥,见 `internal/pet/model.go` 的 `Pet.Team` 注释):
+    - `ApplyBoxMoves`(盒位增量)清 `pet_team` —— 宠物入盒即离队;
+    - `ReplacePetTeams`(队伍快照)清 `pet_box` —— 宠物入队即离盒。
+    缺任一方向会让宠物同时挂两张表。**实际踩到的就是这个**:`0x1888` 拖动交换时,
+    「挤进盒子」那只走 `box_pet_change` 增量(带出其新盒位,并清它残留的队位),
+    而「挤进队伍」那只的新队位**只**出现在同包的完整队伍快照里 ——
+    `ReplacePetTeams` 若不顺手清 `pet_box`,它就仍占着原盒位,表现为
+    「盒子 → 队伍」这个方向拖完不同步(列表与盒子示意图都还显示它在盒里)。
+  - **只清这一个方向,镜像方向刻意不做**:给 `ReplacePetBoxes`(全量盒快照)也加清 `pet_team`
+    看着对称,但实测下来是**空操作**:登录包 `0x0102`(同时带两种快照)实测盒位 857 个 gid、
+    队位 18 个 gid,**交集 0 个** —— 游戏把在队宠物排除在盒快照外。故按盒快照 gid 去删
+    `pet_team` 永远删不到行,加它只是徒增一段没人走得到的分支与维护负担。
+    (顺带这也说明「清 `pet_box`」同样是安全的:登录时它删 0 行,不存在误删。)
+    **若将来某 opcode 的盒快照开始含在队宠物,这里要重新评估** —— 那种情况下镜像清理会
+    因为 `CarriesTeam` ⊇ `CarriesBackpack`(盒子 opcode 也可能带队伍快照)而在
+    `ParseTeams` 解不出队伍的那类包上抹掉整支队伍。故不做,不是因为懒,是因为它现在是死代码
+    且将来可能是危险的死代码。
   - 实测 pcap(交换队首两位 + 盒内 1→30 移位 + 盒内 2/3 互换):三处变更均正确落库。
+    另实测「宠物盒 ↔ 大世界队伍拖动交换」(`TestBoxTeamSwapClearsStaleSide`):修复前 gid=6476
+    拖进队伍后盒子位置仍在,修复后两向都同步。
 - **宠物奖牌墙**(每只宠物拥有的全部奖牌):数据在 **登录 `0x0102`** 的 `PlayerSvrDataInfo.pet_medal_info`
   → `PlayerPetMedalInfo.medal_infos[]`(`PetMedalInfo`:#1 medal_conf_id / #2 medal_type / #3 owner 组[]),
   组内 #2 记录里宠物 gid = `#8(obtain_pet_gid) ?? #6 ?? #2`。**注:该消息线上 wire 格式与 all.pb 的
