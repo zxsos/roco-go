@@ -103,6 +103,8 @@ INTENTIONALLY_CHANGED = {
     # 阶段 2:调用点改为 s.snap.* / s.smtp.*
     "merchantNotify": "阶段2:发信调用点改为 s.smtp.send*",
     "merchantResend": "阶段2:发信调用点改为 s.smtp.send*",
+    # fix:raw string 不转义,写在模板里的 \r\n 是四个字面字符,收件端可见 —— 改回真 CRLF 拼接
+    "merchantMailGroup": "fix:分组标题行的 \\r\\n 原本写在 raw string 里,是四个字面字符",
     "handleMerchantSub": "阶段2:发信调用点改为 s.smtp.send*,配置判定改为 s.smtp.configured()",
     "handleAdminMerchantSubs": "阶段2:配置判定改为 s.smtp.configured()",
     "handleAdminMerchantTestMail": "阶段2:发信调用点改为 s.smtp.send*",
