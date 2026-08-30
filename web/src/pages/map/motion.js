@@ -24,16 +24,21 @@ export const defaultZoom = (p) => ZOOM_DEFAULTS[p && p.sceneResId] || ZOOM_FALLB
 // path(后端投影自 move_seg_list)补报上来:箭头届时沿这条**真实曲线**滑回正轨(GLIDE 秒内追平),
 // 而不是直线跳过去。转向本身最多晚一个心跳(~3s)才可见,那是游戏的上报节奏决定的,任何画法都提前
 // 不了(实测:此时直线外推仍是各策略中最准的,阻尼/定住/圆弧都更差)。见 docs/protocol.md 6。
-// —— 外推的速度衰减 ——
-// 原先是「硬截断」:Math.min(t, MAX_EXTRAP)——3.5s 内照常匀速外推,到点一刀切零。两个毛病:
-//   1. 心跳 2.5-3s 时余量只剩 0.5-1s,丢一个包就触发;实测最大间隔 3.05s,已逼近阈值;
-//   2. 玩家若在心跳空窗中途减速停下,箭头会以**全速**一路外推过去,再被 stop 包拽回来
-//      ——实测(本次抓包)这贡献了 p90 9.4m / 最大 15.1m 的过冲。
-// 改为速度指数衰减:位移 = ∫v·e^(-t/τ)dt = v·τ·(1-e^(-t/τ)),外推总位移**上限恒为 v·τ**,
-// 不再随时间线性累积。取 τ=0.25s:6m/s 时最多外推 1.5m(原为 2.5s×6 = 15m)。
-// 代价:长心跳的直线巡航里箭头不到 1s 就慢下来,落后于真人——但落后可用下面的轨迹回放补回,
-// 过冲却只能靠"先画错再拽回"补救,后者才是"不跟手"的观感来源。
-const EXTRAP_TAU = 0.25
+// —— 外推:全速保持 + 软膝衰减 ——
+// 三种做法都实测过(两份真实抓包,见 web/scripts/verify-motion.mjs 与 fixtures/):
+//
+//   linear 硬截断 min(t, 3.5s):点触式抓包单帧最大跳 21.1m(越过 SNAP_DIST 触发硬跳),
+//     但连续移动抓包上偏差最小(2.7m)。
+//   decay 全时程衰减 τ(1-e^(-t/τ)):消除了 21m 硬跳,但**高速时外推被压得太死**
+//     ——33m/s 骑乘时最多只外推 v×τ≈8m,而玩家一个 0.8s 间隔就跑了 26m,箭头反而落后 13m
+//     并在那里冻住 1.8s。连续移动抓包上偏差从 2.7m 劣化到 4.2m。
+//   hold 全速保持 H 秒,之后按 τ 衰减(采用):先按上报的速度足额外推 H 秒(覆盖绝大多数
+//     间隔:H=0.6s 已盖住连续移动的 p95 间隔 0.97s 中的大半),之后平滑收尾。
+//
+// 采用 hold 后两项都优于 linear:点触式 7.5→6.7m、连续移动 2.7→2.6m,单帧最大跳 21.1→2.6m。
+// 参数敏感度低(H 0.5-0.8、τ 0.15-0.4 区间内偏差和相差 <0.1m),不是刀尖上的取值。
+const EXTRAP_HOLD = 0.6  // 全速外推的时长(秒)
+const EXTRAP_TAU = 0.3   // 之后的衰减时间常数(秒);外推总位移上限 = v × (H + τ)
 
 // 沿真实轨迹追平的时长(秒)。
 //
@@ -109,13 +114,22 @@ const pathAt = (path, cum, r) => {
 
 // posAt 是锚点在其之后 dt 秒的应有位置(不含误差修正):先回放真实轨迹(有的话),再按速度外推。
 // 回放时长取锚点自带的 glide(按跨度自适应,见 glideFor),不再用固定常量。
-// 外推段按速度衰减积分(见 EXTRAP_TAU),不再用 Math.min(t, MAX_EXTRAP) 硬截断。
+//
+// extrapolate 把「距回放结束 t 秒」折算成**按当前速度等效走过多久**:
+// t 秒内先全速(等效 t)保持 EXTRAP_HOLD,之后速度按 τ 衰减,位移渐近到 v×(HOLD+τ)。
+// 返回的是等效秒数,乘 vu/vv 即得位移(见 EXTRAP_HOLD 处三种做法的实测对比)。
+export function extrapolate(t) {
+  if (t <= 0) return 0
+  if (t <= EXTRAP_HOLD) return t
+  return EXTRAP_HOLD + EXTRAP_TAU * (1 - Math.exp(-(t - EXTRAP_HOLD) / EXTRAP_TAU))
+}
+
 export const posAt = (a, dt) => {
   const g = a.glide || GLIDE_MIN
   if (a.cum && dt < g) return pathAt(a.path, a.cum, easeOut(dt / g))
   const t = dt - (a.cum ? g : 0) // 回放结束时正好停在上报位置,由此继续外推
   if (t <= 0) return { u: a.u, v: a.v }
-  const ex = EXTRAP_TAU * (1 - Math.exp(-t / EXTRAP_TAU))
+  const ex = extrapolate(t)
   return { u: a.u + a.vu * ex, v: a.v + a.vv * ex }
 }
 

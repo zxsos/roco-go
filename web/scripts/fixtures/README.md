@@ -1,7 +1,23 @@
 # 运动平滑回归 fixture 的来源与重制方法
 
-`motion-packets.json` 是**真实抓包**的派生数据，不是手搓的。它存在的唯一目的：让
-`verify-motion.mjs` 能在没有 pcap、没有后端的环境下复现"箭头平不平"的度量。
+`tap-move.json` / `continuous.json` 是**真实抓包**的派生数据，不是手搓的。它存在的唯一目的：
+让 `verify-motion.mjs` 能在没有 pcap、没有后端的环境下复现「箭头平不平」的度量。
+
+## 两份 fixture 为什么都要有
+
+只有一份时极易**过拟合**：曾只有 `tap-move.json`（点触式走走停停，间隔 p95 2.6s），
+据此把外推调成「全时程速度衰减」，单看这份数据一切变好；补上 `continuous.json`
+（连续移动，间隔 p95 0.97s）后才发现它在这个更常见的场景上把偏差从 2.7m 劣化到 4.2m。
+
+两份数据的移动特征差异很大，任何只在一边变好的改动都不该被采纳：
+
+| | tap-move | continuous |
+| --- | --- | --- |
+| 包数 / 时长 | 137 / 80.6s | 1088 / 268.5s |
+| 上报间隔 中位 / p95 | 0.14s / 2.61s | 0.12s / 0.97s |
+| stop 包占比 | 33% | 9% |
+| 峰值速度 | 2917 cm/s | 2980 cm/s |
+| 侧重点 | 启停、长静默 | 跟手、稳态抖动 |
 
 ## 内容
 
@@ -21,12 +37,15 @@
 
 ## 重制方法
 
-1. 抓一份含多种移动方式的 pcap（地面 / 骑乘 / 飞行、直线 / 转弯、频繁启停）。
-2. 用 `scene.ParseMoveReq` 解析，按 `pipeline.buildPos` 的同款逻辑投影成上表形状，
-   JSON 落盘（`t` 保留 3 位小数、`u/v` 保留 6 位，1px 底图 ≈ 1.02m，精度足够）。
+    go run ./cmd/movean -out web/scripts/fixtures/tap-move.json   a.pcap
+    go run ./cmd/movean -out web/scripts/fixtures/continuous.json b.pcap
 
-导出逻辑约 60 行 Go，此前是临时工具 `cmd/_tmp_movean`（已删，未随提交保留）。
-重制时照 `buildPos` 重写即可，判据必须与后端一致，否则度量的是"假数据"。
+`cmd/movean` 复用 `internal/scene` 的解析与 `internal/gamedata` 的投影（与 `pipeline.buildPos`
+同款判据，含 `SegSpan >= 0.6` 才带 path、末点补 `to_pos`）。它还会打一份数据画像
+（包数 / 时长 / 间隔分位 / stop 占比 / 峰值速度 / 移动模式分布 / stop 后沉默时长），
+用来判断新抓的包覆盖了哪些移动特征。
+
+**不要用别的方式生成**：自己另写一份解析迟早会和后端跑偏，度量的就成了假数据。
 
 ## 更换 fixture 的注意事项
 
