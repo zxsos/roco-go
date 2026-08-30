@@ -83,6 +83,32 @@ try {
   const arrow = await page.$eval('.map-arrow', (el) => el.style.transform || '').catch(() => '')
   check('玩家箭头已定位', /translate3d/.test(arrow), arrow.slice(0, 60))
 
+  // —— 头像标记无实心底色 ——
+  // 头像靠 .map-wild-face 的 radial-gradient 羽化边缘融入底图,但前提是**背后没有实心底色**:
+  // 否则边缘是渐隐到那块底色上,看起来仍是一整块不透明圆片(即「周边不透明」)。
+  // 故这里断言计算后的背景是透明的 —— 改回 background: var(--bg-1) 会被抓到。
+  // 只查实际渲染出来的元素(本份抓包没有小窝/全部野生,缺样本则跳过,不误报)。
+  const opaque = await page.evaluate(() => {
+    const out = []
+    for (const sel of ['.map-wild', '.map-nest']) {
+      for (const el of document.querySelectorAll(sel)) {
+        const bg = getComputedStyle(el).backgroundColor
+        // 透明色的规范形式:rgba(0, 0, 0, 0) / transparent
+        const a = /^rgba?\(([^)]+)\)$/.exec(bg)
+        const alpha = a ? (a[1].split(',')[3] != null ? parseFloat(a[1].split(',')[3]) : 1) : 1
+        if (alpha > 0.01) out.push(`${sel} 背景 ${bg}`)
+      }
+    }
+    return out
+  })
+  const sample = await page.evaluate(() =>
+    [...document.querySelectorAll('.map-wild, .map-nest')].length)
+  if (sample === 0) {
+    check('头像标记无实心底色', true, '本份数据无样本,跳过')
+  } else {
+    check('头像标记无实心底色', opaque.length === 0, opaque.slice(0, 2).join(' | ') || `已查 ${sample} 个标记`)
+  }
+
   check('页面无 JS 错误', errors.length === 0, errors.slice(0, 2).join(' | '))
 } catch (e) {
   check('执行完成', false, String(e).split('\n')[0])
