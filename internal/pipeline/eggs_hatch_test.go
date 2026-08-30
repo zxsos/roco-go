@@ -138,3 +138,138 @@ func eggBriefBytes(gid uint32) []byte {
 	b = protowire.AppendVarint(b, 57600) // max_secs
 	return b
 }
+
+// —— 放进孵蛋器的蛋要立刻出现在孵蛋器栏 ——
+//
+// 用户操作:在**背包**里点一颗蛋选「孵化」。客户端发 0x0164(用道具),服务器回包
+// 带回这颗蛋的 BagItem(start_hatch_time 已被置为非零)。
+//
+// 现状:0x0164 走「只当普通变化入库」那条分支,known 传 nil,hatching 列不动,
+// 于是孵蛋器栏不新增;要等玩家打开孵蛋器面板、0x0312 的权威 egg_gid 列表到货才收敛。
+// 但从背包入孵时孵蛋器面板并未打开,0x0311/0x0312 未必会来 —— 这一等就是永远。
+//
+// 为何这里可以信 start_hatch_time:不信任它只因「取出后服务器不清零」,那说的是
+// **快照**(0x1344 / 登录包)里的残留值;而 0x0164 / 0x0300 是服务器对「刚放进去 /
+// 刚取出来」这一动作的明确回包,是非即否都是当场证据,不存在残留问题。
+
+// TestPutEggIntoIncubatorShowsIt 在背包入孵后,这颗蛋应立刻出现在孵蛋器栏。
+func TestPutEggIntoIncubatorShowsIt(t *testing.T) {
+	p, _ := newTestPipeline(t)
+
+	// 登录时孵蛋器是空的
+	p.handle(msg(gcp.S2C, pet.OpLoginRsp, loginWithHatchBody(1, "测试", nil)))
+	p.handle(msg(gcp.S2C, pet.OpGetBagItemInfoByPageRsp, bagEggPageBody(1, 1, []uint32{4001})))
+	if got := eggHatching(t, p, 4001); got {
+		t.Fatalf("前置条件:入孵前 gid 4001 不该在孵")
+	}
+
+	// 在背包里点「孵化」:0x0164 回包带回这颗蛋,start_hatch_time 已置位
+	p.handle(msg(gcp.S2C, pet.OpUseBagItemRsp, eggActionBody(4001)))
+
+	if got := eggHatching(t, p, 4001); !got {
+		t.Errorf("背包入孵后 gid 4001 应判为在孵(孵蛋器栏要立刻多出这颗蛋),实际 hatching=false")
+	}
+}
+
+// TestHatchStatusNotClobberByStaleLoginList 权威列表到货后不能被登录那一刻的旧快照冲掉。
+//
+// hatchGids 是登录时记下的孵蛋器占用列表,本意是给「登录包先到、蛋后入库」的时序兜底。
+// 但它**从不失效**:此后每一次背包分页(0x1344)都拿这份登录时的旧列表把 hatching 列
+// 整体覆盖回去。于是入孵之后再开一次背包,标记就被打成登录时的样子 —— 新放进去的那颗
+// (登录时还不在孵蛋器里)会被打回不在孵。
+func TestHatchStatusNotClobberByStaleLoginList(t *testing.T) {
+	p, _ := newTestPipeline(t)
+
+	p.handle(msg(gcp.S2C, pet.OpLoginRsp, loginWithHatchBody(1, "测试", nil)))
+	p.handle(msg(gcp.S2C, pet.OpGetBagItemInfoByPageRsp, bagEggPageBody(1, 1, []uint32{4001})))
+
+	// 开孵蛋器:权威列表说 4001 在孵
+	p.handle(msg(gcp.S2C, pet.OpGetAllHatchStatusRsp, hatchStatusBody([]uint32{4001}, nil)))
+	if got := eggHatching(t, p, 4001); !got {
+		t.Fatalf("前置条件:0x0312 权威列表到货后 4001 应在孵,实际 false")
+	}
+
+	// 再开一次背包(入孵后回到背包很常见):不该被登录时的空列表打回
+	p.handle(msg(gcp.S2C, pet.OpGetBagItemInfoByPageRsp, bagEggPageBody(1, 1, []uint32{4001})))
+	if got := eggHatching(t, p, 4001); !got {
+		t.Errorf("开背包后 4001 被登录时的旧列表打回不在孵(hatchGids 未随权威列表更新)")
+	}
+}
+
+// TestStopHatchRemovesFromIncubator 取出(0x0300)应立刻把这颗蛋从孵蛋器栏撤下。
+func TestStopHatchRemovesFromIncubator(t *testing.T) {
+	p, _ := newTestPipeline(t)
+
+	p.handle(msg(gcp.S2C, pet.OpLoginRsp, loginWithHatchBody(1, "测试", []uint64{4001})))
+	p.handle(msg(gcp.S2C, pet.OpGetBagItemInfoByPageRsp, bagEggPageBody(1, 1, []uint32{4001})))
+	if got := eggHatching(t, p, 4001); !got {
+		t.Fatalf("前置条件:4001 应在孵")
+	}
+
+	p.handle(msg(gcp.S2C, pet.OpStopHatchRsp, eggActionBody(4001)))
+	if got := eggHatching(t, p, 4001); got {
+		t.Errorf("取出后 4001 应立刻从孵蛋器撤下,实际仍在孵")
+	}
+}
+
+// ---- 辅助 ----
+
+// eggHatching 读某颗蛋当前是否在孵。
+func eggHatching(t *testing.T, p *Pipeline, gid uint32) bool {
+	t.Helper()
+	eggs, err := p.st.For(testAcc).ListEggs(store.EggFilter{})
+	if err != nil {
+		t.Fatalf("读蛋: %v", err)
+	}
+	for _, e := range eggs {
+		if e.Gid == gid {
+			return e.Hatching
+		}
+	}
+	t.Fatalf("库里没有 gid %d", gid)
+	return false
+}
+
+// eggActionBody 构造 0x0164 / 0x0300 这类「动作回包」:
+// ret_info(1).goods_change_info(4).changes(1).bag_item(4) = 一颗蛋。
+//
+// start_hatch_time(9) **两种动作下都给非零**,这是刻意按服务器真实行为建模的:
+// 取出时服务器只把进度清零,**不清入孵时刻**(这正是「取出过的蛋会被误判在孵」的根源,
+// 见 pet.Egg.Hatching 的注释)。故单看这个字段分不出放入还是取出 —— 只能靠 opcode。
+// 测试若把它留成 0,就测不出「取出」分支是否真的把标记清掉了。
+func eggActionBody(gid uint32) []byte {
+	brief := eggBriefBytes(gid)
+	brief = protowire.AppendTag(brief, 9, protowire.VarintType)
+	brief = protowire.AppendVarint(brief, 1785000000) // start_hatch_time(两种动作下都非零)
+	item := protowire.AppendTag(nil, 1, protowire.VarintType)
+	item = protowire.AppendVarint(item, uint64(gid))
+	item = protowire.AppendTag(item, 15, protowire.BytesType)
+	item = protowire.AppendBytes(item, brief)
+
+	chg := protowire.AppendTag(nil, 4, protowire.BytesType)
+	chg = protowire.AppendBytes(chg, item)
+	change := protowire.AppendTag(nil, 1, protowire.BytesType)
+	change = protowire.AppendBytes(change, chg)
+
+	// ret_info: field 4 = goods_change_info
+	ret := protowire.AppendTag(nil, 4, protowire.BytesType)
+	ret = protowire.AppendBytes(ret, change)
+
+	// 回包顶层: field 1 = ret_info
+	b := protowire.AppendTag(nil, 1, protowire.BytesType)
+	return protowire.AppendBytes(b, ret)
+}
+
+// hatchStatusBody 构造 0x0312 孵化状态回包:顶层 egg_gid(2) 与 hatched_secs(3)。
+func hatchStatusBody(gids []uint32, secs []int32) []byte {
+	var b []byte
+	for i, g := range gids {
+		b = protowire.AppendTag(b, 2, protowire.VarintType)
+		b = protowire.AppendVarint(b, uint64(g))
+		if i < len(secs) {
+			b = protowire.AppendTag(b, 3, protowire.VarintType)
+			b = protowire.AppendVarint(b, uint64(secs[i]))
+		}
+	}
+	return b
+}
