@@ -522,6 +522,11 @@ function drawArrow(ctx, snap, focus, mapPx, w, h, palette, scale) {
   // 原 svg 是 24×24 视口里的 30px 图形
   const k = arrowSize / 24
   ctx.scale(k, k)
+  // 把 24×24 视口的中心移到旋转中心 —— 对应 DOM 版 .map-arrow 的 translate(-50%,-50%)
+  // (见 useMapEngine.applyFrame 的 arrow transform)。少了这一步,图形的 (0,0) 会被
+  // 对齐到玩家坐标,而箭头画在视口中央(12,12)附近,于是整体偏移 (12,12)×k
+  // (scale=1 时约 22px);且偏移随 heading 一起转,表现为「箭头绕着中心打转、不在中心」。
+  ctx.translate(-12, -12)
   ctx.beginPath()
   ctx.moveTo(12, 2); ctx.lineTo(20, 21); ctx.lineTo(12, 16); ctx.lineTo(4, 21)
   ctx.closePath()

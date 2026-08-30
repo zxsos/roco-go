@@ -12,6 +12,10 @@
 //   2. palette.bg / palette.bg1 给成辨识度极高的洋红 / 亮绿。
 // 于是「标记内部那块区域是洋红还是亮绿」就能直接回答
 // **头像背后有没有垫实心底色** —— 垫了就是绿色(不透明),没垫就是洋红(透出底图)。
+//
+// 另有一组**玩家箭头居中**的断言(见下方 ARROW 段):PiP 的焦点恒为玩家自身位置,
+// 故箭头必须画在画布正中。判据取箭头的**像素重心**而非某个顶点 —— 箭头随 heading
+// 旋转,顶点位置跟着转,重心不转;断言具体像素会随朝向误报。
 
 import { chromium } from 'playwright'
 import { createServer } from 'vite'
@@ -76,6 +80,53 @@ try {
   // 透出底图 = 洋红;垫了实心底色 = 亮绿
   check('野生宠头像无实心底色(透出底图)', got.wild === 'rgb(255, 0, 255)', `标记内 ${got.wild}`)
   check('小窝住户头像无实心底色(透出底图)', got.nest === 'rgb(255, 0, 255)', `标记内 ${got.nest}`)
+
+  // —— 玩家箭头必须画在画布正中 ——
+  // 背景:PiP 的 focus 恒取玩家位置(见 usePip.buildSnap),故玩家屏幕坐标 = 画布中心。
+  // 曾漏了 DOM 版 translate(-50%,-50%) 的对应补偿,箭头整体偏移 (12,12)×k
+  // (scale=1 时约 22px),且偏移随 heading 一起旋转 —— 表现为「箭头绕着中心打转」。
+  // 多个朝向量一遍:只测一个朝向,恰好朝向与偏移同向时也可能蒙混过关。
+  const arrows = await page.evaluate(async () => {
+    const m = await import('/src/pages/map/pipDraw.js')
+    const SIZE = 512
+    const out = []
+    for (const heading of [0, 90, 180, 270]) {
+      const cv = document.createElement('canvas')
+      cv.width = cv.height = SIZE
+      const ctx = cv.getContext('2d')
+      // 底图白、箭头纯红:只统计「红得发黑」的像素即可把箭头从背景里挑出来。
+      // 光晕是半透明红叠在白底上(G 被抬到 ~120),不会被误计入。
+      const palette = {
+        bg: '#ffffff', bg1: '#ffffff', line: '#000000', fg: '#000000',
+        fgDim: '#808080', gold: '#ffff00', star: '#ffff00', portal: '#c9b6ff',
+        shiny: '#ffff00', flowerD: '#ff5fa2', flower: '#ffb6e0', red: '#ff0000',
+      }
+      const u = 0.5, v = 0.5
+      m.renderToCanvas(ctx, {
+        w: SIZE, h: SIZE, zoom: 2, scale: 1,
+        focus: { u, v }, palette,
+        sceneImg: '__no_such_scene__',
+        player: { u, v, heading },
+      })
+      const d = ctx.getImageData(0, 0, SIZE, SIZE).data
+      let n = 0, sx = 0, sy = 0
+      for (let y = 0; y < SIZE; y++) {
+        for (let x = 0; x < SIZE; x++) {
+          const i = (y * SIZE + x) * 4
+          if (d[i] > 200 && d[i + 1] < 40 && d[i + 2] < 40) { n++; sx += x; sy += y }
+        }
+      }
+      out.push({ heading, n, dist: n ? Math.hypot(sx / n - SIZE / 2, sy / n - SIZE / 2) : -1 })
+    }
+    return out
+  })
+  // 阈值 4px:形状自身不对称(三角形重心在 viewBox 的 (12,12.7) 而非 (12,12))会留下
+  // 约 1px 残余,与 DOM 版行为一致;留 4px 余量既不误报,也足以抓住当年的 22px 偏移。
+  const off = arrows.filter((a) => a.n === 0 || a.dist > 4)
+  check('玩家箭头居中(4 个朝向重心均贴近画布中心)', off.length === 0,
+    off.length ? off.map((a) => `${a.heading}° 偏 ${a.dist.toFixed(1)}px`).join(', ')
+      : arrows.map((a) => `${a.heading}° ${a.dist.toFixed(1)}px`).join(' '))
+
   check('绘制过程无 JS 错误', errors.length === 0, errors.slice(0, 2).join(' | '))
 } catch (e) {
   check('执行完成', false, String(e).split('\n')[0])
