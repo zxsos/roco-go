@@ -142,7 +142,15 @@ html[data-privacy] .brand { color: var(--fg-dim); }
      (下拉**条目**不在此列——浮层不占顶栏宽度,UID 照常显示。) */
   .acct-uid { display: none; }
   /* 没有导航要让位,上限交还给剩余空间(超长昵称就缩到剩多少显示多少) */
-  .account-select { max-width: none; }
+  .account-select { max-width: none; width: 100%; }
+  /* 账号下拉**吃掉顶栏剩余空间**。
+     实测(360/390/414 三个手机视口):顶栏里除它之外的元素加起来才 ~110px,
+     而它 width:auto 只按内容撑到 82px,**剩下的一百多像素一直空着** ——
+     于是昵称稍长就先吃省略号,而空间其实根本没用完。
+     给 .account-wrap 加 flex:1 接管剩余空间(其余项仍是 flex:0 1 auto 的固有宽,
+     不会被挤),配合上面 .account-select 的 width:100% 撑满,长昵称能多显示出好几个字,
+     点击区域也跟着变大——手机上端端这个按钮本来就该是大热区。 */
+  .account-wrap { flex: 1; }
   /* 同 .topbar:backdrop-filter 创建层叠上下文,故本栏层级须高于内容区全部浮层。 */
   .bottomnav {
     display: flex; position: sticky; bottom: 0; z-index: var(--z-shell);
