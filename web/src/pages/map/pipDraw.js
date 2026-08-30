@@ -119,11 +119,13 @@ function featheredAvatar(im, scale) {
   c.beginPath(); c.arc(r, r, r, 0, TAU); c.clip()
   const dw = FEATHER * scale
   c.drawImage(im, (FEATHER - dw) / 2, (FEATHER - dw) / 2, dw, dw)
-  // 擦边缘:内圈(60% 半径)alpha 0 不擦,到圆周 alpha 1 全擦,中间线性过渡
+  // 擦边缘:内圈(60% 半径)alpha 0 不擦,到圆周只擦到 SIZES.featherEdge,中间线性过渡。
+  // 圆周处**不留全擦**(即不擦到 0):与 .map-wild-face 的 mask 一致,边缘保留 50% 不透明,
+  // 完全擦净会让头像边缘彻底消失、显得发虚不成型。
   c.globalCompositeOperation = 'destination-out'
   const g = c.createRadialGradient(r, r, r * 0.6, r, r, r)
   g.addColorStop(0, 'rgba(0,0,0,0)')
-  g.addColorStop(1, 'rgba(0,0,0,1)')
+  g.addColorStop(1, 'rgba(0,0,0,' + (1 - SIZES.featherEdge) + ')')
   c.fillStyle = g
   c.fillRect(0, 0, FEATHER, FEATHER) // 被 clip 限制在圆内,圆外本就透明
   c.restore()
