@@ -626,13 +626,6 @@
    ⧉ 按钮:把地图投到系统悬浮窗(见 pages/map/usePip.js)。开启态高亮,
    不支持的浏览器由 :disabled 置灰,title 里给出原因(不静默失败)。 */
 .map-pip-toggle { font-size: 15px; }
-/* 小窗开启时才出现的缩放按钮:小窗不可交互,缩放只能从主页面调,故这两个
-   按钮**不属于**地图缩放(那组是 ＋/－/◎),用更小的尺寸与上缩进以示区别。 */
-.map-pip-zoom {
-  width: 30px; height: 30px; font-size: 14px;
-  margin-left: 4px; align-self: flex-end;
-  opacity: .9;
-}
 
 /* 画中画的 video 挂载点:1px 透明,固定在视口角落。
    为什么不用 display:none —— 部分浏览器不解码隐藏元素,PiP 出来是黑屏;
