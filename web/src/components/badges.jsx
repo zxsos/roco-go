@@ -116,10 +116,11 @@ function GlassZoom({ p, type, value, onClose }) {
             只是个普通 <a>,不点不会有任何外部请求(本项目是局域网工具,断网照常用)。 */}
         {rkpet && (
           <a
-            className="glass-zoom-rkpet"
+            className="btn glass-zoom-rkpet"
             href={rkpet}
             target="_blank"
             rel="noopener noreferrer"
+            title="在 rkpet 新窗口打开,看这只宠物同一套炫彩的 3D 效果(需浏览器支持 WebGPU)"
             onClick={stop}
           >
             在 rkpet 看 3D 效果 ↗
