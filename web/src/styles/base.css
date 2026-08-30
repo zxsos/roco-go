@@ -270,6 +270,15 @@ input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; margin
 .glass-zoom-close {
   position: absolute; top: -10px; right: -10px; z-index: var(--z-raised); width: 26px; height: 26px;
 }
+/* 放大预览里的 rkpet 链接:跳过去看同一套炫彩的 3D 效果(见 rkpetURL)。
+   摆在卡片**下方**居中,不当成卡片的一部分——卡片那块是点一下关遮罩的,
+   链接压在上面会被误认成卡片的一部分(且点它不该关遮罩,已 stopPropagation)。
+   外链要写明「↗ 新窗口」,让人先知道会跳走;本工具是局域网的,没网时点了只是打不开。 */
+.glass-zoom-rkpet {
+  display: block; margin-top: 10px; text-align: center;
+  font-size: 12px; color: var(--fg-dim); text-decoration: none;
+}
+.glass-zoom-rkpet:hover { color: var(--accent); text-decoration: underline; }
 
 /* ---- 系别色 ---- */
 .type {
