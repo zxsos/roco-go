@@ -9,21 +9,22 @@ import { Marks } from '../../components/badges'
 import { hatchProgress } from './hatch'
 import { toast } from '../../components/toast'
 
-// 精灵蛋页面:两段垂直 —— 孵蛋器(在孵的蛋)、仓库(其余蛋)。不分标签页——在孵的蛋本来就不
-// 出现在背包格子里(BagModuleData.IsRemoveEggItem)。
+// 精灵蛋页面:两段垂直 —— 孵蛋器(在孵且进度未满的蛋)、仓库(其余蛋)。不分标签页——在孵的蛋
+// 本来就不出现在背包格子里(BagModuleData.IsRemoveEggItem)。
 //
 // 此前还有第三段「已孵化蛋」(标记在孵但进度满),那是给历史 bug 打的补丁:服务器取出孵蛋器
 // 不清 start_hatch_time,背包全量/登录(0x1344)会把已取出的蛋重新标成在孵,而进度字段被清零
 // 后前端外推瞬间顶满,于是按「在孵且进度满」把它们圈出来隔离。15648bf 改用登录/开孵蛋器时
-// 的权威 egg_gid 判定在孵后,残留标记不再产生,该栏随之作废 —— 剩下的「进度满」是**真孵满
-// 待破壳**的蛋,它们物理上仍在游戏内的孵蛋器里,故并回孵蛋器(卡片显示「可破壳」),不另立一栏。
+// 的权威 egg_gid 判定在孵后,残留标记不再产生,该栏随之作废,进度满的蛋也一并不再显示
+// (孵化倍率是本地估的,见 hatch.js,拿它当「可破壳」的依据并不可靠;且孵蛋器上限 3 格,
+// 孵满了玩家会立刻点掉,不会在页面上看它挂着)。
 // 排序复刻游戏内背包的两种(见 docs/data.md 3.6 与 internal/pet.SortEggs)。
 const SORTS = [
   { k: 'quality', label: '品质' },
   { k: 'obtained', label: '获取时间' },
 ]
 
-// 孵蛋器格子数:实测 3 个(玩家上限可能随等级/道具变,故按实际在孵数取大)。
+// 孵蛋器格子数:游戏内固定 3 格(游戏内上限,不随等级/道具变)。
 const HATCH_SLOTS = 3
 
 // 部分异色形态的蛋配置名自带「的蛋」,后端模板({0}的蛋)再拼一层就成了「XX的蛋的蛋」,
@@ -115,13 +116,12 @@ export default function EggList() {
   // 孵化进度随时间涨:秒级刷新即可。
   useInterval(() => setNow(Date.now()), 1000)
 
-  // 两段分类:孵蛋器=标记在孵的蛋(保持后端槽位序;进度满的也在此,显示「可破壳」);
-  // 仓库=其余(后端已排好序,原样保留)。
-  const incubating = data.eggs.filter((e) => e.hatching)
-  const bag = data.eggs.filter((e) => !e.hatching)
-  // 孵蛋器至少 3 格(与游戏内一致),实际在孵更多时按实际数铺开 —— 宁可多画格子,
-  // 也不要把多出来的蛋藏掉(进度满的蛋并回本栏后,超出 3 颗在理论上可能发生)。
-  const slots = Math.max(HATCH_SLOTS, incubating.length)
+  // 两段分类:孵蛋器=标记在孵且进度未满的蛋(保持后端槽位序);仓库=其余(后端已排好序,原样保留)。
+  // 进度满的蛋两处都不显示(见文件头说明)。
+  const withP = data.eggs.map((e) => ({ e, p: hatchProgress(e, now) }))
+  const incubating = withP.filter((x) => x.e.hatching && (x.p == null || x.p.pct < 100)).map((x) => x.e)
+  const bag = withP.filter((x) => !x.e.hatching).map((x) => x.e)
+  const slots = HATCH_SLOTS
 
   return (
     <div className="eggs-page">
@@ -165,7 +165,7 @@ export default function EggList() {
 }
 
 // IncuTitle 孵蛋器标题:「孵蛋器 n/3」+ 提示图标。图标比数字小;
-// 点击弹出半透明气泡,说明在孵口径(后端权威快照,不是按进度猜的)。点气泡外关闭。
+// 点击弹出半透明气泡,说明在孵口径(后端权威快照)与进度是本地外推的估算。点气泡外关闭。
 function IncuTitle({ n, slots }) {
   const ref = useRef(null)
   const [tip, setTip] = useState(false)
@@ -179,9 +179,9 @@ function IncuTitle({ n, slots }) {
     <div className="eggs-col-t">
       孵蛋器 <span className="muted">{n}/{slots}</span>
       <span ref={ref} className="incu-tip">
-        <img className="incu-tip-ic" src="/ps.svg" alt="?" title="按后端登录/开孵蛋器时的权威快照判定"
+        <img className="incu-tip-ic" src="/ps.svg" alt="?" title="在孵按权威快照判定,进度是本地外推的估算"
           onClick={() => setTip((t) => !t)} draggable={false} />
-        {tip && <span className="incu-tip-bubble">按后端登录 / 开孵蛋器时的权威快照判定在孵,不靠进度猜;进度满的仍在此处,显示「可破壳」</span>}
+        {tip && <span className="incu-tip-bubble">在孵按后端登录 / 开孵蛋器时的权威快照判定;进度条是本地外推的估算</span>}
       </span>
     </div>
   )
