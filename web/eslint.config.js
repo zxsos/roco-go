@@ -55,6 +55,7 @@ export default [
     //   - verify-map-motion-browser.mjs 移动平滑度(RAF 逐帧)
     //   - verify-pip-canvas.mjs         画中画 canvas 像素
     //   - motion-report.mjs             偏差可视化报告
+    //   - verify-admin-browser.mjs      管理面板失效令牌不黑屏
     // 判定方法:顶层 import 'playwright' 的脚本就是双环境的,加进来即可。
     files: [
       'scripts/verify-map-vp-browser.mjs',
@@ -62,6 +63,7 @@ export default [
       'scripts/verify-map-motion-browser.mjs',
       'scripts/verify-pip-canvas.mjs',
       'scripts/motion-report.mjs',
+      'scripts/verify-admin-browser.mjs',
     ],
     languageOptions: {
       ecmaVersion: 'latest',
