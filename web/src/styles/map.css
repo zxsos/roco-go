@@ -666,7 +666,14 @@
 }
 .map-zone-total b { font-size: 13px; color: var(--fg); font-weight: 600; }
 .map-zone-total i { font-style: normal; font-size: 12px; }
-.map-zone-total em { font-style: normal; font-size: 11px; margin-left: 4px; }
+/* 百分比:这里**不能用 .muted** —— .map-medal-toggle 内的 .muted 是展开箭头的旋转
+   目标(收起时 rotate(-90deg)),数字带上它就会跟着侧倒。故自行取 --fg-dim,
+   与 .muted 同色但不参与旋转。 */
+.map-zone-total em {
+  font-style: normal; font-size: 11px; margin-left: 4px;
+  color: var(--fg-dim);
+  font-variant-numeric: tabular-nums;
+}
 
 /* 总进度条(整宽,在总览行下面) */
 .map-zone-bar {
