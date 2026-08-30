@@ -273,3 +273,137 @@ func hatchStatusBody(gids []uint32, secs []int32) []byte {
 	}
 	return b
 }
+
+// —— 动作回包(0x0164 放入 / 0x0300 取出)同时带「变化的那颗蛋」与「权威孵蛋器列表」——
+//
+// 结构按 2026-08-30 抓包实测(见 docs/data.md 3.6):
+//   ret_info(1).goods_change_info(4).changes(1):
+//     ├─ bag_item(4).egg_data(15)   —— 受影响的那颗蛋
+//     └─ backpack_info(6).egg_gid[] —— 动作**之后**的完整孵蛋器列表(权威口径)
+//
+// 以下三组 gid 直接取自那次抓包:取出前 [4379 4434 4313] → 取出 4313 → [4379 4434]
+// → 放入 4303 → [4379 4434 4303]。
+
+// TestEggActionUsesAuthoritativeList 以回包自带的权威列表为准,不靠 start_hatch_time 猜方向。
+// 这是 0x0164 的真实情形(回包里有背包数据):放入后新蛋在孵,且列表里没有的自然清除。
+func TestEggActionUsesAuthoritativeList(t *testing.T) {
+	p, _ := newTestPipeline(t)
+
+	p.handle(msg(gcp.S2C, pet.OpLoginRsp, loginWithHatchBody(1, "测试", []uint64{4379, 4434, 4313})))
+	p.handle(msg(gcp.S2C, pet.OpGetBagItemInfoByPageRsp, bagEggPageBody(1, 1, []uint32{4379, 4434, 4313, 4303})))
+	for _, g := range []uint32{4379, 4434, 4313} {
+		if !eggHatching(t, p, g) {
+			t.Fatalf("前置条件:gid %d 应在孵", g)
+		}
+	}
+	if eggHatching(t, p, 4303) {
+		t.Fatalf("前置条件:gid 4303 入孵前不该在孵")
+	}
+
+	// 放入 4303:回包权威列表 [4379 4434 4303],变化的那颗是 4303
+	p.handle(msg(gcp.S2C, pet.OpUseBagItemRsp, eggActionBodyFull(4303, []uint32{4379, 4434, 4303})))
+	if got := eggHatching(t, p, 4303); !got {
+		t.Errorf("放入后 gid 4303 应在孵(孵蛋器栏要出现这颗),实际 false")
+	}
+}
+
+// TestEggActionRemovesEggNotInList 取出:被取出的蛋不在权威列表里,应立刻从孵蛋器撤下。
+// 关键点是**取出回包里 start_hatch_time 仍非零**(实测 4313 取出时是 1788082293),
+// 所以只能靠列表,不能靠那个字段。
+func TestEggActionRemovesEggNotInList(t *testing.T) {
+	p, _ := newTestPipeline(t)
+
+	p.handle(msg(gcp.S2C, pet.OpLoginRsp, loginWithHatchBody(1, "测试", []uint64{4379, 4434, 4313})))
+	p.handle(msg(gcp.S2C, pet.OpGetBagItemInfoByPageRsp, bagEggPageBody(1, 1, []uint32{4379, 4434, 4313})))
+	if !eggHatching(t, p, 4313) {
+		t.Fatalf("前置条件:gid 4313 应在孵")
+	}
+
+	// 取出 4313:权威列表只剩 [4379 4434];变化的那颗仍带非零 start_hatch_time(残留值)
+	p.handle(msg(gcp.S2C, pet.OpStopHatchRsp, eggActionBodyFull(4313, []uint32{4379, 4434})))
+	if got := eggHatching(t, p, 4313); got {
+		t.Errorf("取出后 gid 4313 应立刻从孵蛋器撤下,实际仍在孵(被残留的 start_hatch_time 误导了)")
+	}
+	if !eggHatching(t, p, 4379) || !eggHatching(t, p, 4434) {
+		t.Error("取出一颗不该影响孵蛋器里其余的蛋")
+	}
+}
+
+// TestEggActionMarksEggNotYetInDB 这颗蛋第一次出现在动作回包里(库里还没有)也要标上在孵。
+//
+// 权威列表对账只改**已存在的行**;若蛋是随这个回包首次入库的,得由 upsert 拿刚记住的
+// 权威列表把它标上。少了这一步,这类蛋会入库但 hatching=0 —— 孵蛋器栏照样不显示。
+// (此用例专门守住 applyEggAction 里 upsert 传 hatchGids 那一步:去掉它只挂这一条。)
+func TestEggActionMarksEggNotYetInDB(t *testing.T) {
+	p, _ := newTestPipeline(t)
+
+	// 背包分页里只有 4379;4303 此刻还没进库(例如刚从商店买到、还没刷背包就点了孵化)
+	p.handle(msg(gcp.S2C, pet.OpLoginRsp, loginWithHatchBody(1, "测试", []uint64{4379})))
+	p.handle(msg(gcp.S2C, pet.OpGetBagItemInfoByPageRsp, bagEggPageBody(1, 1, []uint32{4379})))
+
+	// 放入 4303:权威列表 [4379 4303]
+	p.handle(msg(gcp.S2C, pet.OpUseBagItemRsp, eggActionBodyFull(4303, []uint32{4379, 4303})))
+
+	if got := eggHatching(t, p, 4303); !got {
+		t.Errorf("首次随动作回包入库的 gid 4303 应判为在孵,实际 false(upsert 没带上权威列表)")
+	}
+}
+
+// ---- 辅助:带权威列表的动作回包 ----
+
+// eggActionBodyFull 构造带 backpack_info 的动作回包(0x0164 / 0x0300 的真实形态)。
+// gid 是受影响的那颗蛋,slots 是动作之后的孵蛋器占用列表。
+//
+// 层级与 ParseChangedEggs 的取法一致(见 pet/egg.go):
+//
+//	body{1:ret_info} → ret_info{4:GoodsChange} → {1:GoodsChangeItem[]} → {4:bag_item}
+//
+// GoodsChangeItem 里除 bag_item(4) 外还挂着 backpack_info —— 那是孵蛋器的权威占用列表。
+func eggActionBodyFull(gid uint32, slots []uint32) []byte {
+	// 变化的那颗蛋:BagItem{1:gid, 15:egg_data}
+	brief := eggBriefBytes(gid)
+	brief = protowire.AppendTag(brief, 9, protowire.VarintType)
+	brief = protowire.AppendVarint(brief, 1788082749) // start_hatch_time:取出时同样是残留非零值
+	bagItem := protowire.AppendTag(nil, 1, protowire.VarintType)
+	bagItem = protowire.AppendVarint(bagItem, uint64(gid))
+	bagItem = protowire.AppendTag(bagItem, 15, protowire.BytesType)
+	bagItem = protowire.AppendBytes(bagItem, brief)
+
+	// GoodsChangeItem{4:bag_item, 6:backpack_info}
+	changeItem := protowire.AppendTag(nil, 4, protowire.BytesType)
+	changeItem = protowire.AppendBytes(changeItem, bagItem)
+	// bestBackpack 要求 boxes 非空且至少 5 个非零 pet_gid,否则整包判为解不出 ——
+	// 故这里填满;宠物数不足的账号走的就是「解不出」的兜底分支(见 applyEggAction)。
+	changeItem = protowire.AppendTag(changeItem, 6, protowire.BytesType)
+	changeItem = protowire.AppendBytes(changeItem, backpackWithEggs(slots))
+
+	// GoodsChange{1:GoodsChangeItem[]}
+	goods := protowire.AppendTag(nil, 1, protowire.BytesType)
+	goods = protowire.AppendBytes(goods, changeItem)
+	// ret_info{4:GoodsChange}
+	ret := protowire.AppendTag(nil, 4, protowire.BytesType)
+	ret = protowire.AppendBytes(ret, goods)
+	// body{1:ret_info}
+	b := protowire.AppendTag(nil, 1, protowire.BytesType)
+	return protowire.AppendBytes(b, ret)
+}
+
+// backpackWithEggs 构造 PetBackpackInfo:egg_gid(1)[] + boxes(2)(带足够多的 pet_gid
+// 以通过 bestBackpack 的校验)。
+func backpackWithEggs(eggGids []uint32) []byte {
+	var b []byte
+	for _, g := range eggGids {
+		b = protowire.AppendTag(b, 1, protowire.VarintType)
+		b = protowire.AppendVarint(b, uint64(g))
+	}
+	// boxes(3): box_id(1)=1 + pet_gid(3) × 6
+	box := protowire.AppendTag(nil, 1, protowire.VarintType)
+	box = protowire.AppendVarint(box, 1)
+	for i := 1; i <= 6; i++ {
+		box = protowire.AppendTag(box, 3, protowire.VarintType)
+		box = protowire.AppendVarint(box, uint64(40000+i))
+	}
+	b = protowire.AppendTag(b, 3, protowire.BytesType)
+	b = protowire.AppendBytes(b, box)
+	return b
+}

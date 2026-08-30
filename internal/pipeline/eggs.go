@@ -105,19 +105,29 @@ func (p *Pipeline) handleEgg(m capture.Message, acc string) {
 // 请求状态)。但从背包里点「孵化」时面板并未打开,0x0311/0x0312 未必会来,这一等就是永远,
 // 孵蛋器栏永远少这颗新放进去的蛋(见 TestPutEggIntoIncubatorShowsIt)。
 //
-// 方向只由 opcode 定,不靠蛋自己的 start_hatch_time 定方向:那个字段取出后**不清零**,
-// 在取出回包里同样是残留值,照它判断会把刚取出的蛋又标回在孵
-// (见 TestStopHatchRemovesFromIncubator)。
+// 这类回包**同时**带两样东西(2026-08-30 抓包实测,见 TestEggActionUsesAuthoritativeList):
+//   - changes[].bag_item.egg_data:受影响的那颗蛋(gid + 时刻/进度)
+//   - backpack_info.egg_gid[]:**动作之后**的完整孵蛋器占用列表,与登录 0x0102、
+//     开孵蛋器 0x0312 是同一个权威口径(pet.BackpackHatchSlots)
 //
-// **待验证的假设**:放入时要求回包里的 start_hatch_time 已非零(当作「这颗确实进了孵蛋器」
-// 的确认,也避免 0x0164 被挪作他用时不误标)。若实测服务器不在 0x0164 回包里置位该字段,
-// 就去掉这个条件、只按 opcode 定方向 —— 未验证前保留它,最坏是退回旧行为(等 0x0312),
-// 不会比现在更差。
+// 有权威列表就以它为准全量对账:它是全量的、不必判断动作方向(取出后那颗自然就不在列里),
+// 也不会被 start_hatch_time 的残留值误导 —— 实测取出回包里那个字段**不清零**
+// (取出 4313 时仍是 1788082293),照它判断会把刚取出的蛋又标回在孵。
 //
-// 顺带同步本连接记住的权威列表 hatchGids:它是登录那一刻的旧快照,此后每开一次背包
-// (0x1344)都拿它把 hatching 列整体覆盖回去,不同步则刚写入的标记会被旧列表盖掉。
+// 没有权威列表时退回按 opcode 定方向:bestBackpack 要求 boxes 里至少 5 个非零 pet_gid
+// (见 pet/parse_box.go),宠物少的账号解不出背包,这条兜底是必需的而非理论分支。
+// 此时放入才要求 start_hatch_time 非零,当作「这颗确实进了孵蛋器」的确认。
 func (p *Pipeline) applyEggAction(sc *store.Scoped, acc string, m capture.Message, intoIncubator bool) {
 	eggs := pet.ParseChangedEggs(m.AppBody)
+	if gids, ok := pet.BackpackHatchSlots(m.AppBody); ok {
+		// 先对账(它顺带记住最新权威列表),再入库:新入孵的蛋可能此刻才第一次出现,
+		// 对账改不到它,随后的 upsert 会拿刚记住的列表把它标上。
+		p.applyHatchSlots(m.Session, sc, acc, gids, nil, nil, m.Time)
+		if len(eggs) > 0 {
+			p.upsertEggs(sc, acc, eggs, m.Time, p.conn(m.Session).hatchGids)
+		}
+		return
+	}
 	if len(eggs) == 0 {
 		return
 	}
@@ -127,7 +137,7 @@ func (p *Pipeline) applyEggAction(sc *store.Scoped, acc string, m capture.Messag
 		p.conn(m.Session).hatchGids = known
 	}
 	for _, e := range eggs {
-		// 放入时以 start_hatch_time 为准(非零即刚放进去);取出时一律置否。
+		// 放入:以 start_hatch_time 非零当作确认;取出:一律置否。
 		known[e.Gid] = intoIncubator && e.StartHatch > 0
 	}
 	p.upsertEggs(sc, acc, eggs, m.Time, known)
