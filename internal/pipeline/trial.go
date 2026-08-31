@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/whoisnian/rocom-capture/internal/capture"
+	"github.com/whoisnian/rocom-capture/internal/gamedata"
 	"github.com/whoisnian/rocom-capture/internal/gcp"
 	"github.com/whoisnian/rocom-capture/internal/server"
 	"github.com/whoisnian/rocom-capture/internal/trial"
@@ -524,6 +525,33 @@ func (p *Pipeline) trialRunPayload(r *trialRun, damOf map[uint32]int32) *server.
 	if out.ChapterIdx == 0 && r.chapterID >= 3000 {
 		out.ChapterIdx = r.chapterID - 3000 + 1
 	}
+	// 静态配置(wiki):层类型 / 章节名 / 第 7 层候选阵容。
+	// 协议只给编号,这些「这一层是什么、对面可能是谁」得查静态表才知道。
+	// 缺数据时留空 —— 静态配置是可选的,不该因为它缺失就让整个接口失败。
+	if f := p.db.TrialFloor(r.nodeIndex); f != gamedata.FloorUnknown {
+		out.Floor, out.FloorLabel = string(f), f.Label()
+		if f == gamedata.FloorNPC {
+			for _, o := range p.db.TrialNPCOpponents(r.trialConfID, out.ChapterIdx) {
+				op := server.TrialOpponent{ID: o.ID, Name: o.Name}
+				for _, base := range o.Pets {
+					pet := server.TrialOppPet{Base: base}
+					if info, ok := p.db.PetBase(base); ok {
+						pet.Name = info.Name
+						if form := info.Form; form != "" {
+							pet.Name += "_" + form
+						}
+					}
+					// 头像按 petbase 查;不是每个形态都有图,缺图时留空由前端占位
+					if im := p.db.PetImageByBase(base, false); im.Head != "" {
+						pet.Img = im.Head
+					}
+					op.Pets = append(op.Pets, pet)
+				}
+				out.Opponents = append(out.Opponents, op)
+			}
+		}
+	}
+	out.ChapterName = p.db.TrialChapterName(out.ChapterIdx)
 	out.Chapters = r.chapters
 	out.Effects = r.effects
 	if r.pet != nil {

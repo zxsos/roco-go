@@ -30,9 +30,10 @@ const TRIAL_NAMES = {
   10002: '进阶 2',
 }
 
-// 每层结构(来自 wiki):1-3 层普通池、4 层首领池、5 层普通池、6 层无精灵(商人/魔力之源)、
-// 7 层 NPC 阵容。试炼实际是「3 章 × 8 节点」,与这里的层数是两套口径,此处仅作参考注释,
-// 不参与进度计算(进度仍按实测的每章 8 节点推)。
+// 层结构已由后端下发(run.floor / run.floorLabel),见 gamedata/trial.go。
+// 要点:wiki 说每章 7 层,协议是 8 个节点(node_index 0~7)—— node_index 0 是章节
+// 起点(无战斗),1~7 依次对应 wiki 的 1~7 层。这个映射是抓包实测出来的
+// (node_index 6 无战斗、node_index 7 对手是 NPC),不是照抄 wiki,别改成 7 段。
 
 export default function Trial() {
   const account = useContext(AccountContext)
@@ -105,10 +106,22 @@ function RunView({ run, active }) {
           <span className="trial-chip" title={'难度 id ' + run.trialId}>
             {TRIAL_NAMES[run.trialId] || ('难度 ' + run.trialId)}
           </span>
+          {/* 章节名优先用后端的(来自静态配置),硬编码表只作兜底 */}
           <span className="trial-chip" title={'章节 id ' + run.chapterId}>
-            第 {run.chapterIdx || 1} 章 · {CHAPTER_NAMES[run.chapterId] || '未知章节'}
+            第 {run.chapterIdx || 1} 章 ·{' '}
+            {run.chapterName || CHAPTER_NAMES[run.chapterId] || '未知章节'}
           </span>
           <span className="trial-chip">节点 {run.nodeIndex + 1}</span>
+          {/* 层类型来自静态配置(wiki):这一层是普通/首领/商人还是 NPC。
+              协议只给 node_index,「这一层是什么」查表才知道。缺数据时整块不显示。 */}
+          {run.floorLabel && (
+            <span
+              className={'trial-chip trial-floor trial-floor-' + run.floor}
+              title={`第 ${run.nodeIndex + 1} 个节点 · ${run.floor}`}
+            >
+              {run.floorLabel}
+            </span>
+          )}
           <span className="trial-chip trial-coin" title="试炼金币">🪙 {run.coin}</span>
           {run.boss && <span className="trial-chip trial-boss">BOSS</span>}
         </div>
@@ -136,6 +149,22 @@ function RunView({ run, active }) {
           {run.refreshCost > 0 && (
             <div className="muted trial-note">本节点刷新已花费 {run.refreshCost} 金币</div>
           )}
+        </section>
+      )}
+
+      {run.opponents && run.opponents.length > 0 && (
+        <section className="trial-group">
+          <h4 className="trial-group-t">
+            第 7 层 NPC 候选({run.opponents.length} 套阵容)
+          </h4>
+          {/* wiki 的 opponent id 与协议 npc_id 不是同一套编号,无从锁定当前遭遇到底
+              是哪一个 —— 这里是候选池,措辞上不能说成「对面就是这几只」。 */}
+          <div className="muted trial-note">
+            进入战斗前只能列出候选;实际遭遇以游戏内为准
+          </div>
+          <div className="trial-opps">
+            {run.opponents.map((o) => <OpponentCard key={o.id} o={o} />)}
+          </div>
         </section>
       )}
 
@@ -244,6 +273,28 @@ function ResultCard({ result }) {
 }
 
 // PetCard 展示试炼宠物副本。
+// OpponentCard 是第 7 层的一个候选 NPC 阵容:标题是 NPC 名,下面是它带的精灵。
+// 每只精灵带名字与头像 —— 都由后端补齐(头像并非每个形态都有,缺图时 img 为空,
+// ImgAvatar 会自己占位,这里不用管)。
+function OpponentCard({ o }) {
+  return (
+    <div className="trial-opp">
+      <div className="trial-opp-name">
+        {o.name}
+        <span className="muted trial-opp-id"> #{o.id}</span>
+      </div>
+      <div className="trial-opp-pets">
+        {(o.pets || []).map((p) => (
+          <div key={p.base} className="trial-opp-pet" title={p.name || String(p.base)}>
+            <ImgAvatar src={p.img} alt={p.name} className="trial-opp-img" />
+            <span>{p.name || p.base}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 function PetCard({ pet }) {
   const pct = pet.maxHp > 0 ? Math.round((pet.hp / pet.maxHp) * 100) : 0
   return (

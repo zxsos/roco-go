@@ -321,10 +321,21 @@ func contractTrial() *TrialPayload {
 		Active:  true,
 		Run: &TrialRun{
 			TrialID: 10002, SlotID: 1000, SlotName: "普系",
-			ChapterID: 3001, ChapterIdx: 2, NodeIndex: 3, Coin: 12,
+			ChapterID: 3001, ChapterIdx: 2, NodeIndex: 7, Coin: 12,
 			Chapters: []uint32{3000, 3001, 3002},
 			Effects:  []uint32{1001, 1008},
 			Boss:     false,
+			// node_index 7 = NPC 层(层类型的映射见 gamedata/trial.go),
+			// 故下面带上第 7 层的候选阵容;其余层不会带 opponents。
+			Floor: "npc", FloorLabel: "NPC",
+			ChapterName: "记忆中的巨石阵",
+			Opponents: []TrialOpponent{
+				{ID: 310005, Name: "易西", Pets: []TrialOppPet{
+					{Base: 3031, Name: "奇丽花", Img: "HeadIcon/3031.webp"},
+					{Base: 3067, Name: "卷毛鸭", Img: "HeadIcon/3067.webp"},
+					{Base: 3027, Name: "蒲公英娃娃"}, // 无头像:形态没图时 img 缺失
+				}},
+			},
 			Pet: &TrialPet{
 				Gid: 133, Name: "黑猫巫师", Species: "黑猫巫师", Img: "HeadIcon/3569.webp",
 				Level: 60, HP: 264, MaxHP: 389, Energy: 10, Growth: 2,

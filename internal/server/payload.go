@@ -250,6 +250,38 @@ type TrialRun struct {
 	Shop        []TrialShopItem `json:"shop,omitempty"`
 	Result      *TrialResult    `json:"result,omitempty"` // 上一局结算(Active=false 时)
 	Log         []TrialLogEntry `json:"log,omitempty"`    // 操作流水(最新在前)
+
+	// 以下三项来自**静态配置**(wiki,见 gamedata/trial.go),协议不发这些:
+	//   Floor      当前节点是什么(普通/首领/商人/NPC…)
+	//   ChapterName 章节名(如「记忆中的索米亚草原」)
+	//   Opponents  第 7 层的候选 NPC 阵容;其余层为 nil
+	// 静态配置缺失时(如数据没生成)两项为空、Opponents 为 nil,不是错误。
+	Floor       string          `json:"floor,omitempty"`       // start/normal/boss/merchant/npc
+	FloorLabel  string          `json:"floorLabel,omitempty"`  // 中文名(普通/首领/商人/NPC)
+	ChapterName string          `json:"chapterName,omitempty"` // 章节名
+	Opponents   []TrialOpponent `json:"opponents,omitempty"`   // 第 7 层候选阵容
+}
+
+// TrialOpponent 是第 7 层的一个候选 NPC 阵容。
+//
+// ⚠️ **这是候选池,不是「当前遭遇的对手」**:wiki 的 opponent id 与协议里的
+// npc_id 不是同一套编号(实测协议 npc_id=86023),无从绑定。前端应照此表述,
+// 不要写成「对面就是这几只」。
+type TrialOpponent struct {
+	ID   uint32        `json:"id"`   // wiki 的 opponent 编号(300xxx 等),仅作标识
+	Name string        `json:"name"` // NPC 名(研究员/易西/罗兰)
+	Pets []TrialOppPet `json:"pets"` // 阵容:每只带名字与头像
+}
+
+// TrialOppPet 是候选阵容里的一只精灵。
+//
+// 带名字与头像而不只给 petbase id:这两样都要查 gamedata(且**并非每个形态都有
+// 头像** —— 缺图时 Img 为空,由前端决定占位),后端查比前端再查一遍省事,
+// 也避免前端硬编码「HeadIcon/<id>.webp」这种路径约定。
+type TrialOppPet struct {
+	Base uint32 `json:"base"`          // petbase id
+	Name string `json:"name"`          // 形态全名(未知时为空)
+	Img  string `json:"img,omitempty"` // HeadIcon/<n>.webp;无图时缺失
 }
 
 // TrialPet 是试炼里的宠物副本。

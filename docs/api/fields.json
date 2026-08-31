@@ -748,6 +748,7 @@
       "run": {
         "chapterId": "int",
         "chapterIdx": "int",
+        "chapterName": "str",
         "chapters": [
           {}
         ],
@@ -755,6 +756,8 @@
         "effects": [
           {}
         ],
+        "floor": "str",
+        "floorLabel": "str",
         "log": [
           {
             "action": "int",
@@ -767,6 +770,19 @@
           }
         ],
         "nodeIndex": "int",
+        "opponents": [
+          {
+            "id": "int",
+            "name": "str",
+            "pets": [
+              {
+                "base": "int",
+                "img": "str",
+                "name": "str"
+              }
+            ]
+          }
+        ],
         "options": [
           {
             "event": "int",

@@ -411,6 +411,28 @@
 - 一局结束有两条路径收敛：0x196a 结算通知，或档案 0x1975 里最新战绩的补判
   （服务器未必发结算通知，见 `docs/pcap-20260831-grass-trial.md` 第 5 节）。
 
+#### `run.floor` / `run.chapterName` / `run.opponents`（静态配置）
+
+协议只下发编号（`chapterId` / `nodeIndex`），「这一层是什么、对面可能是谁」协议里没有，
+来自**静态配置**（`scripts/gen_trial.py` 从 wiki 生成，见 `gamedata/trial.go`）：
+
+```json
+{ "floor": "npc", "floorLabel": "NPC", "chapterName": "记忆中的巨石阵",
+  "opponents": [{ "id": 310005, "name": "易西",
+                  "pets": [{ "base": 3031, "name": "奇丽果", "img": "HeadIcon/3031.webp" }] }] }
+```
+
+- **`floor` 按 `nodeIndex`（0~7）查表**，两者不是简单的一一对应：协议每章 8 个节点，
+  wiki 只有 7 层。`nodeIndex 0` = `start`（章节起点，无战斗），1~7 依次对应 wiki 的
+  1~7 层（`normal`×3 → `boss` → `normal` → `merchant` → `npc`）。这个映射是抓包实测
+  得出的，见 `scripts/gen_trial.py` 文件头的两条证据，**不要照抄 wiki 改成 7 段**。
+- `opponents` **只在 `floor == "npc"` 时出现**，其余层为 `null`。
+- ⚠️ **`opponents` 是候选池，不是「当前遭遇的对手」**：wiki 的 opponent id（300xxx 等）
+  与协议里的 `npc_id`（实测 86023）**不是同一套编号**，无从绑定。前端措辞应照此表述。
+- `pets[].img` 可能缺失 —— 并非每个形态都有头像。
+- 静态配置缺失时（数据没生成）`floor` / `chapterName` 为空、`opponents` 为 `null`，
+  不是错误，前端应能容忍。
+
 ---
 
 ## 其它有快照的接口

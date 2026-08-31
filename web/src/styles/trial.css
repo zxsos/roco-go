@@ -60,6 +60,32 @@
 .trial-reward { color: var(--green, var(--accent)); border-color: var(--green, var(--accent)); }
 .trial-note { font-size: 12px; }
 
+/* —— 层类型标签 —— */
+/* 首领层用与 BOSS 一致的红,强调这一层是硬仗;商人层(无战斗)用最暗的灰色,
+   与「要打架」的层拉开区分;NPC 层用强调色,因为它下面才会展开候选阵容。 */
+.trial-floor-boss {
+  color: var(--red); border-color: var(--red); font-weight: 600;
+  background: color-mix(in srgb, var(--red) 12%, var(--bg-3));
+}
+.trial-floor-merchant { color: var(--fg-dim); opacity: .8; }
+.trial-floor-npc { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
+
+/* —— 第 7 层 NPC 候选阵容 —— */
+.trial-opps { display: flex; flex-direction: column; gap: 8px; }
+.trial-opp {
+  border: 1px solid var(--line); border-radius: var(--radius, 8px);
+  padding: 8px 10px; background: var(--bg-2);
+}
+.trial-opp-name { font-weight: 600; font-size: 13px; margin-bottom: 6px; }
+/* NPC 编号是 wiki 那边的 id,与游戏内 npc_id 无关 —— 弱化显示,免得被当成官方编号 */
+.trial-opp-id { font-weight: 400; font-size: 11px; }
+.trial-opp-pets { display: flex; flex-wrap: wrap; gap: 10px; }
+.trial-opp-pet {
+  display: flex; align-items: center; gap: 5px;
+  font-size: 12px; cursor: help;
+}
+.trial-opp-img { width: 30px; height: 30px; flex: none; }
+
 /* —— 结算 —— */
 .trial-result {
   display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
