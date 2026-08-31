@@ -119,6 +119,8 @@ img.evo-avatar { object-fit: cover; }
 }
 /* 「非当前携带」的注脚:比标题暗一档,说明这不是个体当前技能 */
 .skills-note { font-size: 11px; opacity: .75; margin-left: 4px; }
+/* 可学/血脉两个区块没有等级,但行内仍渲染一个空的 .skill-lv 占位 ——
+   grid 首列固定 3.2em,占位后三个区块的技能名起止位置一致,扫读不错位。 */
 
 /* 身高/体重范围 tooltip:由 StatRange 经 portal 渲染到 body、fixed 定位(避开 .table-wrap
    的 overflow 裁剪与常驻滚动条问题);定位由 JS 计算(默认上方/自动翻转)。 */
