@@ -1,15 +1,22 @@
-// 顶栏账号切换器布局验收:桌面「徽章 → 称号 → 锁 → 昵称 → UID」,手机端触发条去掉 UID。
+// 顶栏账号切换器布局验收。
 //
 //   npm run build && 启动后端
 //   node scripts/verify-account-width.mjs [后端地址]
+//
+// 触发条的内容**两端不同**,改任何一端都要看这个脚本的对应分支:
+//   桌面:徽章 → 称号 → 昵称 → UID
+//   手机:徽章 → 称号 → UID(昵称不渲染,顶栏横向放不下;昵称进了 title/aria-label,
+//        点开 sheet 每行也写得很清楚)
+// PIN 锁不在这一层 —— 它挂在头像左下角(AccountAvatar 的 pin 参数)。
 //
 // 判据(都是用户明确提过的约束,漏了看得见):
 //   1. 桌面端触发条 DOM 顺序必须是 徽章 → 称号 → 昵称 → UID;
 //   2. 短于 5 个字的昵称,触发条宽度**一致** —— 否则切换账号时顶栏一档一档变宽变窄,
 //      紧邻的全屏/主题按钮跟着抖;
-//   3. 手机端触发条**不渲染 UID**(旧行为是换行到第二行,会把 sticky 顶栏撑高);
-//   4. 手机端触发条高度**不随昵称长度变化**(顶栏高度稳定);
-//   5. 超长昵称要截断出省略号,而不是把顶栏撑破;
+//   3. 手机端触发条**不渲染昵称**但**渲染 UID**(早期版本是反过来的:
+//      显示昵称、把 UID 藏了;那版 UID 换行会把 sticky 顶栏撑高,各页高度不一致);
+//   4. 手机端触发条高度**不随内容长度变化**(顶栏高度稳定);
+//   5. 超长昵称(桌面端)要截断出省略号,而不是把顶栏撑破;
 //   6. 徽章头像渲染出来了,且带 .privacy(截图防泄)而在线小点不带。
 //
 // 四个坑,都踩过:
@@ -70,13 +77,16 @@ for (const vp of [
           const titleEl = q('.account-trigger .rank-title')
           const nameItem = q('.acct-name')
           const uidEl = q('.account-trigger .acct-uid')
-          if (!avatar || !nameItem) return null
+          if (!avatar) return null
+          // 手机端不渲染昵称,顺序退化为 徽章 → [称号] → UID
+          const last = nameItem || uidEl
+          if (!last) return null
           const before = (a, b) => !!(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING)
-          let ok = before(avatar, nameItem)
-          if (titleEl) ok = ok && before(avatar, titleEl) && before(titleEl, nameItem)
-          // 桌面端 UID 必须存在且在昵称之后;手机端必须不存在
-          if (uidEl) ok = ok && before(nameItem, uidEl)
-          return { ok, hasUid: !!uidEl }
+          let ok = before(avatar, last)
+          if (titleEl) ok = ok && before(avatar, titleEl) && before(titleEl, last)
+          // 昵称与 UID 同时存在时(桌面端),UID 必须排在昵称之后
+          if (nameItem && uidEl) ok = ok && before(nameItem, uidEl)
+          return { ok, hasUid: !!uidEl, hasName: !!nameItem }
         })()
         return {
           len: n.length,
@@ -91,31 +101,40 @@ for (const vp of [
       }, name))
     }
 
-    const shortW = rows.filter((r) => r.len <= 5).map((r) => r.sel)
-    const uniq = [...new Set(shortW)]
-    check(`${vp.n} 短昵称(≤5字)宽度一致`, uniq.length === 1,
-      uniq.length === 1 ? `${uniq[0]}px` : shortW.join('/'))
-
-    const w5 = rows.find((r) => r.len === 5).sel
-    const w8 = rows.find((r) => r.len === 8).sel
-    check(`${vp.n} 长于 5 字能自适应增长`, w8 >= w5, `5字 ${w5} → 8字 ${w8}`)
-
-    check(`${vp.n} 元素顺序为 徽章→[称号]→昵称→[UID]`,
+    check(`${vp.n} 元素顺序为 徽章→[称号]→[昵称]→[UID]`,
       rows.every((r) => r.ordered && r.ordered.ok),
-      rows[0].ordered ? '' : '(无徽章/昵称,跳过)')
+      rows[0].ordered ? '' : '(无徽章,跳过)')
 
     if (vp.mobile) {
-      check(`${vp.n} 触发条不渲染 UID`,
-        rows.every((r) => r.ordered && !r.ordered.hasUid),
-        rows[0].ordered?.hasUid ? '仍渲染了 UID' : '')
+      // 手机端:**不渲染昵称、渲染 UID**。
+      // 早期版本是反过来的(显示昵称、藏 UID),那版 UID 换行会把 sticky 顶栏撑高,
+      // 各页高度不一致、滚动时有跳动感,故改成藏昵称留 UID。
+      check(`${vp.n} 触发条不渲染昵称`,
+        rows.every((r) => r.ordered && !r.ordered.hasName),
+        rows[0].ordered?.hasName ? '仍渲染了昵称' : '')
+      check(`${vp.n} 触发条渲染 UID(唯一的文本标识)`,
+        rows.every((r) => r.ordered && r.ordered.hasUid),
+        rows[0].ordered?.hasUid ? '' : 'UID 没渲染')
       const heights = new Set(rows.map((r) => r.triggerH))
       const barHeights = new Set(rows.map((r) => r.barH))
-      check(`${vp.n} 顶栏高度不随昵称长度变化`,
+      check(`${vp.n} 顶栏高度不随内容长度变化`,
         heights.size === 1 && barHeights.size === 1,
         `trigger ${[...heights].join('/')} · topbar ${[...barHeights].join('/')}`)
     } else {
-      check(`${vp.n} UID 与昵称同排(桌面端保留)`,
-        rows.every((r) => r.ordered?.hasUid), `hasUid=${rows[0].ordered?.hasUid}`)
+      // 下面两条**只在桌面端有意义**:手机端不渲染昵称,改 .acct-name 的文本
+      // 不会引起任何宽度变化,两条都会恒绿 —— 假绿灯比不测更糟(它让人以为验过了)。
+      const shortW = rows.filter((r) => r.len <= 5).map((r) => r.sel)
+      const uniq = [...new Set(shortW)]
+      check(`${vp.n} 短昵称(≤5字)宽度一致`, uniq.length === 1,
+        uniq.length === 1 ? `${uniq[0]}px` : shortW.join('/'))
+
+      const w5 = rows.find((r) => r.len === 5).sel
+      const w8 = rows.find((r) => r.len === 8).sel
+      check(`${vp.n} 长于 5 字能自适应增长`, w8 >= w5, `5字 ${w5} → 8字 ${w8}`)
+
+      check(`${vp.n} 昵称与 UID 同排(桌面端都保留)`,
+        rows.every((r) => r.ordered?.hasName && r.ordered?.hasUid),
+        `hasName=${rows[0].ordered?.hasName} hasUid=${rows[0].ordered?.hasUid}`)
     }
 
     check(`${vp.n} 顶栏不溢出 / brand 未被挤`,
@@ -132,9 +151,13 @@ for (const vp of [
 //
 // 字数要取**足够长**:桌面端触发条的可用宽比手机端大得多(实测 258px vs 130px),
 // 16 个字在桌面只有 224px、根本撑不破 —— 那条会假绿成「不截断」(曾经就这么误报过)。
-// 取 40 字:两个视口下都远超可用宽,测到的才是真截断。
+// 取 40 字:远超桌面端可用宽,测到的才是真截断。
+//
+// 只测桌面端:手机端压根不渲染昵称(见上面 mobile 分支),这里 querySelector
+// 拿不到元素,断言会直接抛;而手机端真正要防的是「UID 把顶栏撑破」,
+// 那由上面的「顶栏不溢出 / brand 未被挤」覆盖。
 const LONG_NAME = '啊'.repeat(40)
-for (const vp of [{ w: 1280, h: 800, n: '桌面 1280' }, { w: 360, h: 800, n: '手机 360' }]) {
+for (const vp of [{ w: 1280, h: 800, n: '桌面 1280' }]) {
   const page = await browser.newPage({ viewport: { width: vp.w, height: vp.h }, deviceScaleFactor: 2 })
   try {
     await page.goto(BASE + '/#/pets', { waitUntil: 'domcontentloaded' })

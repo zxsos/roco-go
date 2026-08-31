@@ -111,6 +111,32 @@ try {
     `grip=${geo.hasGrip} close=${geo.hasClose}`)
   check('底部有「管理 PIN / 删除账号」', geo.hasActions)
 
+  // ---- 填充:列表通栏 + 底部按钮均分 ----
+  // 两条都是「看着差一截」类的缺陷,只能靠几何量出来,肉眼在截图里容易看漏。
+  const fill = await page.evaluate(() => {
+    const list = document.querySelector('.account-sheet .account-list')
+    const btns = [...document.querySelectorAll('.account-sheet .account-action-btn')]
+    const lr = list.getBoundingClientRect()
+    return {
+      // 列表必须通栏:抵消 sheet 的 12px 内边距,让行高亮延伸到 sheet 边缘
+      listL: Math.round(lr.left), listR: Math.round(lr.right), vw: window.innerWidth,
+      // 按钮必须均分满宽。曾因 .account-actions(<li>)漏写 display:flex 而失效:
+      // 它是 list-item,不是 flex 容器,按钮的 flex:1 形同虚设,两个按钮按内容宽
+      // 挤在左边(实测 366px 的行里只占 137px)。
+      btnW: btns.map((b) => Math.round(b.getBoundingClientRect().width)),
+      btnSpan: btns.length ? Math.round(btns[btns.length - 1].getBoundingClientRect().right -
+        btns[0].getBoundingClientRect().left) : 0,
+      liDisplay: getComputedStyle(document.querySelector('.account-sheet .account-actions')).display,
+    }
+  })
+  check('账号列表左右通栏(行高亮延伸到 sheet 边缘)',
+    fill.listL === 0 && fill.listR === fill.vw,
+    `list ${fill.listL}~${fill.listR} / 视口 0~${fill.vw}`)
+  check('底部两个按钮均分满宽',
+    fill.btnW.length === 2 && fill.liDisplay === 'flex' &&
+    Math.abs(fill.btnW[0] - fill.btnW[1]) <= 1 && fill.btnSpan >= fill.vw - 40,
+    `${fill.btnW.join('/')} · 跨度 ${fill.btnSpan} · li.display=${fill.liDisplay}`)
+
   // 点 sheet **内部空白处**不该关。
   // 这是 extraRef 的守护项:sheet 用 createPortal 挂到了 body,不是 .account-wrap 的 DOM
   // 后代 —— useOutsideClick 若只判 rootRef,点这里会被当成「点外部」而收起。
@@ -161,6 +187,17 @@ try {
   await page.evaluate(() => window.scrollTo(0, 0))
   await page.waitForTimeout(200)
 
+  // 截图遮罩:展开时**临时**解除,收起(切成功或取消)即恢复 —— 见 hooks/usePrivacy。
+  // 判据取 **html 上有没有 data-privacy**,不读 CSS 的 filter 值:
+  // 后者在 .12s 过渡期间读到的是中间态,断言会莫名飘。
+  //
+  // 下面三种退出方式(关闭按钮 / 点遮罩 / Esc)各自验一遍恢复,另加「切换成功」。
+  // 收起共有五条路径(还有「点外部」),实现上收敛在 open 的变化里
+  // (见 AccountSelect 的 useEffect),只要那条链路在就不会漏;但反过来,
+  // 若哪天有人改成在退出路径上散着调,漏一条遮罩就永远留着了 —— 这些判据守的就是这个。
+  const privacyOn = () => page.evaluate(() => document.documentElement.hasAttribute('data-privacy'))
+  check('展开前遮罩是开的', await privacyOn())
+
   // ---- 退出 1:点关闭按钮 ----
   // 重新打开:上面那步为了回页顶已经把 sheet 关了,退出方式的判据各自需要一个开着的 sheet。
   await openSheet()
@@ -169,44 +206,57 @@ try {
   const restored1 = await page.evaluate(() => document.documentElement.style.overflow)
   check('关闭后还原 <html> 的 overflow(非空串即还原原值)',
     restored1 === '' || restored1 === 'visible', `inline overflow="${restored1}"`)
+  check('取消(关闭按钮)后遮罩恢复', await privacyOn())
 
   // ---- 退出 2:点遮罩 ----
   await openSheet()
+  check('展开 sheet 时临时解除遮罩', !(await privacyOn()))
   await page.click('.account-scrim', { position: { x: 195, y: 60 } })
   check('点遮罩能退出', await sheetGone())
+  check('取消(点遮罩)后遮罩恢复', await privacyOn())
 
   // ---- 退出 3:Esc ----
   await openSheet()
   await page.keyboard.press('Escape')
   check('按 Esc 能退出', await sheetGone())
+  check('取消(Esc)后遮罩恢复', await privacyOn())
 
   // ---- 键盘导航:↑↓ + Enter 切账号 ----
   // 目标必须是「非当前 + 未设 PIN」的账号:设了 PIN 的会被拦去输 PIN(那是另一条路径,
-  // 下面单独验)。这里若直接挑第一个不同的项,会撞上 PIN 弹窗、顶栏昵称自然不变化 ——
+  // 下面单独验)。这里若直接挑第一个不同的项,会撞上 PIN 弹窗、顶栏标识自然不变化 ——
   // 表现为「切不动」,其实是 PIN 拦截生效了。
+  //
+  // 锁的选择器是 **.acct-avatar-pin**(头像左下角),不是 .account-item-pin ——
+  // 锁从「行内一个独立 span」挪到头像上了(见 AccountAvatar 的 pin 参数),
+  // 沿用旧选择器会**一个都找不到**,于是「没有设 PIN 的账号」→ 3 项全 skip,
+  // 看着是数据不足,其实是选择器失效(踩过一次)。
+  //
+  // 「当前账号」的探针用 **UID** 而不是昵称:手机端触发条不渲染昵称(见
+  // verify-account-width.mjs 的判据 3),取 .acct-name 会得到 null。
   const pickTarget = async () => page.evaluate(() => {
     const items = [...document.querySelectorAll('.account-sheet .account-item')]
-    const cur = document.querySelector('.account-trigger .acct-name')?.textContent || ''
+    const cur = document.querySelector('.account-trigger .acct-uid')?.textContent || ''
+    const curId = cur.replace(/^UID:/, '')
     return items.findIndex((el) =>
       !el.classList.contains('cur') &&
-      !el.querySelector('.account-item-pin') &&
-      !(el.querySelector('.account-item-name')?.textContent || '').includes(cur))
+      !el.querySelector('.acct-avatar-pin') &&
+      !(el.querySelector('.account-item-name')?.textContent || '').includes(curId))
   })
 
-  // 先验 PIN 拦截:切到设了 PIN 的账号应弹 PIN 窗、昵称**不变**
+  // 先验 PIN 拦截:切到设了 PIN 的账号应弹 PIN 窗、顶栏标识**不变**
   await openSheet()
   const pinIdx = await page.evaluate(() => {
     const items = [...document.querySelectorAll('.account-sheet .account-item')]
-    return items.findIndex((el) => !el.classList.contains('cur') && el.querySelector('.account-item-pin'))
+    return items.findIndex((el) => !el.classList.contains('cur') && el.querySelector('.acct-avatar-pin'))
   })
   if (pinIdx >= 0) {
-    const before = await page.textContent('.account-trigger .acct-name')
+    const before = await page.textContent('.account-trigger .acct-uid')
     await page.locator('.account-sheet .account-item').nth(pinIdx).click()
     await page.waitForTimeout(1200)
-    const after = await page.textContent('.account-trigger .acct-name')
+    const after = await page.textContent('.account-trigger .acct-uid')
     const pinShown = await page.locator('.pin-dialog').count()
     check('切到设了 PIN 的账号:弹 PIN 窗且不直接切',
-      pinShown === 1 && before === after, `PIN 窗 ${pinShown} 个 · 「${before}」→「${after}」`)
+      pinShown === 1 && before === after, `PIN 窗 ${pinShown} 个 · ${before} → ${after}`)
     // 关掉弹窗,免得挡住后面的点击。
     // verify 模式的 PinDialog **没有取消按钮**(只有输入框 + 确认),且它自己不处理 Esc ——
     // 只能点遮罩空白处。注意不能直接 page.click('.pin-backdrop'):那会点在正中央,
@@ -225,7 +275,7 @@ try {
   await openSheet()
   const targetIdx = await pickTarget()
   if (targetIdx >= 0) {
-    const before = await page.textContent('.account-trigger .acct-name')
+    const before = await page.textContent('.account-trigger .acct-uid')
     // 从当前高亮出发,按 ↓ 直到高亮落在目标项上(高亮初值是当前选中项,见 useDropdown)
     for (let i = 0; i <= geo.rowCount; i++) {
       const hiIdx = await page.evaluate(() => [...document.querySelectorAll('.account-sheet .account-item')]
@@ -238,10 +288,11 @@ try {
       .findIndex((el) => el.classList.contains('hi')))
     await page.keyboard.press('Enter')
     await page.waitForTimeout(2500) // 切账号会触发全站重取
-    const after = await page.textContent('.account-trigger .acct-name')
+    const after = await page.textContent('.account-trigger .acct-uid')
     check('键盘 ↑↓ 能把高亮移到目标项', hiIdx === targetIdx, `高亮 ${hiIdx} / 目标 ${targetIdx}`)
-    check('键盘 Enter 能切账号(顶栏昵称变化)', before !== after, `「${before}」→「${after}」`)
+    check('键盘 Enter 能切账号(顶栏 UID 变化)', before !== after, `${before} → ${after}`)
     check('切完自动收起', await sheetGone())
+    check('切换成功后遮罩恢复', await privacyOn())
   } else {
     skip('键盘切账号', '库里只有 1 个账号(需 ≥2 个才能切)')
     await page.keyboard.press('Escape')
@@ -252,11 +303,11 @@ try {
   await openSheet()
   const clickIdx = await pickTarget()
   if (clickIdx >= 0) {
-    const before = await page.textContent('.account-trigger .acct-name')
+    const before = await page.textContent('.account-trigger .acct-uid')
     await page.locator('.account-sheet .account-item').nth(clickIdx).click()
     await page.waitForTimeout(2500)
-    const after = await page.textContent('.account-trigger .acct-name')
-    check('点条目能切账号', before !== after, `「${before}」→「${after}」`)
+    const after = await page.textContent('.account-trigger .acct-uid')
+    check('点条目能切账号', before !== after, `${before} → ${after}`)
     check('点完自动收起', await sheetGone())
   } else {
     skip('点条目能切账号', '库里只有 1 个账号(需 ≥2 个才能切)')
