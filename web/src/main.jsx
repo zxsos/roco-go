@@ -12,6 +12,7 @@ const MapPage = lazy(() => import('./pages/map/MapPage'))
 const EggList = lazy(() => import('./pages/eggs/EggList'))
 const Merchant = lazy(() => import('./pages/merchant/Merchant'))
 const Flowers = lazy(() => import('./pages/flowers/Flowers'))
+const Trial = lazy(() => import('./pages/trial/Trial'))
 const HandbookGlasses = lazy(() => import('./pages/handbook/HandbookGlasses'))
 const Leaderboard = lazy(() => import('./pages/leaderboard/Leaderboard'))
 const Admin = lazy(() => import('./pages/admin/Admin'))
@@ -29,6 +30,7 @@ import './styles/detail.css'
 import './styles/map.css'
 import './styles/debug.css'
 import './styles/flowers.css'
+import './styles/trial.css'
 import './styles/handbook.css'
 import './styles/leaderboard.css'
 import './styles/admin.css'
@@ -57,6 +59,7 @@ createRoot(document.getElementById('root')).render(
             <Route path="merchant" element={<Merchant />} />
             <Route path="map" element={<MapPage />} />
             <Route path="flowers" element={<Flowers />} />
+            <Route path="trial" element={<Trial />} />
             <Route path="handbook" element={<HandbookGlasses />} />
             <Route path="leaderboard" element={<Leaderboard />} />
             {/* 调试页:导航不显示,需手动输入 #/debug */}
