@@ -65,8 +65,31 @@
 | `box` | obj? | `{boxId, slot, boxName?, mark?}`（在盒中） |
 | `team` | obj? | `{teamIdx, pos}`（在队中；与 `box` **互斥**） |
 | `hp` `attack` `defense` `spAttack` `spDefense` `speed` | obj | `{value, talentLv, nature}` |
+| `skills` | obj[]? | **仅详情接口有**：当前形态天生会的技能，见下 |
 
 > `image` 取图优先 `baseConfId` 回退 `confId` —— 只按 `confId` 取会拿到进化线一阶的图。
+
+#### `skills`（仅 `GET /api/pets/{gid}`）
+
+```json
+{ "skills": [{ "name": "山火", "level": 48, "elem": "火",
+               "power": "15", "cost": "3",
+               "effect": "造成物伤，每使用1次其他火系技能，本技能威力永久翻倍。" }] }
+```
+
+按 `baseConfId`（当前形态）查 `gamedata.InnateSkills`，按学会等级降序。四点约束：
+
+1. **这是「该形态天生会的技能」，不是某只宠物当前携带的**。技能是可换配置
+   （见 `git 0762eb6` 移除 `Pet.SkillIDs` 的理由），后端不存个体技能。
+2. **只有详情接口带**，`GET /api/pets` 列表不带 —— 避免给每只宠物都序列化一份。
+3. `power` / `cost` 是**字符串**：变化类技能无威力，值为 `"—"`（如「防御」），整数表达不了。
+4. **该形态无资料时整键缺失**（`omitempty`），不是空数组 —— 见下「数据来源」。
+
+> ⚠️ **数据来源是第三方资料站（过渡方案）**，不是游戏解包：
+> 见 `scripts/gen_skills.py` 与 `internal/gamedata/skills.go`。它只覆盖部分形态
+> （本项目宠物形态的约 85%），且**没有协议里的 `base_skill_id`**（`7020500` 这类），
+> 故只能按「形态 + 学会等级」组织，不能用于反查试炼里的技能 id
+> （试炼技能 id 的中文名仍需解包 `SKILL_CONF`，见 `docs/data.md`「待校准」）。
 
 ### `GET /api/stats` ✅
 ```json

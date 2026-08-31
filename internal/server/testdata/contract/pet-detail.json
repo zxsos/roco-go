@@ -43,6 +43,112 @@
   "natureId": 3,
   "partnerMark": "首领",
   "shiny": true,
+  "skills": [
+    {
+      "cost": "3",
+      "effect": "造成物伤，每使用1次其他火系技能，本技能威力永久翻倍。",
+      "elem": "火",
+      "level": 48,
+      "name": "山火",
+      "power": "15"
+    },
+    {
+      "cost": "1",
+      "effect": "造成物伤，应对状态：本次技能威力变为4倍。",
+      "elem": "火",
+      "level": 42,
+      "name": "闪燃",
+      "power": "40"
+    },
+    {
+      "cost": "1",
+      "effect": "下一次攻击时，技能威力翻倍，应对防御：改为威力变为4倍。",
+      "elem": "火",
+      "level": 36,
+      "name": "热身",
+      "power": "—"
+    },
+    {
+      "cost": "5",
+      "effect": "对敌方精灵造成物理伤害。",
+      "elem": "火",
+      "level": 30,
+      "name": "火云车",
+      "power": "140"
+    },
+    {
+      "cost": "2",
+      "effect": "造成魔伤，应对状态：下次攻击技能威力翻倍。",
+      "elem": "火",
+      "level": 29,
+      "name": "持续高温",
+      "power": "70"
+    },
+    {
+      "cost": "1",
+      "effect": "自己获得双攻+120%和双防-40%。",
+      "elem": "火",
+      "level": 21,
+      "name": "怒火",
+      "power": "—"
+    },
+    {
+      "cost": "1",
+      "effect": "驱散敌方所有增益。",
+      "elem": "普通",
+      "level": 17,
+      "name": "晒太阳",
+      "power": "—"
+    },
+    {
+      "cost": "1",
+      "effect": "造成物伤，每次使用后，本技能威力永久+20。",
+      "elem": "火",
+      "level": 12,
+      "name": "吹火",
+      "power": "50"
+    },
+    {
+      "cost": "1",
+      "effect": "减伤70%，应对攻击。",
+      "elem": "普通",
+      "level": 10,
+      "name": "防御",
+      "power": "—"
+    },
+    {
+      "cost": "3",
+      "effect": "对敌方精灵造成物理伤害。",
+      "elem": "火",
+      "level": 8,
+      "name": "火焰切割",
+      "power": "100"
+    },
+    {
+      "cost": "1",
+      "effect": "自己获得物攻+100%。",
+      "elem": "普通",
+      "level": 6,
+      "name": "力量增效",
+      "power": "—"
+    },
+    {
+      "cost": "0",
+      "effect": "造成物伤，自己回复1能量。",
+      "elem": "火",
+      "level": 1,
+      "name": "火苗",
+      "power": "30"
+    },
+    {
+      "cost": "1",
+      "effect": "对敌方精灵造成物理伤害。",
+      "elem": "普通",
+      "level": 1,
+      "name": "猛烈撞击",
+      "power": "65"
+    }
+  ],
   "spAttack": {
     "nature": 0,
     "talentLv": 7,

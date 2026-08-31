@@ -451,6 +451,16 @@
       "natureId": "int",
       "partnerMark": "str",
       "shiny": "bool",
+      "skills": [
+        {
+          "cost": "str",
+          "effect": "str",
+          "elem": "str",
+          "level": "int",
+          "name": "str",
+          "power": "str"
+        }
+      ],
       "spAttack": {
         "nature": "int",
         "talentLv": "int",

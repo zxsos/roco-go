@@ -74,6 +74,19 @@ func (s *Server) handlePets(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, map[string]any{"total": total, "pets": pets})
 }
 
+// petDetailView 是单只宠物详情的响应形状:宠物本体字段平铺 + 该形态的天生技能。
+//
+// 为什么用包装而非给 pet.Pet 加 Skills 字段:Pet 会被整个序列化进 pets.data 列,
+// 加字段等于给每只宠物都存一份技能(体积 × 宠物数)—— 正是 git 0762eb6 移除
+// Pet.SkillIDs 的理由之一。故技能只在**详情接口读取时**按形态注入,不进库。
+// 内嵌 *pet.Pet 让 JSON 字段平铺,前端拿到的结构与改造前一致,只多出 skills。
+type petDetailView struct {
+	*pet.Pet
+	// Skills 是该形态天生会的技能(可换配置,非这只宠物当前携带的);
+	// 第三方资料没覆盖该形态时为 nil,键不出现(见 gamedata.InnateSkills)。
+	Skills []gamedata.InnateSkill `json:"skills,omitempty"`
+}
+
 func (s *Server) handlePet(w http.ResponseWriter, r *http.Request) {
 	gid, _ := strconv.ParseUint(r.PathValue("gid"), 10, 32)
 	p, err := s.store.For(s.acct(r)).GetPet(uint32(gid))
@@ -86,7 +99,13 @@ func (s *Server) handlePet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	pet.FillSizePercentile(s.db, p)
-	writeJSON(w, p)
+	// 天生技能按**当前形态**取(base_conf_id);它比 conf_id(进化线一阶)更准,
+	// 已进化的宠物才能看到本形态的技能。
+	v := &petDetailView{Pet: p}
+	if sk := s.db.InnateSkills(p.BaseConfID); len(sk) > 0 {
+		v.Skills = sk
+	}
+	writeJSON(w, v)
 }
 
 // handlePetPage 返回某宠物在当前筛选+排序下所处的页码,供盒子示意图点击跳页。

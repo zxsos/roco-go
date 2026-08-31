@@ -134,6 +134,8 @@ export function PetDetailModal({ gid, onClose }) {
 
           {chain.length > 1 && <EvoChain chain={chain} current={pet.baseConfId} form={pet.form} />}
 
+          <Skills skills={pet.skills} />
+
           {ownedMedals.length > 0 && (
             <div>
               <div className="muted" style={{ marginBottom: 6 }}>奖牌墙</div>
@@ -163,6 +165,37 @@ function evoStages(chain) {
     else stages.push([s])
   }
   return stages
+}
+
+// Skills 天生技能表:按学会等级降序,每行「等级 · 技能名 · 属性 · 威力/能耗」,
+// 悬浮给出完整效果描述。
+//
+// 两点要说清,免得被误读成「这只宠物当前带的技能」:
+//   - 这是**该形态天生会的技能**(可换配置),不是个体当前携带的 —— 后端不存个体技能
+//     (见 git 0762eb6),技能也可经技能石等途径更换。
+//   - 数据来自第三方资料站(过渡方案),只覆盖部分形态;没数据时整块不显示。
+function Skills({ skills }) {
+  if (!skills || !skills.length) return null
+  return (
+    <div>
+      <div className="muted" style={{ marginBottom: 6 }}>
+        天生技能<span className="skills-note">（该形态可学，非当前携带）</span>
+      </div>
+      <div className="skills">
+        {skills.map((s, i) => (
+          <div key={i} className="skill-row" title={s.effect || ''}>
+            <span className="skill-lv">Lv{s.level}</span>
+            <span className="skill-name">{s.name}</span>
+            {s.elem && <span className="skill-elem">{s.elem}</span>}
+            <span className="skill-num">
+              {s.power && s.power !== '—' ? `威力 ${s.power}` : '—'}
+              {s.cost !== '' && s.cost !== undefined ? ` · 能耗 ${s.cost}` : ''}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
 }
 
 // EvoChain 进化链:各阶段头像横向排列,当前形态高亮;同阶段多形态=分支进化,纵向并列。
