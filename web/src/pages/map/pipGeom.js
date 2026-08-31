@@ -26,6 +26,10 @@ export const SIZES = {
   markBadge: 16,     // .map-wild-mark 角标圆盘
   markBadgeIcon: 10, // 角标内的图标
   routeWidth: 2.5,   // .map-routes path stroke-width
+  // 路线三层描边(casing):深色外圈 → 白色内圈 → 彩色线,底图什么颜色都留得住轮廓。
+  // 照抄 styles/map.css 的 .map-route-casing-dark / -light,改那里记得改这里。
+  routeCasingDark: 6.5,
+  routeCasingLight: 4.2,
   routeStart: 6,     // 起点圆
   routeArrived: 5.5, // 跟走中:已到达点
   routeNext: 9,      // 下一目标点

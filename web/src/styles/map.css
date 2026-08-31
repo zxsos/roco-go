@@ -596,10 +596,19 @@
 }
 .map-routes path {
   vector-effect: non-scaling-stroke;
+  fill: none; stroke-linejoin: round; stroke-linecap: round;
 }
 .map-routes circle {
   vector-effect: non-scaling-stroke;
 }
+/* 路线三层描边(casing):底图地形色不可控(草原绿 / 雪地白 / 沙漠黄 / 洞穴暗),
+   单靠路线色总有一段糊进背景,故给线加 casing —— 深色外圈 + 白色内圈 + 彩色线。
+   亮背景靠深色外圈勾边,暗背景靠白色内圈,任何底图上轮廓都在。
+   宽度是屏幕像素(non-scaling-stroke),不随缩放变粗。
+   改这里的宽度记得同步 pipGeom.js 的 SIZES.routeCasingDark / routeCasingLight。 */
+.map-route-casing-dark path { stroke: rgba(0, 0, 0, .5); stroke-width: 6.5; }
+.map-route-casing-light path { stroke: rgba(255, 255, 255, .85); stroke-width: 4.2; }
+.map-route-line path { stroke-width: 2.5; opacity: .95; }
 
 /* 图层侧栏「跑图路线」组:行结构与奖牌筛选行一致(✓开关 + 色点 + 名称 + 点数)。
    名称超长(精灵球路线带传送点说明)时省略号截断,悬停看全名。 */
