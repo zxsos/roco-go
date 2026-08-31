@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from 'react'
+import { IconLock } from './svg'
 
 // 头像色相:8 个精选值,由账号 ID 哈希选中。
 // 不用 0~360 全量色相 —— 中间地带会撞出浑浊、低对比的色(暗色主题下压不住底、
@@ -40,17 +41,26 @@ const sized = (url) => {
   return /^https:\/\/\S+\/\d+$/.test(url) ? url.replace(/\/\d+$/, '/' + AVATAR_SIZE) : url
 }
 
+// 左下角 PIN 锁:与在线小点(右下)分列两侧,各占一角,不会互相遮挡。
+// 用页面底色描边把它从徽章上「抠」出来,否则深色徽章上深色的锁直接看不见。
+// 锁**不带 .privacy**:它不敏感(只说明这个账号设了 PIN),且是扫视时要确认的东西。
+const PinMark = () => (
+  <i className="acct-avatar-pin" title="已设 PIN 保护">
+    <IconLock size={9} />
+  </i>
+)
+
 // AccountAvatar 账号头像「训练家徽章」:取到平台头像时盖在盘上,取不到则露出由账号 ID
-// 派生色相的搪瓷渐变盘 + 昵称首字;右下角叠在线/离线小点。
+// 派生色相的搪瓷渐变盘 + 昵称首字;右下角叠在线/离线小点,左下角叠 PIN 锁。
 //
 // 尺寸由父级继承下来的 --acct-avatar 控制(触发条 26px、桌面行 30px、手机 sheet 36px),
 // 不通过 props 传 —— 同一枚徽章在三种容器里只是大小不同,交给 CSS 统一调。
 //
 // 首字层与头像层都挂 .privacy 参与全局截图防泄(见 styles/shell.css 的 html[data-privacy]):
 // 首字和昵称一样是可识别信息,真人头像更是看图认人,糊掉才能防旁窥。
-// 在线小点**刻意放在 .privacy 之外**:它不敏感,且正是扫视时最先要确认的东西 ——
+// 在线小点与 PIN 锁**刻意放在 .privacy 之外**:它们不敏感,且正是扫视时最先要确认的东西 ——
 // 糊掉会逼着用户去点顶栏品牌名解除遮罩才能看在线状态,得不偿失。
-export default function AccountAvatar({ account, name, online, avatar }) {
+export default function AccountAvatar({ account, name, online, avatar, pin }) {
   const hue = useMemo(() => hueOf(account || ''), [account])
   // 记「加载失败过的 URL」而不是一个布尔值:账号列表 15s 轮询一次,avatar 会随
   // 重新解析而变化 —— 用布尔值会把新的 URL 一并判死,头像再也回不来。
@@ -76,6 +86,7 @@ export default function AccountAvatar({ account, name, online, avatar }) {
         />
       )}
       <i className={'acct-avatar-dot' + (online ? ' on' : '')} title={online ? '在线' : '离线'} />
+      {pin && <PinMark />}
     </span>
   )
 }

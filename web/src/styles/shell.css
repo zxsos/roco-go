@@ -125,6 +125,22 @@
   transition: background .2s ease, box-shadow .2s ease;
 }
 .acct-avatar-dot.on { background: var(--green); box-shadow: 0 0 0 2px rgb(63 185 80 / .22); }
+/* 左下角 PIN 锁:与在线小点(右下)分列两角,各占一角不打架。
+   刻意**不做成圆形徽标**(像在线小点那样):锁是方形图标,塞进圆里四角会顶到边;
+   给它一点内边距 + 圆角,让底色只在图标外围露出一圈即可。
+   描边用页面底色(--bg-1)把整块从徽章上「抠」出来,否则深色徽章上深色的锁看不见。
+   不带 .privacy:它不敏感(只说明该账号设了 PIN),且是扫视时要确认的东西 ——
+   糊掉会逼用户去点顶栏品牌名解除遮罩,得不偿失。 */
+.acct-avatar-pin {
+  position: absolute; left: -2px; bottom: -2px;
+  display: flex; align-items: center; justify-content: center;
+  width: calc(var(--acct-avatar) * .46); height: calc(var(--acct-avatar) * .46);
+  min-width: 12px; min-height: 12px;
+  border-radius: 4px;
+  background: var(--bg-1); color: var(--fg-dim);
+  border: 1px solid var(--line);
+  box-shadow: 0 1px 2px rgb(0 0 0 / .25);
+}
 
 /* ---- 触发条 ----
    材质:弃用平板 var(--bg-2),改 160° 竖向微渐变 + 顶部内高光 + 发丝描边,
@@ -172,8 +188,14 @@
 .account-trigger.open .account-caret { transform: rotate(180deg); }
 
 /* ---- 账号行(桌面浮层与手机 sheet 共用,唯一的行渲染源) ----
-   布局:徽章 → 昵称(可截断) → 称号 → PIN 锁 → UID → 对勾。 */
-.account-list { list-style: none; margin: 0; }
+   布局:徽章 → 昵称(可截断) → 称号 → PIN 锁 → UID → 对勾。
+
+   padding 必须显式清 0:它是 <ul>,浏览器默认给 40px 的 padding-inline-start
+   (list-style:none 只去掉了圆点,**不动这个内边距**)。
+   桌面端一直看不出来:那里的 <ul> 同时挂着 .account-dropdown(padding:5px),
+   把 40px 覆盖掉了;手机端 sheet 里的 <ul> 只有 account-list 一个类,
+   于是整个列表连「管理 PIN / 删除账号」一起右偏 40px,左边空一大块、右边贴边。 */
+.account-list { list-style: none; margin: 0; padding: 0; }
 .account-item {
   display: flex; align-items: center; gap: 8px;
   cursor: pointer; user-select: none;
@@ -198,10 +220,12 @@
 .account-item.cur .account-item-name { color: var(--accent); }
 .account-item.cur .account-item-uid { color: var(--accent); opacity: .75; }
 
-/* PIN 保护标记:触发条 + 账号行里的锁 */
-.account-pin-mark, .account-item-pin { flex: none; color: var(--fg-dim); opacity: .75; display: inline-flex; }
-/* 底部操作行:管理 PIN + 删除账号 */
-.account-actions { gap: 8px; justify-content: center; margin-top: 4px; }
+/* 底部操作行:管理 PIN + 删除账号。
+   **display:flex 必须显式写**:这个 <li> 只有 account-actions 一个类,不带
+   .account-item,而 <li> 默认是 display:list-item —— 不写的话下面的 gap /
+   justify-content 全无效,按钮的 flex:1 也跟着失效(它压根不是 flex item),
+   于是两个按钮按内容宽挤在左边、右边空一大片(实测 366px 的行里只占 137px)。 */
+.account-actions { display: flex; gap: 8px; justify-content: center; margin-top: 4px; }
 .account-actions:hover { background: none; }
 .account-action-btn { font-size: 12px; padding: 5px 10px; }
 .account-del-btn { color: var(--fg-dim); }
@@ -267,13 +291,21 @@
 }
 .account-sheet-title { font-size: 15px; font-weight: 600; }
 .account-sheet-close { flex: none; }
+/* 列表**左右通栏**:抵消 sheet 的 12px 左右内边距,让账号行的高亮/选中背景
+   一直延伸到 sheet 边缘 —— 移动端抽屉里的列表行是通栏的,缩在中间会显得
+   「每边都差一截、没填满」。行本身再给 12px 的左右 padding,
+   故文字的起始位置与上面「切换账号」标题仍然对齐,视觉上不散。 */
 .account-sheet .account-list {
-  max-height: min(60vh, 420px); overflow-y: auto; padding-bottom: 4px;
+  max-height: min(60vh, 420px); overflow-y: auto;
+  margin: 0 -12px; padding: 0 12px 4px;
 }
 .account-sheet .account-list .acct-avatar { --acct-avatar: 36px; }
 /* 行高 56px:移动端触控基线(见 base.css 的 760px 媒体查询)之上再放一档,
    账号切换是低频但后果大的操作,宁可多点几次也不要误触。 */
-.account-sheet .account-item { padding: 10px 10px; border-radius: 12px; font-size: 15px; gap: 10px; }
+/* 行的左右 padding 用 12px 而不是 10px:与 sheet 自身的内边距一致,
+   这样「昵称的起始位置」和上面「切换账号」标题、下面两个按钮都对齐在同一条竖线上。
+   (列表已用负 margin 通栏,这里的 padding 就是行内的呼吸空间。) */
+.account-sheet .account-item { padding: 10px 12px; border-radius: 12px; font-size: 15px; gap: 10px; }
 .account-sheet .account-item:active { background: var(--bg-3); }
 .account-sheet .account-item-check { width: 18px; }
 .account-sheet .account-actions {
@@ -294,7 +326,11 @@
    点击顶栏品牌名「妙妙屋」切换:默认开启(html 有 data-privacy 属性),
    敏感文字(.privacy:昵称/UID)常驻模糊;点击品牌名解除全部,再点恢复。
    不依赖任何窗口焦点/鼠标/触屏事件——截图/录屏/投屏不触发 DOM 事件,默认即保护最可靠。
-   品牌名遮罩开启时变暗,作为当前模式的视觉提示。 */
+   品牌名遮罩开启时变暗,作为当前模式的视觉提示。
+
+   另有**一处自动解除**:切换账号时(见 hooks/usePrivacy 的 setOff 与 App.jsx 的两处调用)。
+   切过去后昵称/UID/头像全是糊的,用户没法确认自己切到了哪个账号,而切换是他亲手做的。
+   首屏默认账号没设 PIN 时不解除(那是 useAccounts 自行选定的,不是主动操作)。 */
 html[data-privacy] .privacy {
   filter: blur(5px);
   transition: filter .12s ease;
@@ -314,23 +350,40 @@ html[data-privacy] .brand { color: var(--fg-dim); }
   .brand { font-size: 10px; max-width: none; }
   .topbar-fs { padding: 6px 8px; }
   .topbar-fs-text { display: none; }
-  /* 触发条上的 UID **整条去掉**(JSX 里 mobile 时不渲染,这里只是双保险 + 记录理由):
-     原做法是换行到第二行,但那会把顶栏撑高一截 —— 而顶栏是 sticky 的,
-     各页高度不一致,滚动时会有跳动感。UID 在 sheet 里照样能看到,不亏信息。 */
-  .account-trigger .acct-uid { display: none; }
-  /* 上限 55vw 是「不要太长」的那道闸 —— 再长就要吃掉 brand 与右侧按钮的空间了。
-     超出部分由 .account-trigger-name 的 ellipsis 收尾(它自带 overflow:hidden +
-     text-overflow:ellipsis),不会把顶栏撑破。
-     注意别写回 width:100% —— 那会让短昵称也撑满整条(实测 213px),不符合「按内容」。 */
-  .account-select { max-width: 55vw; width: auto; }
-  /* 触发条**吃掉顶栏剩余空间**。
-     实测(360/390/414 三个手机视口):顶栏里除它之外的元素加起来才 ~110px,
-     而它 width:auto 只按内容撑到 82px,**剩下的一百多像素一直空着** ——
-     于是昵称稍长就先吃省略号,而空间其实根本没用完。
-     给 .account-wrap 加 flex:1 接管剩余空间(其余项仍是 flex:0 1 auto 的固有宽,
-     不会被挤),长昵称能多显示出好几个字,点击区域也跟着变大 ——
-     手机端点开这个按钮本来就该是大热区。 */
-  .account-wrap { flex: 1; }
+  /* 手机端触发条**整体靠右**:
+       - .account-wrap 交回固有宽(flex 复位),不再 flex:1 接管剩余空间;
+       - margin-left:auto 把整条推到顶栏右端;
+       - .account-select 也回到 width:auto,不再撑满 —— 撑满时内容会左对齐,
+         右边空一大截,看着就是「没靠右」。
+     三者是一套,改任何一个都要看另外两个。
+
+     为什么要靠右:顶栏右侧是主题按钮那一组操作区,账号紧贴着它排,
+     视觉上归到同一组;撑满时它贴在左端紧挨 brand,中间那片空白会让人
+     以为那块也是可点的。
+
+     靠右的第二个好处:展开的 sheet 是贴底的,而触发条在右上 —— 手指点右上角、
+     从底部抬起,两者不打架,误触更少。
+
+     (历史:flex:1 + width:100% 撑满 → width:auto + margin-left:auto 靠右。
+      撑满那条判据是在「要让超长昵称多显示几个字」的前提下才成立的,
+      而昵称现在由 ellipsis 收尾,不再靠撑满争取宽度。) */
+  .account-wrap { flex: 0 1 auto; margin-left: auto; }
+  /* max-width 不能整个去掉:去掉后昵称再长也不会截断(下面的收缩与 ellipsis
+     都建立在「有一个上限」之上),360 窄屏下整条会溢出视口。
+     但也不能沿用 vw —— vw 是按视口算的,而这里真正要防的是「挤掉 brand」,
+     那是顶栏内的竞争关系。故给一个按内容算的绝对上限 200px:
+     实测 360 视口下 brand ~110px + 触发条 200px + 右侧按钮 ~70px 仍放得下。 */
+  .account-select { max-width: 200px; width: auto; min-width: 0; }
+  /* 上下收到 2px,箭头去掉(点整条都能展开,箭头是冗余的) */
+  .account-trigger { padding: 2px 8px; gap: 6px; }
+  .account-trigger .account-caret { display: none; }
+  /* 昵称在手机端已不渲染(见 AccountSelect 的 !mobile 条件),故那条 5em 下限
+     在这里用不上 —— 只留「兜底文案」用的收缩规则(无账号时显示「选择账号…」)。
+     桌面的 5em 保持不动:那里宽度充裕,按内容宽反而不必要地频繁变宽。 */
+  .account-trigger .account-trigger-name { flex: 0 1 auto; min-width: 0; }
+  /* UID 在手机端是**唯一的文本标识**了(昵称已不显示),故给回正常字号 ——
+     之前压到 9px 是为了给昵称让位,现在没有让位的对象了,太小反而看不清。 */
+  .account-trigger .acct-uid { display: inline; font-size: 11px; margin-right: 2px; }
   /* 同 .topbar:backdrop-filter 创建层叠上下文,故本栏层级须高于内容区全部浮层。 */
   .bottomnav {
     display: flex; position: sticky; bottom: 0; z-index: var(--z-shell);

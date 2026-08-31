@@ -2,7 +2,7 @@ import React from 'react'
 import { uidOf } from '../data/nav'
 import RankTitle from './RankTitle'
 import AccountAvatar from './AccountAvatar'
-import { IconLock, IconCheck } from './svg'
+import { IconCheck } from './svg'
 
 // AccountItem 单行账号行:桌面浮层与手机 sheet **共用**的唯一行渲染源。
 // 两者只有行高/圆角/字号不同(由各自容器的 CSS 决定),内容结构完全一致,
@@ -25,10 +25,11 @@ export default function AccountItem({ account, cur, hi, onChoose, onHover, touch
       onClick={touch ? onChoose : undefined}
       onMouseEnter={onHover}
     >
-      <AccountAvatar account={account.account} name={account.name} online={account.online} avatar={account.avatar} />
+      <AccountAvatar account={account.account} name={account.name} online={account.online} avatar={account.avatar} pin={account.hasPin} />
       <span className="privacy account-item-name">{account.name}</span>
       <RankTitle title={account.title} />
-      {account.hasPin && <span className="account-item-pin" title="已设 PIN"><IconLock size={11} /></span>}
+      {/* PIN 锁已移到头像左下角(AccountAvatar 的 pin 参数),这里不再单独渲染 ——
+          它挂在这一层时会被伸缩的昵称推来推去。 */}
       <span className="privacy account-item-uid">UID:{uidOf(account.account)}</span>
       {/* 对勾槽位**恒定占位**(未选中也占同样的宽):否则选中行的昵称会比其它行短一截,
           各行名字对不齐,扫视反而更慢。选中与否只改槽内的透明度与缩放。 */}
