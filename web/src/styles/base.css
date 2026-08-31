@@ -50,6 +50,10 @@
   --c-spend: #e5534b;    /* 亏损红(盈亏为负、危险态)——与 --danger 同值,语义上指「花掉」 */
   --c-chart: #3d7ab8;    /* 图表蓝(柱状图渐变起点) */
   --c-chart-l: #5aa9e6;  /* 图表亮蓝(渐变终点) */
+  /* 蛋组标签(繁殖组):原写死在 pet.css 的 .egg-group 里,收进来做成与上面同构的
+     语义色 —— 它标的是宠物身上一个固定属性,玩家扫视时也靠颜色认,故同样**不随主题变化**。 */
+  --c-egggroup: #b9ccef;   /* 蛋组标签字色 */
+  --c-egggroup-d: #2f3f57; /* 蛋组标签底 */
 
   /* 上面几个语义色的 **rgb 分量形式**,供需要半透明的地方用:
      `rgba(var(--c-earn-rgb), .14)`。避免各处重复写死同一串数字(改色时易漏)。 */
@@ -63,6 +67,21 @@
   /* 详情弹窗 hero 的底衬色(径向渐变中心色)。暗色下偏冷灰蓝提供纵深,
      亮色下近乎透明 —— 白底上再叠深色会显脏(原写死 #38415a,切亮色是一块突兀深色斑)。 */
   --hero-tint: #38415a;
+
+  /* 浮层气泡(tooltip / 提示气泡):**有意在明暗主题下都维持反白的深底浅字** ——
+     气泡是浮在内容之上的第三层,跟着主题由深翻浅会让它在浅底内容上失去边界。
+     原先各处写死 #0b0e13 / #e6edf3,而边框仍取 --line(亮色主题下是浅灰),
+     近黑底配浅灰描边很脏;收进变量后底色/字色/描边一并成套。 */
+  --tip-bg: #0b0e13;
+  --tip-fg: #e6edf3;
+  --tip-line: #2a3240;
+  --tip-bg-rgb: 11, 14, 19; /* 需半透明时写 rgba(var(--tip-bg-rgb), .94) */
+
+  /* 系别标签的深字色:浅底系别(冰/翼/草/虫…)用白字对比度不足,改用这一档。
+     取值接近纯黑但留一点冷调,与 --fg 系同源。放在这里(而非系别色那段另起
+     一个 :root 块)是硬要求:scripts/check-css-vars.mjs 用 `rootVars = ...`
+     逐块赋值,第二个 :root 块会把第一个整块顶掉,全站变量都会被判未定义。 */
+  --type-ink: #12161c;
 
   /* --muted 是 --fg-dim 的别名:早先各处直接写 var(--muted) 但从未定义,
      导致这 8 处「次要文字」静默降级为继承色(失去弱化效果)。补上定义即可,无需改调用点。 */
@@ -156,6 +175,13 @@ body {
   font-family: -apple-system, "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
   font-size: 14px;
   -webkit-font-smoothing: antialiased;
+  /* 全站数字等宽(tabular-nums):数字字宽一致后,排行榜/倒计时/六维/时间这些
+     列里的数能竖着对齐成列,秒级刷新也不左右跳。
+     放在 body 上让全站继承:本工具满屏都是数字,逐个加既容易漏也没必要。
+     CJK 不受影响(全角字宽本就固定),中文里夹的数字同样受益
+     (如「捕获于 3 月 5 日」不会因为 1 比 8 窄而错位)。
+     个别处要比例数字(大号展示数字)自行写 font-variant-numeric: proportional-nums。 */
+  font-variant-numeric: tabular-nums;
 }
 a { color: inherit; text-decoration: none; }
 button, input, select { font: inherit; color: inherit; }
@@ -296,7 +322,14 @@ input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; margin
 }
 .glass-zoom-rkpet:hover { color: var(--accent); background: var(--accent-soft); }
 
-/* ---- 系别色 ---- */
+/* ---- 系别色 ----
+   底色**一个都不改**:18 个系别色取自游戏内配色,玩家靠颜色辨认系别(同 --c-* 语义色,
+   见文件顶部注释),改底色等于改含义。
+
+   改的是**前景色**:这些底色的亮度参差很大(冰/翼/草/虫偏亮,幽/恶/武偏暗),
+   统一用白字时浅底那几个只有 2.1~3.9:1(AA 正文要求 4.5:1),实测最差的是
+   翼 #5bc0c9 = 2.14:1、冰 #54bcd6 = 2.20:1、草 #46b35a = 2.67:1、虫 #86a832 = 2.74:1。
+   按底色亮度分两组给前景色(下面那组改成近黑墨色),两组都 ≥4.5:1。 */
 .type {
   display: inline-flex; align-items: center; gap: 3px;
   padding: 1px 7px 1px 4px; border-radius: 6px; font-size: 12px; color: #fff; margin: 0 2px 2px 0;
@@ -308,11 +341,21 @@ input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; margin
 /* 系别属性小图 */
 .type-ic { width: 14px; height: 14px; object-fit: contain; }
 .type[data-t="火"]{background:#e2563b}.type[data-t="水"]{background:#3b8fe2}.type[data-t="草"]{background:#46b35a}
-.type[data-t="光"]{background:#e0c33a;color:#222}.type[data-t="地"]{background:#a9763e}.type[data-t="冰"]{background:#54bcd6}
-.type[data-t="龙"]{background:#6b58d6}.type[data-t="电"]{background:#d6b53a;color:#222}.type[data-t="毒"]{background:#9b4fc4}
+.type[data-t="光"]{background:#e0c33a}.type[data-t="地"]{background:#a9763e}.type[data-t="冰"]{background:#54bcd6}
+.type[data-t="龙"]{background:#6b58d6}.type[data-t="电"]{background:#d6b53a}.type[data-t="毒"]{background:#9b4fc4}
 .type[data-t="虫"]{background:#86a832}.type[data-t="武"]{background:#c2452f}.type[data-t="翼"]{background:#5bc0c9}
-.type[data-t="萌"]{background:#e58fb8;color:#222}.type[data-t="幽"]{background:#5a4a7a}.type[data-t="恶"]{background:#3a3f4a}
+.type[data-t="萌"]{background:#e58fb8}.type[data-t="幽"]{background:#5a4a7a}.type[data-t="恶"]{background:#3a3f4a}
 .type[data-t="机械"]{background:#7a8794}.type[data-t="幻"]{background:#b46fd6}.type[data-t="普"]{background:#6b7280}
+/* 浅底系别改用深字(白字在这 12 个底色上 2.1~3.9:1,AA 要求 4.5:1;
+   换成 var(--type-ink) 后为 4.6~8.5:1)。剩下 6 个(龙/毒/武/幽/恶/普)底色够深,
+   沿用 .type 上的白字(4.8~10.6:1)。
+   原先光/电/萌 三个是在各自规则里写 color:#222,其余浅底系别却是白字 —— 口径不一,
+   这里统一收到一条规则里,底色一个字都没改。 */
+.type[data-t="火"], .type[data-t="水"], .type[data-t="草"], .type[data-t="地"],
+.type[data-t="冰"], .type[data-t="虫"], .type[data-t="翼"], .type[data-t="机械"],
+.type[data-t="幻"], .type[data-t="光"], .type[data-t="电"], .type[data-t="萌"] {
+  color: var(--type-ink);
+}
 
 /* ---- 移动端触控基线:按钮/图标按钮/胶囊统一最小可点高度,避免误触 ---- */
 @media (max-width: 760px) {

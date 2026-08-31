@@ -62,7 +62,12 @@ export default function App() {
         <IconsContext.Provider value={icons}>
           <div className="app">
             <header className="topbar">
-              {/* 品牌名即截图遮罩开关:开启时变暗,提示当前处于保护态 */}
+              {/* 品牌名**即**截图遮罩开关,且**刻意不做成按钮的样子** ——
+                  无边框/底色/图标,看着只是顶栏角落一个 logo + 站名;站名还带 .privacy,
+                  与昵称/UID 一起被糊掉(截图里不该留下「这是哪个工具」的线索)。
+                  曾有一版把它拆成右侧独立的盾牌图标按钮 + 顶栏金色状态条,已按原设计退回:
+                  这块的价值就在于「看起来不像开关」,做显著了就失去意义。
+                  开启时整块变暗(见 shell.css 的 html[data-privacy] .brand),是它唯一的提示。 */}
               <button type="button" className={'brand' + (privacyOn ? ' privacy-on' : '')}
                 onClick={togglePrivacy} title={privacyOn ? '点击解除遮罩' : '点击开启遮罩'}>
                 <img className="brand-logo" src="/logo.svg" alt="" draggable={false} /><span className="privacy">妙妙屋</span>
