@@ -458,7 +458,8 @@
           "elem": "str",
           "level": "int",
           "name": "str",
-          "power": "str"
+          "power": "str",
+          "skillId": "int"
         }
       ],
       "spAttack": {
@@ -785,6 +786,7 @@
               "merged": [
                 {}
               ],
+              "name": "str",
               "power": "int",
               "slot": "int"
             }

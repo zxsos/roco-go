@@ -329,7 +329,8 @@ func contractTrial() *TrialPayload {
 				Gid: 133, Name: "黑猫巫师", Species: "黑猫巫师", Img: "HeadIcon/3569.webp",
 				Level: 60, HP: 264, MaxHP: 389, Energy: 10, Growth: 2,
 				Skills: []TrialSkill{
-					{ID: 7020500, Power: 25, Cost: 4, Fusion: 1, Slot: 2, Merged: []uint32{7090100}},
+					{ID: 7020500, Name: "乱打", Power: 25, Cost: 4, Fusion: 1, Slot: 2, Merged: []uint32{7090100}},
+					// 融合产物(788xxxx):查不到中文名,name 缺失,前端回退显示 id
 					{ID: 7880058, Power: 20, Cost: 0, Slot: 2},
 				},
 				Features: []uint32{288135, 288001},

@@ -56,6 +56,68 @@ func TestInnateSkillsSortedDesc(t *testing.T) {
 	}
 }
 
+// TestSkillName 断言 skill_id → 中文名的映射。
+//
+// 取值来自第三方资料站,故只断言确定的几条(用协议实测过的 id),覆盖三类情况:
+// 普通技能、同名变体、查不到的融合产物。
+func TestSkillName(t *testing.T) {
+	db, err := Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if len(db.skills.names) == 0 {
+		t.Fatal("names 映射为空:data/skills.json 没解析出 skill_id")
+	}
+	// 普通技能:试炼里实测出现过的 id
+	for id, want := range map[uint32]string{
+		7020500: "乱打", // 黑猫巫师初始技能(融合前威力25/能耗4)
+		7020550: "魔能爆",
+		7170210: "午夜噪音",
+		7120100: "毒液渗透",
+		7020840: "借用", // 变化类(威力0),按数值反查不了,只能按 id 查
+		7140190: "听桥",
+		7120300: "毒肽",
+	} {
+		if got := db.SkillName(id); got != want {
+			t.Errorf("SkillName(%d) = %q, 期望 %q", id, got, want)
+		}
+	}
+	// 融合产物:融合会生成新的 skill_id,不在基础技能表里,查不到是**正常的**
+	if got := db.SkillName(7880058); got != "" {
+		t.Errorf("融合产物 7880058 应查不到, 得到 %q", got)
+	}
+	// 不存在的 id
+	if got := db.SkillName(1); got != "" {
+		t.Errorf("不存在的 id 应返回空串, 得到 %q", got)
+	}
+}
+
+// TestInnateSkillsHaveSkillID 断言天生技能带上了 skill_id(重名技能除外)。
+func TestInnateSkillsHaveSkillID(t *testing.T) {
+	db, err := Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	withID, withoutID := 0, 0
+	for id := range db.skills.pets {
+		for _, s := range db.InnateSkills(id) {
+			if s.SkillID != 0 {
+				withID++
+			} else {
+				withoutID++ // 重名技能(借用/取念/复写/愿力冲击/疾风涡轮)填 0
+			}
+		}
+	}
+	if withID == 0 {
+		t.Fatal("没有任何天生技能带上 skill_id —— 合并回填没生效")
+	}
+	// 名字能查到 id 的应占绝大多数(资料站 492 个技能里 488 个唯一命中)
+	if r := float64(withID) / float64(withID+withoutID); r < 0.9 {
+		t.Errorf("带 skill_id 的比例过低: %.1f%% (%d/%d)", r*100, withID, withID+withoutID)
+	}
+	t.Logf("带 skill_id %d 条, 重名无 id %d 条", withID, withoutID)
+}
+
 // TestInnateSkillsUnknown 断言未知形态返回 nil 且不 panic。
 func TestInnateSkillsUnknown(t *testing.T) {
 	db, err := Load()

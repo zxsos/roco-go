@@ -50,7 +50,8 @@
       "elem": "火",
       "level": 48,
       "name": "山火",
-      "power": "15"
+      "power": "15",
+      "skillId": 7040250
     },
     {
       "cost": "1",
@@ -58,7 +59,8 @@
       "elem": "火",
       "level": 42,
       "name": "闪燃",
-      "power": "40"
+      "power": "40",
+      "skillId": 7040180
     },
     {
       "cost": "1",
@@ -66,7 +68,8 @@
       "elem": "火",
       "level": 36,
       "name": "热身",
-      "power": "—"
+      "power": "—",
+      "skillId": 7040270
     },
     {
       "cost": "5",
@@ -74,7 +77,8 @@
       "elem": "火",
       "level": 30,
       "name": "火云车",
-      "power": "140"
+      "power": "140",
+      "skillId": 7040320
     },
     {
       "cost": "2",
@@ -82,7 +86,8 @@
       "elem": "火",
       "level": 29,
       "name": "持续高温",
-      "power": "70"
+      "power": "70",
+      "skillId": 7040220
     },
     {
       "cost": "1",
@@ -90,7 +95,8 @@
       "elem": "火",
       "level": 21,
       "name": "怒火",
-      "power": "—"
+      "power": "—",
+      "skillId": 7040440
     },
     {
       "cost": "1",
@@ -98,7 +104,8 @@
       "elem": "普通",
       "level": 17,
       "name": "晒太阳",
-      "power": "—"
+      "power": "—",
+      "skillId": 7021100
     },
     {
       "cost": "1",
@@ -106,7 +113,8 @@
       "elem": "火",
       "level": 12,
       "name": "吹火",
-      "power": "50"
+      "power": "50",
+      "skillId": 7040200
     },
     {
       "cost": "1",
@@ -114,7 +122,8 @@
       "elem": "普通",
       "level": 10,
       "name": "防御",
-      "power": "—"
+      "power": "—",
+      "skillId": 7020780
     },
     {
       "cost": "3",
@@ -122,7 +131,8 @@
       "elem": "火",
       "level": 8,
       "name": "火焰切割",
-      "power": "100"
+      "power": "100",
+      "skillId": 7040390
     },
     {
       "cost": "1",
@@ -130,7 +140,8 @@
       "elem": "普通",
       "level": 6,
       "name": "力量增效",
-      "power": "—"
+      "power": "—",
+      "skillId": 7020620
     },
     {
       "cost": "0",
@@ -138,7 +149,8 @@
       "elem": "火",
       "level": 1,
       "name": "火苗",
-      "power": "30"
+      "power": "30",
+      "skillId": 7040170
     },
     {
       "cost": "1",
@@ -146,7 +158,8 @@
       "elem": "普通",
       "level": 1,
       "name": "猛烈撞击",
-      "power": "65"
+      "power": "65",
+      "skillId": 7020370
     }
   ],
   "spAttack": {

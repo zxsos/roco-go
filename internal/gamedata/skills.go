@@ -7,15 +7,17 @@ import (
 	"strconv"
 )
 
-// 精灵的「天生技能」表(由 scripts/gen_skills.py 生成)。
+// 技能表(由 scripts/gen_skills.py 生成),含两块互补的数据:
 //
-// 数据来源与 names.json 不同:names.json 全部出自游戏解包 Bin 配置,而这份来自第三方
-// 资料站(arkmeng.cn 的技能数据),是**过渡方案** —— 解包出 SKILL_CONF 后应改走解包数据。
-// 独立成文件(而非并入 names.json)正是为了让「这份数据从哪来」说得清。
+//  1. **skill_id → 技能中文名**(names):协议里的 base_skill_id(7020500 这类)。
+//     草系试炼等「只给 id」的场景靠它显示中文名。
+//  2. **形态 → 天生技能**(pets):某形态天生会什么、几级学会、威力/能耗/效果。
+//     宠物详情页用。注意这是**可换的配置**,不是某只宠物当前携带的技能 ——
+//     后者见 git 0762eb6 移除 Pet.SkillIDs 的理由(技能可经技能石等途径更换)。
 //
-// 组织方式:按 petbase 形态 id 索引,值为该形态天生会的技能(含学会等级)。
-// 注意这是**可换的配置**,不是某只宠物当前携带的技能 —— 后者见 git 0762eb6 移除
-// Pet.SkillIDs 的理由(技能可从技能石等途径更换,且体积开销大)。
+// 数据来源与 names.json 不同:names.json 全部出自游戏解包 Bin 配置,而这份来自两个
+// 第三方资料站(aismile.dev + arkmeng.cn),是**过渡方案** —— 解包出 SKILL_CONF
+// (id→中文名,与协议同源)后应改走解包数据。独立成文件正是为了让「这份数据从哪来」说得清。
 //
 //go:embed data/skills.json
 var skillsJSON []byte
@@ -27,42 +29,67 @@ var skillsJSON []byte
 // (weightKg/glassType/…)不一致,前端取值也容易写错。
 // Power/Cost 用字符串而非数值:无威力的变化类技能是 "—"(如「防御」),整数表达不了。
 type InnateSkill struct {
-	Name   string `json:"name"`
-	Level  uint32 `json:"level"`
-	Elem   string `json:"elem"`
-	Power  string `json:"power"`
-	Cost   string `json:"cost"`
-	Effect string `json:"effect"`
+	Name    string `json:"name"`
+	Level   uint32 `json:"level"`
+	Elem    string `json:"elem"`
+	Power   string `json:"power"`
+	Cost    string `json:"cost"`
+	Effect  string `json:"effect"`
+	SkillID uint32 `json:"skillId,omitempty"` // 协议里的 base_skill_id;重名技能为 0(见 gen_skills.py)
 }
 
-// innateSkillRaw 是 JSON 里的紧凑数组形式:[名, 等级, 属性, 威力, 能耗, 效果下标]。
+// innateSkillRaw 是 JSON 里的紧凑数组形式:
+// [名, 等级, 属性, 威力, 能耗, 效果下标, skill_id]。
 // 用数组而非对象是为压体积(5213 条省下重复键名,见 gen_skills.py 的说明)。
-type innateSkillRaw [6]any
+type innateSkillRaw [7]any
 
 // skillsDB 是解析后的技能表。
 type skillsDB struct {
 	effects []string                    // 共享效果描述池
+	names   map[uint32]string           // skill_id -> 技能名
 	pets    map[uint32][]innateSkillRaw // petbase_id -> 紧凑条目
 	byID    map[uint32][]InnateSkill    // petbase_id -> 展开后的技能(懒解析)
 }
 
 // loadSkills 解析内嵌的技能表;文件缺失或格式不符时返回空表(不影响其余功能)。
 func loadSkills() *skillsDB {
-	db := &skillsDB{pets: map[uint32][]innateSkillRaw{}}
+	db := &skillsDB{
+		names: map[uint32]string{},
+		pets:  map[uint32][]innateSkillRaw{},
+	}
 	var raw struct {
 		Effects []string                    `json:"effects"`
+		Names   map[string]string           `json:"names"`
 		Pets    map[string][]innateSkillRaw `json:"pets"`
 	}
 	if err := json.Unmarshal(skillsJSON, &raw); err != nil {
 		return db
 	}
 	db.effects = raw.Effects
+	for k, v := range raw.Names {
+		if id, err := strconv.ParseUint(k, 10, 32); err == nil {
+			db.names[uint32(id)] = v
+		}
+	}
 	for k, v := range raw.Pets {
 		if id, err := strconv.ParseUint(k, 10, 32); err == nil {
 			db.pets[uint32(id)] = v
 		}
 	}
 	return db
+}
+
+// SkillName 把协议里的技能 id(base_skill_id,如 7020500)翻成中文名;
+// 查不到返回空串 —— 资料站只覆盖 604 个,且**融合产生的技能 id 不在其中**。
+//
+// 关于融合技能:试炼里技能可被融合,融合后会生成新的 skill_id(如 7880058,
+// 而基础技能是 702xxxx/712xxxx 这类)。这类 id 是融合产物、不在基础技能表里,
+// 故查不到是**正常的**,调用方应回退显示原始 id 而非当成错误。
+func (db *DB) SkillName(skillID uint32) string {
+	if db.skills == nil {
+		return ""
+	}
+	return db.skills.names[skillID]
 }
 
 // InnateSkills 返回某形态天生会的技能,按学会等级降序(同级按名);
@@ -102,6 +129,9 @@ func (db *DB) InnateSkills(petbaseID uint32) []InnateSkill {
 				s.Effect = sdb.effects[i]
 			}
 		}
+		if v, ok := r[6].(float64); ok {
+			s.SkillID = uint32(v)
+		}
 		out = append(out, s)
 	}
 	// 生成脚本已排好序,这里再排一次只为防御(展开顺序与紧凑条目一致,行为可预期)。
@@ -122,6 +152,3 @@ func (db *DB) InnateSkills(petbaseID uint32) []InnateSkill {
 func (db *DB) HasInnateSkills(petbaseID uint32) bool {
 	return db.skills != nil && len(db.skills.pets[petbaseID]) > 0
 }
-
-// 保证 embed 变量被引用(避免只用于解析时被误判未使用)。
-var _ = skillsJSON

@@ -274,7 +274,10 @@ function PetCard({ pet }) {
             <div key={s.slot} className={'trial-skill' + (pet.equipped && pet.equipped.includes(s.slot) ? ' on' : '')}>
               <div className="trial-skill-head">
                 <span className="trial-skill-slot">槽 {s.slot}</span>
-                <span className="trial-skill-id">{s.id}</span>
+                {/* 技能名按 id 查;融合产生的 id 查不到(如 7880058),回退显示 id */}
+                <span className="trial-skill-id" title={`技能 id ${s.id}`}>
+                  {s.name || s.id}
+                </span>
               </div>
               <div className="trial-skill-meta">
                 <span title="融合后威力">威力 {s.power}</span>

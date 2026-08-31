@@ -72,24 +72,26 @@
 #### `skills`（仅 `GET /api/pets/{gid}`）
 
 ```json
-{ "skills": [{ "name": "山火", "level": 48, "elem": "火",
+{ "skills": [{ "name": "山火", "level": 48, "elem": "火", "skillId": 7040250,
                "power": "15", "cost": "3",
                "effect": "造成物伤，每使用1次其他火系技能，本技能威力永久翻倍。" }] }
 ```
 
-按 `baseConfId`（当前形态）查 `gamedata.InnateSkills`，按学会等级降序。四点约束：
+按 `baseConfId`（当前形态）查 `gamedata.InnateSkills`，按学会等级降序。五点约束：
 
 1. **这是「该形态天生会的技能」，不是某只宠物当前携带的**。技能是可换配置
    （见 `git 0762eb6` 移除 `Pet.SkillIDs` 的理由），后端不存个体技能。
 2. **只有详情接口带**，`GET /api/pets` 列表不带 —— 避免给每只宠物都序列化一份。
 3. `power` / `cost` 是**字符串**：变化类技能无威力，值为 `"—"`（如「防御」），整数表达不了。
 4. **该形态无资料时整键缺失**（`omitempty`），不是空数组 —— 见下「数据来源」。
+5. **`skillId` 可能为 0**：该技能在资料站是重名的（借用/取念/复写各有 4 个变体，
+   愿力冲击有 15 个精灵专属版），无从判断这个形态会的是哪一个。
 
 > ⚠️ **数据来源是第三方资料站（过渡方案）**，不是游戏解包：
-> 见 `scripts/gen_skills.py` 与 `internal/gamedata/skills.go`。它只覆盖部分形态
-> （本项目宠物形态的约 85%），且**没有协议里的 `base_skill_id`**（`7020500` 这类），
-> 故只能按「形态 + 学会等级」组织，不能用于反查试炼里的技能 id
-> （试炼技能 id 的中文名仍需解包 `SKILL_CONF`，见 `docs/data.md`「待校准」）。
+> 见 `scripts/fetch_skill_ids.py`、`scripts/gen_skills.py` 与 `internal/gamedata/skills.go`。
+> 它只覆盖部分形态（本项目宠物形态的约 85%）；权威映射是解包的 `SKILL_CONF`
+> （`base_skill_id` → 中文名，与协议同源），解出后应替换。
+> 完整背景与四条局限见 `docs/data.md`「技能名」。
 
 ### `GET /api/stats` ✅
 ```json
@@ -388,9 +390,12 @@
 
 - `active` 恒在下发（是否正在打一局）；`run` 只在握有某一局时出现，`history` 只在收到过
   0x1975 账号档案后出现。
-- `run` 里技能/特性/碎片/事件/奖励**只有 id**：游戏技能名表尚未接入本项目
-  （`names.json` 里没有），一律原样展示。奖励 id 的类别按区间可判（7xxxxx=技能、
-  288xxx=特性、20xx-30xx=碎片），前端已内置该映射。
+- `run.pet.skills[]` 的**技能有 `name`**（按 `id` 查第三方资料的 `skill_id → 中文名`，
+  见 `docs/data.md`「技能名」）。**融合产物查不到名、`name` 缺失是正常现象** ——
+  融合会生成新 id（基础技能 `702xxxx`，融合产物如 `7880058`），不在基础表里，
+  前端回退显示 `id`。实测一局 7 个技能里 6 个有名。
+- 其余（特性 `288xxx`、碎片 `20xx-30xx`、事件、奖励）**只有 id，无名称表**，一律原样展示。
+  奖励 id 的类别按区间可判（7xxxxx=技能、288xxx=特性、20xx-30xx=碎片），前端已内置该映射。
 - `log` 是操作流水（最新在前，最多 40 条），`kind` 取值 `start/node/refresh/bless/reward/
   shop/boss/settle`；`ids` 随 kind 而异（如 `node` 是 [章节号, 节点号]）。
 - 一局结束有两条路径收敛：0x196a 结算通知，或档案 0x1975 里最新战绩的补判
