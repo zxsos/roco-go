@@ -167,3 +167,55 @@ func TestTrialBosses(t *testing.T) {
 		}
 	}
 }
+
+// TestTrialBossesAreBattleForms 守护一个踩过的坑:**首领必须用战斗形态的 id**。
+//
+// 每只首领在我方 petbase 里有三套形态(以女王蜂为例):
+//   - 5015 普通
+//   - 4021 首领形态      ← wiki 的 pets 表记的是这一套
+//   - 8107 草系徽章-首领形态  ← **战斗里实际出现的是这一套**
+//
+// 早先照抄 wiki 的 base_id(4021 那套),结果「战斗中遇到的首领」与首领池对不上
+// (0x1316 的 enemy_team 给的是 8107)—— 记录遇见进度时会永远匹配不上。
+// 故这里要求全部落在 8101~8122,且形态名带「草系徽章-首领形态」。
+func TestTrialBossesAreBattleForms(t *testing.T) {
+	db, err := Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	for _, b := range db.TrialBosses() {
+		if b < 8100 || b > 8130 {
+			t.Errorf("首领 %d 不在 8101~8122 区间 —— 用了非战斗形态的 id(见本测试的说明)", b)
+			continue
+		}
+		info, ok := db.PetBase(b)
+		if !ok {
+			t.Errorf("首领 %d 不在我方 petbase 里", b)
+			continue
+		}
+		if info.Form != "草系徽章-首领形态" {
+			t.Errorf("首领 %d 的形态是 %q, 期望「草系徽章-首领形态」", b, info.Form)
+		}
+	}
+}
+
+// TestTrialBossesNotInPools 断言首领不在各章普通池里 —— 两者是不同的遭遇来源
+// (首领来自第 4 层的 22 人名单,普通池来自 1/2/3/5 层),混在一起会让
+// 「遇见进度」重复计数。
+func TestTrialBossesNotInPools(t *testing.T) {
+	db, err := Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	boss := map[uint32]bool{}
+	for _, b := range db.TrialBosses() {
+		boss[b] = true
+	}
+	for ch, pool := range db.trial.pools {
+		for _, p := range pool {
+			if boss[p] {
+				t.Errorf("第 %d 章普通池里混进了首领 %d", ch, p)
+			}
+		}
+	}
+}

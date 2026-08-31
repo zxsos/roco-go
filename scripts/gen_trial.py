@@ -258,11 +258,15 @@ if not modes:
 # 页面「第 4 层 · 首领列表」在三章下是同一份 22 个名字。数据模块里**没有**单独的
 # 首领表,只能按名字反查。
 #
-# 为什么不靠 marker_name 里含「首领」来判:wiki 的标注不全 —— 实测 22 名里
-# 「霜翼领主」和「深渊罗隐」的 marker 没写「首领形态」,按 marker 只会得到 21 个。
-# 故以页面标注为准,下面这份名单是**硬编码**的(改版时按页面更新),
-# 并用「数量必须等于 22」+「每个名字都要查到 base_id」双重校验,
-# 少一个就报错而不是静默产出一份缺斤少两的首领池。
+# 为什么不靠 marker_name 含「首领」判:wiki 标注不全(霜翼领主、深渊罗隐没标),
+# 按 marker 只会得到 21 个。故以页面标注为准,硬编码下面这份名单。
+#
+# ⚠️ **必须用「草系徽章-首领形态」那套 id(8101~8122),不能用 wiki 的 base_id**:
+#   wiki 的 pets 表里首领记的是「首领形态」(如女王蜂 4021),而**战斗里实际出现的
+#   是「草系徽章-首领形态」**(8107)—— 实测 0x1316 的 enemy_team 就是这个。
+#   两套 id 差了 4000 多,用错的话「遇到的首领」与首领池对不上。
+#   我方解包数据里 22 名**都有**草系徽章-首领形态(8101~8122,连续),故统一用它。
+#   校验:数量必须等于 22,且每个都要落到 8101~8122 这个区间。
 BOSS_NAMES = [
     "圣水守护", "烈火战神", "叶冕魔力猫", "恶魔狼王", "蹦蹦果", "千棘海针",
     "女王蜂", "奇丽果", "幻影荆棘", "迷嶂布莱克", "风暴战犬", "钻石蜗",
@@ -280,25 +284,25 @@ for p in pets.values():
 
 bosses, missing_boss = set(), []
 for n in BOSS_NAMES:
-    if n in name2base:
-        bosses.add(name2base[n])
-        continue
-    # wiki 的 pets 表只含普通池精灵,22 名首领里有 2 名不在其中(霜翼领主、深渊罗隐)。
-    # 我方解包数据里反而有,且形态后缀正是「草系徽章-首领形态」—— 用它兜底。
+    # 只认「<名字>_草系徽章-首领形态」—— 见上面的说明,这是战斗里的实际形态。
+    # wiki 的 base_id(name2base)对首领无效,故这里不用它。
     hit = [
         pid
         for full, pid in petbase_full.items()
-        if full.startswith(n + "_") and "首领" in full
+        if full == n + "_草系徽章-首领形态"
     ]
     if hit:
-        bosses.add(min(hit))  # 同名取最小(与 main_id 同口径:优先常规区间)
+        bosses.add(min(hit))
     else:
         missing_boss.append(n)
 if missing_boss:
-    sys.exit(f"首领名单里有名字查不到 base_id: {missing_boss} —— 模块或我方名称库变了,请核对")
+    sys.exit(f"首领名单里查不到「草系徽章-首领形态」: {missing_boss} —— 我方名称库或 BOSS_NAMES 变了")
 bosses = sorted(bosses)
 if len(bosses) != 22:
     sys.exit(f"解析出 {len(bosses)} 名首领(应为 22) —— 请核对 BOSS_NAMES")
+# id 必须落在 8101~8122(草系徽章首领的连续区间);若哪天游戏换了区间,这里会拦住
+if bosses[0] < 8100 or bosses[-1] > 8130:
+    sys.exit(f"首领 id {bosses[0]}~{bosses[-1]} 不在预期的 8101~8122 区间 —— 游戏可能改版了")
 
 out = {
     "_source": "wiki.biligame.com/rocom/草系徽章试炼 → Module:GrassTrialData"
