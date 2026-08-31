@@ -228,9 +228,23 @@ func (s *Server) handleStatic(w http.ResponseWriter, r *http.Request) {
 	}
 	if f, err := sub.Open(path); err == nil {
 		f.Close()
+		// 静态资源缓存策略(三档):
+		//   assets/  vite 构建产物,文件名带内容 hash,内容不变则文件名不变 → 可安全长缓存 immutable;
+		//   fonts/   public 原样复制的字体文件,**无 hash**,给短缓存(13KB,每天重验一次成本极低,
+		//            又能防止「改了字体文件但浏览器一直用旧的」);
+		//   其余      index.html / logo.svg / route-map 数据等,无 hash 且可能随发布更新 → no-cache。
+		switch {
+		case strings.HasPrefix(path, "assets/"):
+			w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+		case strings.HasPrefix(path, "fonts/"):
+			w.Header().Set("Cache-Control", "public, max-age=86400")
+		default:
+			w.Header().Set("Cache-Control", "no-cache")
+		}
 		http.ServeFileFS(w, r, sub, path)
 		return
 	}
 	// SPA fallback
+	w.Header().Set("Cache-Control", "no-cache")
 	http.ServeFileFS(w, r, sub, "index.html")
 }
