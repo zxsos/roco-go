@@ -40,6 +40,8 @@ export const SIZES = {
   // 头像边缘羽化到圆周处**保留**的不透明度(照抄 .map-wild-face 的 mask 终点 alpha):
   // 中心 60% 全实,往外渐隐到这里就不再继续变透。0.5 = 周围那圈是 50% 半透明,
   // 既透出底图又留得住轮廓;取 0 则是彻底渐隐、边缘会消失。
+  // canvas 侧天然精确:createRadialGradient 的 r 就是圆周,不存在 CSS 那种
+  // radial-gradient(circle) 默认 farthest-corner 把终点放到角上的坑(见 map.css)。
   featherEdge: 0.5,
 }
 
