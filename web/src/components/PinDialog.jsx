@@ -114,7 +114,7 @@ export function PinDialog({ account, name, hasPin, mode, onClose, onVerified, on
               onKeyDown={(e) => { if (e.key === 'Enter') submit() }} />
             <div className="pin-actions">
               {hasPin && (
-                <button className="btn pin-clear-btn" onClick={clearPin} disabled={busy || oldPin.length < 4}
+                <button className="btn ghost" onClick={clearPin} disabled={busy || oldPin.length < 4}
                   title={oldPin.length < 4 ? '需先输入旧 PIN 才能清除' : '清除后切到该账号不再需要 PIN'}>清除 PIN</button>
               )}
               <button className="btn primary pin-submit" onClick={submit} disabled={busy || newPin.length < 4 || newPin !== confirmPin}>保存</button>
@@ -130,7 +130,7 @@ export function PinDialog({ account, name, hasPin, mode, onClose, onVerified, on
               onKeyDown={(e) => { if (e.key === 'Enter') submit() }} />
             <div className="pin-actions">
               <button className="btn" onClick={onClose} disabled={busy}>取消</button>
-              <button className="btn pin-danger-btn" onClick={submit} disabled={busy || pin.length < 4}>确认删除</button>
+              <button className="btn danger pin-danger-btn" onClick={submit} disabled={busy || pin.length < 4}>确认删除</button>
             </div>
           </>
         )}
