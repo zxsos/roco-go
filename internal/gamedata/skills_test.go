@@ -59,7 +59,7 @@ func TestInnateSkillsSortedDesc(t *testing.T) {
 // TestSkillName 断言 skill_id → 中文名的映射。
 //
 // 取值来自第三方资料站,故只断言确定的几条(用协议实测过的 id),覆盖三类情况:
-// 普通技能、同名变体、查不到的融合产物。
+// 普通技能、同名变体、试炼专属 id。
 func TestSkillName(t *testing.T) {
 	db, err := Load()
 	if err != nil {
@@ -82,13 +82,33 @@ func TestSkillName(t *testing.T) {
 			t.Errorf("SkillName(%d) = %q, 期望 %q", id, got, want)
 		}
 	}
-	// 融合产物:融合会生成新的 skill_id,不在基础技能表里,查不到是**正常的**
-	if got := db.SkillName(7880058); got != "" {
-		t.Errorf("融合产物 7880058 应查不到, 得到 %q", got)
+	// 试炼专属 id:魔能爆在试炼里被换成 7880058(资料站 788 段整段缺失,
+	// 靠抓包实证逐个登记,见 gen_skills.py 的 EXTRA_SKILL_IDS)
+	if got := db.SkillName(7880058); got != "魔能爆" {
+		t.Errorf("试炼态 7880058 = %q, 期望 魔能爆", got)
 	}
 	// 不存在的 id
 	if got := db.SkillName(1); got != "" {
 		t.Errorf("不存在的 id 应返回空串, 得到 %q", got)
+	}
+}
+
+// TestSkillNameFusionKeepsID 守护一条反直觉的事实:**融合不改变 base_skill_id**。
+//
+// 早先误以为「融合会生成新 skill_id、查不到名是正常的」,据此放过了一个本可查到的
+// 名字(7880058)。实测它开局零融合时就存在,融合 2 次(威力 20 → 150、
+// fusion_count 0 → 2)后 id 始终不变 —— 故融合态技能同样该查到名。
+// 本测试防止该误解回归。
+func TestSkillNameFusionKeepsID(t *testing.T) {
+	db, err := Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	// 试炼实测:这三个 id 无论融合几次都不变(只增长威力与 fusion_count)
+	for _, id := range []uint32{7020500, 7880058, 7170210} {
+		if got := db.SkillName(id); got == "" {
+			t.Errorf("融合态技能 %d 应能查到名(融合不改 base_skill_id), 得到空串", id)
+		}
 	}
 }
 

@@ -606,9 +606,9 @@ func (p *Pipeline) trialPetPayload(tp *trial.Pet) *server.TrialPet {
 			ID: s.BaseID, Power: s.Power, Cost: s.EnergyCost,
 			Fusion: s.FusionCount, Slot: s.SlotPos, Merged: s.Merged,
 		}
-		// 技能名按 base_skill_id 查。查不到是**正常的**:融合会生成新的 skill_id
-		// (基础技能是 702xxxx/712xxxx,融合产物如 7880058),那些不在基础表里,
-		// 此时 name 缺失、前端回退显示 id。
+		// 技能名按 base_skill_id 查。融合**不会**改变 base_skill_id(只改威力与
+		// fusion_count),故融合态技能同样能查到名。查不到即资料站未收录,
+		// name 缺失、前端回退显示 id。
 		if n := p.db.SkillName(s.BaseID); n != "" {
 			sk.Name = n
 		}
