@@ -498,6 +498,46 @@ input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; margin
   .boxmap-btn { width: 32px; height: 32px; }
 }
 
+/* ---- 骨架屏(P5.4.2,配合 components/Skeleton.jsx)----
+   底色与高光都取自主题令牌(--bg-3 底 + --line 高光):深色下 --line 更亮、
+   浅色下更暗,两主题都是「微妙提亮」而**不会闪白** —— 闪白的根源是写死
+   rgba(255,255,255,.x),浅色主题下等于把白底高光叠在白底上。
+   只用 background-position 做扫光(不动画几何属性),合成器友好。 */
+.skeleton {
+  display: block;
+  background: linear-gradient(90deg, var(--bg-3) 25%, var(--line) 37%, var(--bg-3) 63%);
+  background-size: 400% 100%;
+  border-radius: var(--radius);
+  animation: skeleton-shimmer 1.4s ease-in-out infinite;
+}
+@keyframes skeleton-shimmer {
+  from { background-position: 100% 50%; }
+  to { background-position: 0 50%; }
+}
+.skeleton-rows { display: flex; flex-direction: column; }
+
+/* ---- 图片加载占位(P5.4.2)----
+   直接给 <img> 自己铺底色,不额外插占位元素:图片元素本身已由各自的类
+   (.inline-ic / .pet-avatar)定好尺寸,铺上背景就是一个尺寸正确的灰块,
+   加载完成后摘掉类即可 —— 没有多余 DOM,也不会出现占位与图片并存导致的跳位。 */
+.img-ph { background: var(--bg-3); border-radius: 4px; }
+
+/* ---- 路由切换过渡(P5.4.1,配合 App.jsx 的 RouteEnter)----
+   内容区淡入 + 8px 上移,只用 transform/opacity(合成器属性),时长走 --dur-base。
+   keyframes 不写 to、animation 也不设 fill-mode:动画结束即回到元素常态
+   (transform: none),不会留下一个持久的 containing block ——
+   地图页的 .map-vp 定位与尺寸测量都建立在「祖先无 transform」的假设上。 */
+.route-enter { animation: route-enter var(--dur-base) var(--ease-out); }
+@keyframes route-enter { from { opacity: 0; transform: translateY(8px); } }
+
+/* 地图页的高度链必须在这里接住:map.css 里是 .content:has(.map-page) 变 flex 列、
+   .map-page 用 flex:1 1 auto 撑满 —— 多插一层 .route-enter 后,若它是个普通块级
+   flex 项,map-page 的 flex 就落在一个非 flex 容器里失效,地图视口撑不满高度。
+   故只在地图页让包装层「接住并传递」这条链(他页保持普通块级,布局行为不变)。 */
+.content:has(.map-page) > .route-enter {
+  display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0;
+}
+
 /* ---- 路由懒加载的页面级占位(main.jsx 的 PageLoading)----
    只在懒加载 chunk 未就绪的瞬间出现(局域网内通常一闪而过),
    先给纯 spinner,P5 会升级成与页面布局同构的骨架屏。 */
@@ -514,6 +554,10 @@ input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; margin
 @media (prefers-reduced-motion: reduce) {
   /* 降速不停止:用户仍需知道「正在加载」,只是不要晃眼 */
   .spinner { animation-duration: 1.6s; }
+  /* 页面切换是纯装饰动效(内容本来就在导航瞬间到位),直接关掉不打折 */
+  .route-enter { animation: none; }
+  /* 骨架屏扫光同样只是「示意在加载」,静态底色已足够表达,去掉循环动画 */
+  .skeleton { animation: none; }
   /* 浮层/抽屉的位移动画属非必要动效,直接关闭(过渡声明保留,只把时长压到不可感);
      .filters 是移动端侧滑抽屉(panel.css)。保留不透明度过渡,避免瞬间闪变。 */
   .toast, .confirm-backdrop, .confirm-dialog, .glass-zoom-backdrop, .filters {

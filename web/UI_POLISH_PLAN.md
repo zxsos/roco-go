@@ -195,17 +195,41 @@ mac/win/linux/安卓多端渲染一致。
 
 ## 4. P5 · 交互体验（优先级 P1）
 
-### 4.1 页面切换过渡
+### 4.1 页面切换过渡 —— ✅ 已完成
 
+步骤（原计划）：
 1. 路由出口包 `CSSTransition` 或轻量自研（`@keyframes` + `key` 触发）：页面淡入
    + 8px 上移，时长 160–200ms，`prefers-reduced-motion` 下直接无动画；
 2. 复用现有入场反馈模式（P2 已做 hover/入场），保持"入场即反馈"的语言一致；
 3. 不引入重量级动画库，保持 bundle 可控。
 
+实施记录：
+- 自研（不引库）：`App.jsx` 新增 `RouteEnter`，用 `key={pathname}` 换 key 触发
+  CSS `animation`。**只包 `<Outlet/>` 不包外壳** —— 顶栏/底导航是固定 chrome，
+  跟着内容一起动会显得整页在晃。
+- 动画 `.route-enter`（base.css）：`opacity 0→1 + translateY(8px)→0`，
+  `--dur-base` / `--ease-out`；reduced-motion 下 `animation: none`。
+  **keyframes 不写 `to`、不设 fill-mode**：动画结束即回常态 `transform: none`，
+  不留持久 containing block（地图页的定位与测量建立在「祖先无 transform」上）。
+- **踩坑（已修）**：这一层是布局敏感的。map.css 的高度链是
+  `.content:has(.map-page)` 变 flex 列 + `.map-page{flex:1 1 auto}` 撑满；
+  插进一个普通块级 `.route-enter` 后，flex 落在非 flex 容器里失效 ——
+  **实测 .map-page 高度归零（地图只剩顶部一条）**。修法：只在地图页让包装层
+  接住并传递这条链（`.content:has(.map-page) > .route-enter{display:flex;
+  flex-direction:column;flex:1 1 auto;min-height:0}`），他页保持普通块级。
+- 新增 `web/scripts/verify-route-enter.mjs`（真浏览器 + 自带静态服务，**不依赖后端**，
+  已并进 `npm run verify:browser`）：把 `.route-enter > .map-page` 探针注入真实
+  `.content` 量高度。jsdom 版测不出（不跑真实布局）。
+  **变异测试**：删掉上面那条修复规则 → `map-page 0.0px / 可用 709.0px`，2 项 FAIL；
+  恢复 → 709.0px 对齐，3 项 ok。
+- 测法本身也踩过一次坑：探针直接塞进已有真实内容的 `.content`，自由空间被真内容
+  占满、量出来恒为 0（假阳性）。故探针前先隐藏既有子节点。
+
 预期效果：页面切换不再"硬切"，视觉连贯、减少跳变突兀感。
 
-### 4.2 骨架屏与加载反馈
+### 4.2 骨架屏与加载反馈 —— ✅ 已完成
 
+步骤（原计划）：
 1. 新建 `Skeleton` 组件（CSS 渐变扫光，`aria-hidden`）；
 2. 各列表页（宠物/蛋/商人/花）loading 时显示与真实布局同构的骨架，
    替代现有"加载中…"文字；
@@ -213,13 +237,59 @@ mac/win/linux/安卓多端渲染一致。
 4. 图片 loading 占位：`avatar`/`icons` 组件在 `onLoad` 前显示统一灰底占位
    （含主题变量，避免深/亮两主题下闪白）。
 
+实施记录：
+- 新增 `components/Skeleton.jsx`：`Skeleton` / `SkeletonRows` / `SkeletonGrid`，
+  色块一律 `aria-hidden`（外层容器自己补 `role="status"`）。
+- 扫光只走主题令牌：`--bg-3` 底 + `--line` 高光（深色下 `--line` 更亮、浅色下更暗，
+  两主题都是「微妙提亮」）。**不写死 `rgba(255,255,255,.x)`** —— 那是闪白的根源
+  （浅色主题下等于白高光叠白底）。只动画 `background-position`，合成器友好。
+- 落地 5 处：
+  - 商人页（横幅 + 轮次卡纵向堆叠）、炫彩图鉴（**直接复用 `.hb-major-group` /
+    `.hb-major-cards` 真实布局类**铺 42×23 的色卡格，结构与内容同构）、
+    详情弹窗（复用 `.detail-card`/`.detail-body`/`.kv`）；
+  - 宠物列表、排行榜：修的是**语义错报** —— 首次加载时 `data` 还是 fallback，
+    原先直接渲染「没有匹配的宠物 / 暂无参加者」，那是**结论**不是「加载中」，
+    会让人以为筛了个寂寞或榜单空着。现在首次加载铺骨架（换筛选条件时
+    `useAsyncData` 保留旧数据，故只有真正从零开始那一次会见到骨架）。
+- 图片占位（`icons.jsx` 新增 `useImgReady`）：占位底色挂在 `<img>` **自身**
+  （`.img-ph`）而非另插元素 —— 图片尺寸本来就由各自的类定好，没有多余 DOM，
+  也不会出现「占位与图片并存」导致的跳位。
+  **关键坑**：必须在 ref 回调里补查 `el.complete` —— 命中缓存时浏览器可能在
+  React 挂上 `onLoad` 之前就完成加载，那时 `onLoad` 永不触发，只靠 `onLoad`
+  会让缓存命中的图永远停在占位态（刷新一次才正常，极易被误判成偶发 bug）。
+- 未做（有理由，非遗漏）：
+  - 花种页 —— 加载由下拉 `placeholder="加载中…"` 表达，且槽位切换有既有语义
+    （`slots` 未到时回落到当前世界），改骨架要动既有行为；
+  - 精灵蛋页 —— 数据是 SSE 推送驱动，空态给的是「需打开一次背包」这种
+    **明确原因说明**，不是等待态，铺骨架反而丢信息。
+
 预期效果：数据等待期有结构感而非空白/文字，首屏与刷新体验提升。
 
-### 4.3 弹窗焦点管理
+### 4.3 弹窗焦点管理 —— ✅ 已完成
 
+步骤（原计划）：
 1. `PinDialog`/`PetDetailModal` 打开时焦点移入弹窗、`Tab` 循环圈定在弹窗内、
    关闭后焦点还给触发按钮（可封装 `useDialog` hook，复用 `useScrollLock` 的模式）；
 2. 遮罩点击/`Esc` 关闭已有的话保持，补 `role="dialog"`/`aria-modal`。
+
+实施记录：
+- 新增 `hooks/useDialog.js`（与 `useScrollLock` 同一套路：开→生效，关→还原），
+  返回 `{ ref, dialogProps }`（`dialogProps` = `role="dialog"` + `aria-modal="true"`
+  + `tabIndex={-1}` + `aria-label`，都挂弹窗最外层容器）。
+  **不接管 Esc/遮罩关闭**（各弹窗已有，避免重复绑定）。
+- 三件事：打开时聚焦弹窗内第一个可聚焦元素（组件已自行聚焦时**不抢**）；
+  Tab / Shift+Tab 首尾循环；关闭后把焦点还给打开它的元素（该元素可能已随数据
+  消失，此时 `focus()` 空操作、落到 body —— 也比停在已移除的节点上强）。
+- 两个实现细节（都是坑）：
+  - 可见性用 `getClientRects().length > 0` 判，**不用 `offsetParent !== null`** ——
+    后者对 `position: fixed` 恒为 null，而弹窗容器本身就是 fixed；
+  - 监听挂 `document`（捕获阶段）而非容器：焦点一旦意外跑出容器（地址栏绕回、
+    外部脚本聚焦），挂在容器上就再也拦不住了；且焦点不在弹窗内时一律拉回。
+- 接入：`PinDialog`（顺带删掉三处 `inputRef` 手动聚焦 —— hook 自动聚焦的第一个
+  可聚焦元素在各模式下恰好就是「该填的那个 PIN 框」，行为一致且少一套 ref 管道）、
+  `PetDetailModal`（加载态与内容态共用同一个 ref，DOM 节点复用不重挂）。
+- 遗留：未做浏览器端的自动化验收（焦点行为需真实交互，`verify-account-mobile.mjs`
+  那套键盘测试可作参照）。人工确认路径：Tab 走不到弹窗背后、关闭后焦点回到原卡片。
 
 预期效果：键盘用户操作弹窗不"迷失焦点"，与 P1 的二级菜单键盘操作形成完整链路。
 
