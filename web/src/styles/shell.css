@@ -371,7 +371,15 @@ html[data-privacy] .brand { color: var(--fg-dim); }
 /* ---- 底部 tab(移动) ---- */
 .bottomnav { display: none; }
 
-.content { flex: 1; padding: 16px; min-width: 0; }
+/* 内容区:给一个阅读栏宽上限并居中。
+   原先没有上限,2560 宽屏上宠物列表的 10 列表格横铺整屏 —— 行长过长时,眼睛从
+   最左扫到最右要移动很大距离,回扫时容易串行,而这类工具站恰恰是要逐列对比的。
+   取 1720px:够放下「312 侧栏 + 1160 表格」这一最宽组合且还留余量,常用宽度下不会触发。
+   地图页要占满视口,由 map.css 覆写回 none。
+
+   居中用 margin-inline:auto 而不是给外层加容器:.content 是 .app 的 flex 项
+   (flex:1 撑满垂直空间),它自己限宽居中不影响 .app 的高度链。 */
+.content { flex: 1; padding: 16px; min-width: 0; width: 100%; max-width: 1720px; margin-inline: auto; }
 
 @media (max-width: 760px) {
   .topnav { display: none; }

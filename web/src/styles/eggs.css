@@ -80,9 +80,19 @@
 .egg-card {
   border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--bg-1);
   padding: 10px; display: flex; flex-direction: column; gap: 8px;
-  box-shadow: var(--shadow-sm); transition: border-color .15s ease, box-shadow .15s ease;
+  box-shadow: var(--shadow-sm);
+  transition: border-color .15s ease, box-shadow .15s ease, transform .15s ease;
 }
-.egg-card:hover { border-color: var(--accent); box-shadow: 0 4px 14px rgba(var(--c-accent-rgb), .12); }
+/* 蛋卡的 hover 补上抬升(三件套的第三件)。
+   投影**保留蓝色调**不走 --shadow-lift:这张卡的静态影子是中性黑(--shadow-sm),
+   换成蓝等于「影子变了颜色」,反而突兀;而这里的蓝本就与边框的 accent 同色,
+   是「发光的边」而不是「浮起的卡」,与中性投影是两种语言,故不强行统一。 */
+@media (hover: hover) {
+  .egg-card:hover {
+    border-color: var(--accent);
+    transform: translateY(var(--lift)); box-shadow: 0 4px 14px rgba(var(--c-accent-rgb), .12);
+  }
+}
 
 /* 头部:蛋图 | 名称+奖牌标签 | 品类角标+孵出物种头像 */
 .egg-head { display: flex; align-items: flex-start; gap: 8px; }

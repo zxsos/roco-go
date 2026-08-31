@@ -18,6 +18,13 @@
   --danger: #e5534b;
   --shadow: 0 4px 16px rgba(0, 0, 0, .35);
   --shadow-sm: 0 2px 8px rgba(0, 0, 0, .25);
+  /* hover 抬升:与 --shadow 分开,因为两者语义不同 ——
+     --shadow 是**静止**的层级(卡在页面上就是浮着的),
+     --shadow-lift 只在指针悬停的瞬间出现,故要更紧更淡(大而散的影子配 1px 位移会飘)。
+     --lift 抽成变量是为了让「抬多高」只有一个来源:各处写 translateY(var(--lift)),
+     想整体收敛(比如移动端不抬)改一处即可。 */
+  --lift: -1px;
+  --shadow-lift: 0 4px 12px -4px rgb(0 0 0 / .45);
   --radius: 10px;
   --radius-lg: 14px;
   /* 磨砂顶栏/底栏背景:暗色下深、亮色下浅(见 [data-theme="light"] 覆写)。
@@ -76,6 +83,11 @@
   --tip-fg: #e6edf3;
   --tip-line: #2a3240;
   --tip-bg-rgb: 11, 14, 19; /* 需半透明时写 rgba(var(--tip-bg-rgb), .94) */
+
+  /* 数字显示字体:仅用于**纯数字/西文**的展示值(统计、洛克贝、盈亏),
+     不用在中文上 —— 理由见 @font-face 处的注释。回退链以系统字体收尾,
+     字体加载失败时只是数字字形变了,布局与可读性不受影响。 */
+  --font-num: 'RocoNum', -apple-system, 'PingFang SC', system-ui, sans-serif;
 
   /* 系别标签的深字色:浅底系别(冰/翼/草/虫…)用白字对比度不足,改用这一档。
      取值接近纯黑但留一点冷调,与 --fg 系同源。放在这里(而非系别色那段另起
@@ -156,10 +168,40 @@
   --danger: #cf222e;
   --shadow: 0 4px 16px rgba(0, 0, 0, .12);
   --shadow-sm: 0 2px 8px rgba(0, 0, 0, .08);
+  /* 亮色下抬升的影子要更淡:白底上的黑影对比本来就强,.45 那档会糊成一团脏边 */
+  --shadow-lift: 0 4px 12px -4px rgb(0 0 0 / .18);
   --bar-bg: rgba(255, 255, 255, .9);
   --bar-hover: rgba(0, 0, 0, .05);
   --hero-tint: rgba(56, 65, 90, .12); /* 亮色下只留极淡的一层,见暗色处注释 */
 
+}
+
+/* —— 数字显示字体(自托管,Bricolage Grotesque 700 子集,SIL OFL 1.1)——
+
+   仓库内文件:web/public/fonts/bricolage-grotesque-700-subset.woff2(13KB)+ OFL.txt。
+   自托管是**必须**的:本工具跑在局域网,可能压根没外网,任何 CDN 引用都会导致
+   字体静默失效(退回系统字体)。文件随构建进 internal/server/web/,由 Go embed 带出。
+
+   为什么只要 700 一个字重:这个站用显示字体的地方**全是粗体**(统计数字、洛克贝、
+   盈亏),不存在 regular 的展示场景,多下一个字重纯属浪费(可变字体三轴版实测 70KB,
+   静态 700 子集只有 13KB)。
+
+   为什么只给**数字/西文**用,不给中文标题用(见下面的 --font-num):
+   这个站的文字几乎全中文,显示字体的中文字符一个都没打包 —— 若用在中文标题上,
+   汉字会 fallback 到系统字体,出现「西文是 Bricolage、中文是苹方」的混排,
+   两套字形的字重、字面大小、基线都对不齐,比统一用系统字体更难看。
+   而数字是这个站出现频率最高的字符(六维、洛克贝、统计、时间、百分位),
+   它值得有一套自己的字形。 */
+@font-face {
+  font-family: 'RocoNum';
+  src: url('/fonts/bricolage-grotesque-700-subset.woff2') format('woff2');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+  /* 子集里只有:空格 " # % & ' ( ) + , - . / 0-9 : < = > ? @ A-Z a-z ~ ° ×
+     (U+20, U+22-23, U+25-29, U+2B-3A, U+3C-5A, U+61-7A, U+7E, U+B0, U+D7)。
+     用到子集外的字符时按此逐字符回退到下面的系统字体,**不会**出现豆腐块。 */
+  unicode-range: U+20, U+22-23, U+25-29, U+2B-3A, U+3C-5A, U+61-7A, U+7E, U+B0, U+D7;
 }
 
 * { box-sizing: border-box; }
