@@ -184,8 +184,10 @@
   border: 2px solid var(--line); font-size: 16px; line-height: 1;
   user-select: none; -webkit-user-drag: none;
   filter: drop-shadow(0 1px 3px rgba(0, 0, 0, .6));
-  /* 桌面 hover 看悬浮说明,点一下弹资料卡(见 .map-wild-tip):pointer 提示可点。 */
+  /* 桌面 hover 看悬浮说明,点一下弹资料卡(见 .map-wild-tip):pointer 提示可点。
+     带 transition:点中/移开时的放大与提亮是平滑渐变,而不是瞬跳(瞬跳看起来像闪一下)。 */
   cursor: pointer;
+  transition: transform .18s ease, filter .18s ease;
 }
 /* 悬停或点中时放大一点并提亮描边,进一步确认指到了哪一只(标记只有 30px,挨得近时有用)。 */
 .map-wild:hover, .map-wild.tip { transform: translate(-50%, -50%) scale(1.15); filter: drop-shadow(0 0 4px rgba(255, 255, 255, .5)); }
@@ -335,6 +337,15 @@
   border: 1px solid var(--line);
   box-shadow: 0 4px 14px rgba(0, 0, 0, .45);
   font-size: 12px; line-height: 1.5;
+  /* 入场动画:资料卡由 `tip &&` 条件渲染直接挂载/卸载,不加动画会「啪」地
+     弹出/消失,看起来像个方形框闪一下。淡入 + 从原位置轻微上移收拢,
+     进出都有过渡,而不是瞬间跳变。 */
+  animation: map-wild-tip-in .16s ease-out;
+  transform-origin: bottom center;
+}
+@keyframes map-wild-tip-in {
+  from { opacity: 0; transform: translate(-50%, calc(-100% - 8px)) scale(.96); }
+  to   { opacity: 1; transform: translate(-50%, calc(-100% - 12px)) scale(1); }
 }
 .map-wild-tip .twn { font-weight: 600; }
 .map-wild-tip .twt { color: var(--fg-dim); }

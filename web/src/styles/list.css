@@ -13,7 +13,7 @@
 }
 .boxmap-btn:hover:not(:disabled) { border-color: var(--accent); background: var(--accent-soft); }
 .boxmap-btn:active:not(:disabled) { transform: scale(.94); }
-.boxmap-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.boxmap-btn:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--accent-soft), 0 0 0 1px var(--accent); }
 .boxmap-btn:disabled { opacity: 0.35; cursor: default; }
 /* 预留 6 排高度(队伍 6×3 最高),切换容器时下方筛选条件不上下抖动 */
 .boxmap-grid { display: grid; gap: 4px; justify-content: center; align-content: start; min-height: 260px; }

@@ -58,7 +58,7 @@
   border-color: var(--line); background: var(--bar-hover); color: var(--fg);
 }
 .topbar-fs:active { transform: scale(.97); }
-.topbar-fs:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.topbar-fs:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--accent-soft), 0 0 0 1px var(--accent); }
 .topbar-fs.on { color: var(--accent); }
 .topbar-fs.on:hover { border-color: var(--accent); background: var(--accent-soft); }
 /* ---- 账号切换器(AccountSelect / AccountSheet / AccountItem / AccountAvatar) ----
@@ -157,7 +157,7 @@
   border-color: var(--accent);
   box-shadow: inset 0 1px 0 rgb(255 255 255 / .06), 0 0 0 3px var(--accent-soft);
 }
-.account-trigger:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.account-trigger:focus-visible { outline: none; box-shadow: inset 0 1px 0 rgb(255 255 255 / .05), 0 0 0 3px var(--accent-soft), 0 0 0 1px var(--accent); }
 .account-trigger.open {
   border-color: var(--accent);
   background: var(--bg-3);

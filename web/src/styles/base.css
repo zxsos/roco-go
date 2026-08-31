@@ -144,6 +144,11 @@
 }
 
 * { box-sizing: border-box; }
+/* 禁用移动端点按高亮:默认的 -webkit-tap-highlight-color 会在触摸按钮时闪一个
+   灰色半透明方形框(点击一次闪一下,和 :active 反馈叠加很难看)。
+   触控反馈改由各控件自己的 :active 变换(scale 回弹)承担,这里清掉原生残留。
+   同样清掉 Firefox 触摸高亮,保持跨浏览器一致。 */
+html { -webkit-tap-highlight-color: transparent; }
 html, body, #root { height: 100%; margin: 0; }
 body {
   background: var(--bg);
@@ -164,7 +169,7 @@ button, input, select { font: inherit; color: inherit; }
 }
 .btn:hover { border-color: var(--accent); background: var(--accent-soft); }
 .btn:active { transform: scale(.97); }
-.btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.btn:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--accent-soft), 0 0 0 1px var(--accent); }
 .btn:disabled { opacity: .4; cursor: not-allowed; transform: none; }
 .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
 .btn.primary:hover { background: #5c9aff; border-color: #5c9aff; }
@@ -178,7 +183,7 @@ button, input, select { font: inherit; color: inherit; }
 }
 .icon-btn:hover { border-color: var(--accent); color: var(--accent); background: rgba(76, 141, 255, .12); }
 .icon-btn:active { transform: scale(.94); }
-.icon-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.icon-btn:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--accent-soft), 0 0 0 1px var(--accent); }
 .input, .select {
   background: var(--bg-2); border: 1px solid var(--line); border-radius: var(--radius); padding: 7px 10px; width: 100%;
   transition: border-color .15s ease, box-shadow .15s ease;
@@ -195,7 +200,7 @@ input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; margin
 }
 .chip:hover { border-color: var(--accent); color: var(--fg); }
 .chip:active { transform: scale(.97); }
-.chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.chip:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--accent-soft), 0 0 0 1px var(--accent); }
 .chip.on { background: var(--accent); border-color: var(--accent); color: #fff; }
 .chip.on:hover { background: #5c9aff; border-color: #5c9aff; }
 .pill {
