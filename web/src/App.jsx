@@ -111,6 +111,9 @@ export default function App() {
 
             <BottomNav />
           </div>
+          {/* onSaved:改/清 PIN 后重拉账号列表 —— hasPin 由 accounts 持有,
+              不刷新的话下拉里的锁图标与「修改 PIN / 设置 PIN」文案都还停在旧状态。
+              verify 与 delete 两条分支各自已在 onVerified / onDeleted 里刷过,不缺。 */}
           {pinDialog && (
             <PinDialog
               mode={pinDialog.mode}
@@ -118,6 +121,7 @@ export default function App() {
               name={pinDialog.name}
               hasPin={pinDialog.hasPin}
               onClose={closePin}
+              onSaved={refreshAccounts}
               onVerified={() => {
                 // PIN 校验通过,执行待切换(closePin 已清 pendingAccount,此处读的仍是本次渲染的闭包值)
                 closePin()
