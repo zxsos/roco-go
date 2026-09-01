@@ -25,6 +25,10 @@ import (
 //go:embed data/trial.json
 var trialJSON []byte
 
+// TrialJSON 暴露内嵌的试炼配置原文,供 server 侧读取 _updated 等元信息。
+// 只读,调用方不要修改返回的切片。
+func TrialJSON() []byte { return trialJSON }
+
 // FloorType 是试炼里一个节点的类型。
 type FloorType string
 
@@ -161,6 +165,20 @@ func (db *DB) TrialBosses() []uint32 {
 		return nil
 	}
 	return db.trial.bosses
+}
+
+// TrialPool 返回第 n 章(1 起)普通池的 petbase id 列表(208/315/177 只)。
+//
+// 这是「遇见记录」三张图的数据来源:每章一张图,图里列出本章可能遇到的精灵,
+// 遇到过的置灰。查不到返回 nil(第 4 章等越界,或静态配置缺失)。
+//
+// 与 TrialBosses 是**两个独立来源**:首领来自第 4 层的 22 人名单(三章共用),
+// 普通池来自第 1/2/3/5 层。前端一张图要同时展示两者,别混为一谈。
+func (db *DB) TrialPool(chapterIdx uint32) []uint32 {
+	if db.trial == nil {
+		return nil
+	}
+	return db.trial.pools[chapterIdx]
 }
 
 // TrialNPCOpponents 返回第 7 层在某难度(10000/10001/10002)某章的候选阵容。

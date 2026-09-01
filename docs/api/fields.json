@@ -854,6 +854,44 @@
       "ts": "int"
     }
   },
+  "trial-encounters": {
+    "desc": "草系试炼遇见记录(三章精灵图,读库累积)",
+    "endpoint": "GET /api/trial/encounters",
+    "sample": "internal/server/testdata/contract/trial-encounters.json",
+    "shape": {
+      "account": "str",
+      "chapters": [
+        {
+          "boss": [
+            {
+              "base": "int",
+              "img": "str",
+              "kind": "int",
+              "name": "str",
+              "seen": "bool",
+              "time": "int"
+            }
+          ],
+          "chapter": "int",
+          "name": "str",
+          "normal": [
+            {
+              "base": "int",
+              "img": "str",
+              "kind": "int",
+              "name": "str",
+              "seen": "bool",
+              "time": "int"
+            }
+          ],
+          "seen": "int",
+          "total": "int"
+        }
+      ],
+      "ts": "int",
+      "updated": "str"
+    }
+  },
   "wildpets": {
     "desc": "最近一次野生宠物标记",
     "endpoint": "GET /api/wildpets",

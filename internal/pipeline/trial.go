@@ -1,6 +1,7 @@
 package pipeline
 
 import (
+	"log"
 	"sort"
 	"time"
 
@@ -120,6 +121,13 @@ func (p *Pipeline) handleTrial(m capture.Message, acc string) {
 	now := time.Now()
 	s2c := m.Direction == gcp.S2C
 	changed := false
+
+	// 战斗进入通知(0x1316)**不属于试炼专属 opcode**,试炼外的战斗(野外/PVP)也走它。
+	// 是否属于试炼由消息内的 grass_trial_battle_info 判定,故在这里先看一眼再放行:
+	// 命中试炼就记下「遇到谁」,不命中则完全不动(让宠物路等其它消费者照常处理)。
+	if m.Opcode == trial.OpBattleEnterNotify {
+		p.recordTrialEncounter(m, acc, st)
+	}
 
 	switch {
 	// —— 一局的全量快照 ——
@@ -473,6 +481,39 @@ func (p *Pipeline) sweepTrial(now time.Time) {
 	}
 }
 
+// ---- 遇见记录 ----
+
+// recordTrialEncounter 把一场试炼战斗里遇到的精灵记进数据库。
+//
+// 三道判据,缺一不记(宁可少记也别记错 —— 记错的进度比没有进度更误导):
+//  1. 必须是试炼战斗(消息带 grass_trial_battle_info);
+//  2. 必须有正在进行的试炼局(否则拿不到章节);
+//  3. 必须推得出第几章 —— 归不到某张图上的记录毫无用处。
+//
+// 章节取自**当前局**而非战斗消息:后者不带章节信息。这也意味着若是战斗拖到
+// 退出试炼之后才结束,可能因 active=false 而漏记 —— 可接受,遇到概率极低,
+// 且漏记只是少一格,记错章节才会污染整张图的进度。
+func (p *Pipeline) recordTrialEncounter(m capture.Message, acc string, st *trialState) {
+	e := trial.ParseBattleEnter(m.AppBody)
+	if e == nil || !e.Type.IsTrial() || len(e.PetBases) == 0 {
+		return
+	}
+	if st.run == nil || !st.run.active {
+		return
+	}
+	ch := chapterIdxOf(st.run)
+	if ch == 0 {
+		return
+	}
+	if err := p.st.AddTrialEncounters(acc, ch, uint32(e.Type), e.PetBases); err != nil {
+		log.Printf("记录试炼遇见失败(第%d章 %v): %v", ch, e.PetBases, err)
+		return
+	}
+	for _, b := range e.PetBases {
+		log.Printf("试炼遇见: 第%d章 %s战 petbase=%d", ch, e.Type.Label(), b)
+	}
+}
+
 // ---- 推送 ----
 
 // pushTrial 组一份试炼快照,缓存并广播。
@@ -499,6 +540,25 @@ func (p *Pipeline) pushTrial(acc string, st *trialState) {
 	p.srv.Hub().Broadcast("trial", acc, payload)
 }
 
+// chapterIdxOf 推出「当前是第几章」(1 起)。
+//
+// 按服务器给的可选章节次序定位;列表为空时退回 chapter_id 末三位
+// (协议恒为 3000/3001/3002,故 3000→第1章)。返回 0 表示推不出来。
+//
+// 单独抽成函数是因为两处要用:载荷的 chapterIdx,以及遇见记录要按章归档 ——
+// 两处口径必须一致,否则记录会记到别的章上去。
+func chapterIdxOf(r *trialRun) uint32 {
+	for i, c := range r.chapters {
+		if c == r.chapterID {
+			return uint32(i) + 1
+		}
+	}
+	if r.chapterID >= 3000 {
+		return r.chapterID - 3000 + 1
+	}
+	return 0
+}
+
 // trialRunPayload 把一局镜像转成对外载荷。damOf 是 slot_id → 属性系的查表(见 pushTrial)。
 func (p *Pipeline) trialRunPayload(r *trialRun, damOf map[uint32]int32) *server.TrialRun {
 	out := &server.TrialRun{
@@ -516,15 +576,7 @@ func (p *Pipeline) trialRunPayload(r *trialRun, damOf map[uint32]int32) *server.
 			out.SlotName = n + "系"
 		}
 	}
-	// 第几章:按服务器给的可选章节次序;列表为空时退回 chapter_id 末三位(3000→第1章)
-	for i, c := range r.chapters {
-		if c == r.chapterID {
-			out.ChapterIdx = uint32(i) + 1
-		}
-	}
-	if out.ChapterIdx == 0 && r.chapterID >= 3000 {
-		out.ChapterIdx = r.chapterID - 3000 + 1
-	}
+	out.ChapterIdx = chapterIdxOf(r)
 	// 静态配置(wiki):层类型 / 章节名 / 第 7 层候选阵容。
 	// 协议只给编号,这些「这一层是什么、对面可能是谁」得查静态表才知道。
 	// 缺数据时留空 —— 静态配置是可选的,不该因为它缺失就让整个接口失败。

@@ -433,6 +433,42 @@
 - 静态配置缺失时（数据没生成）`floor` / `chapterName` 为空、`opponents` 为 `null`，
   不是错误，前端应能容忍。
 
+### `GET /api/trial/encounters` ✅
+
+草系试炼的**遇见记录**：三章各一张精灵图，列出本章可能遇到的精灵，遇到过的置灰。
+与 `GET /api/trial`（实时状态、走 SSE）不同，这份是**累积的历史、直接读库**，
+故不随 SSE 推送 —— 打完一局重新进页或刷新即可。
+
+```json
+{ "account": "UID:1", "ts": 1700000000,
+  "updated": "S3 铅字幻梦 2026/08/18（页面标注的更新时间）",
+  "chapters": [{ "chapter": 1, "name": "记忆中的索米亚草原",
+                 "total": 230, "seen": 2,
+                 "normal": [{ "base": 3001, "name": "喵喵", "img": "HeadIcon/3001.webp",
+                              "seen": true, "kind": 0, "time": 1700000000 }],
+                 "boss":   [{ "base": 8101, "name": "圣水守护_草系徽章-首领形态",
+                              "img": "HeadIcon/4005.webp", "seen": true, "kind": 1,
+                              "time": 1700000000 }] }] }
+```
+
+- **每章独立计算**：同一只精灵在第 1 章遇到过，第 2/3 章的图里仍算未遇见。
+  与 wiki 口径一致（页面注明「3 章首领按章节独立计算」）。例：3005 同时在第 2、3 章池里，
+  只在第 2 章打过照面 → 第 3 章那张图仍显示未遇见。
+- `normal` 是普通池（第 1/2/3/5 层，208/315/197 只），`boss` 是第 4 层的 22 名首领、
+  **三章共用**。二者来源独立（`gamedata.TrialPool` / `TrialBosses`），故分开列出。
+- ⚠️ `kind` / `time` 是**可选指针**：未遇见时**键不出现**（不是 `0` 或 `null`）。
+  `kind` 取值见 `TrialEncounterPet`：`0` 普通 / `1` 首领 / `2` NPC / `3` 最终 BOSS。
+  ⚠️ 正因为普通战 `kind` 就是 `0`，这两个字段**必须用指针、不能加 `omitempty` 值类型**，
+  否则 JSON 会抹掉取值 0 的键，前端便分不清「普通战遇到过」与「压根没遇到」——
+  与 `docs/api/README.md` 里 `u`/`v` 那条是同一个坑。
+- ⚠️ 精灵池来自**静态配置**（wiki），与数据库无关，故**没有遇见记录时 `chapters` 照样存在**
+  （三章齐全、每章 `seen: 0`）。`chapters` 上的 `omitempty` 因此是个死标签 —— 判空请用
+  `chapters.length`（仅在静态配置缺失时才为空），不要指望那个 `omitempty`。
+- `updated` 是静态配置的更新时间，用于提示「精灵池可能与当前版本有出入」；取不到时键不出现。
+- 数据来源：池子来自 `gamedata`（wiki），遇见情况来自 `trial_encounter` 表
+  （管线解析 0x1316 写入，见 `internal/trial/battle.go`）。只记试炼战斗 —— 以消息带
+  `grass_trial_battle_info` 为准，野外/PVP 不会进库。
+
 ---
 
 ## 其它有快照的接口

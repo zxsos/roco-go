@@ -415,6 +415,45 @@ type TrialSlot struct {
 	Cleared uint32 `json:"cleared"`
 }
 
+// TrialEncountersPayload 是草系试炼的「遇见记录」:三章各一张图,列出本章可能
+// 遇到的精灵,遇到过(该章打过照面)的置灰。
+//
+// 每张图分两组:普通池(第 1/2/3/5 层)与首领(第 4 层的 22 人名单,三章共用)。
+// 二者是**独立来源**,故分开列出而非合并成一个大网格。
+//
+// 关键口径:**每章独立计算** —— 与 wiki 一致(页面注明「3 章首领按章节独立计算」)。
+// 同一只精灵在第 1 章遇到过,第 2 章的图里仍算未遇见。这样三张图的进度各自真实。
+type TrialEncountersPayload struct {
+	Account  string               `json:"account"`
+	Ts       int64                `json:"ts"`
+	Chapters []TrialEncounterBook `json:"chapters,omitempty"`
+	Updated  string               `json:"updated,omitempty"` // 静态配置的更新时间(数据可能已过期)
+}
+
+// TrialEncounterBook 是某一章的一张图。
+type TrialEncounterBook struct {
+	Chapter uint32              `json:"chapter"`        // 1 起
+	Name    string              `json:"name,omitempty"` // 章节名(如「记忆中的索米亚草原」)
+	Total   uint32              `json:"total"`          // 本章精灵总数(普通池 + 首领)
+	Seen    uint32              `json:"seen"`           // 已遇见数
+	Normal  []TrialEncounterPet `json:"normal"`         // 普通池
+	Boss    []TrialEncounterPet `json:"boss,omitempty"` // 22 名首领
+}
+
+// TrialEncounterPet 是图里的一只精灵。
+//
+// Kind/Time 用**指针**而非 omitempty 值类型:普通战的 Kind 就是 0,用值类型加
+// omitempty 会被 JSON 抹掉,前端便分不清「普通战遇到的」与「没遇到」——
+// 与 AGENTS.md 里 u/v 指针那条约定是同一个坑。未遇见时二者为 nil(键不出现)。
+type TrialEncounterPet struct {
+	Base uint32  `json:"base"`
+	Name string  `json:"name"`          // 形态全名(查不到时为空)
+	Img  string  `json:"img,omitempty"` // 头像;并非每个形态都有图
+	Seen bool    `json:"seen"`          // 本章是否已遇见
+	Kind *uint32 `json:"kind,omitempty"`
+	Time *int64  `json:"time,omitempty"`
+}
+
 // TrialLogBook 是见闻录的一册。
 type TrialLogBook struct {
 	LogConfID  uint32 `json:"logConfId"`

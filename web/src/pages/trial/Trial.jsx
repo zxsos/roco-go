@@ -1,8 +1,9 @@
 import React, { useCallback, useContext, useEffect, useState } from 'react'
-import { getTrial, subscribe } from '../../api'
+import { clearTrialEncounters, getTrial, getTrialEncounters, subscribe } from '../../api'
 import { AccountContext } from '../../context'
 import { useAsyncData } from '../../hooks/useAsyncData'
 import { ImgAvatar } from '../../components/icons'
+import { confirmDialog } from '../../components/confirm'
 import { fmtTime } from '../../utils/format'
 
 // 草系徽章试炼页:实时同步游戏内的一局。
@@ -38,21 +39,30 @@ const TRIAL_NAMES = {
 export default function Trial() {
   const account = useContext(AccountContext)
   const { data, setData } = useAsyncData(useCallback(() => getTrial(), []), { reloadKey: account })
-  const [tab, setTab] = useState('run') // run | history
+  const [tab, setTab] = useState('run') // run | history | encounters
+
+  // 遇见记录是**累积历史**(读库,不经 SSE),且只在切到该页时才需要 ——
+  // 三章近 800 只精灵,随本局状态一起加载纯属浪费。故按需拉取,
+  // 换账号时清掉重来。
+  const [enc, setEnc] = useState(null)
+  // 加一个自增序号当重拉信号:清空记录后要让页面重新取数,而 tab/account 都没变,
+  // 光靠依赖数组触发不了 —— 用这个「世代」把刷新意图显式传下去。
+  const [encGen, setEncGen] = useState(0)
+  useEffect(() => {
+    setEnc(null)
+    if (tab !== 'encounters') return
+    let alive = true
+    getTrialEncounters().then((d) => { if (alive) setEnc(d) })
+    return () => { alive = false }
+  }, [tab, account, encGen])
 
   useEffect(() => subscribe('trial', (d) => setData(d)), [setData])
 
   const run = data && data.run
   const history = data && data.history
-  // 从没见过试炼报文:给一句明确的引导,而不是空页面
-  if (!data) {
-    return (
-      <div className="trial-page">
-        <div className="empty">尚未收到试炼数据:游戏内进入一次草系徽章试炼后自动显示…</div>
-      </div>
-    )
-  }
 
+  // 从没见过试炼报文时**不整页拦掉**:「遇见记录」是累积历史、读库的,
+  // 哪怕此刻没在打也该能翻。故空态下移到各 tab 内部判断。
   return (
     <div className="trial-page">
       <div className="toolbar">
@@ -71,16 +81,144 @@ export default function Trial() {
           >
             档案{history ? ` (${history.wins}/${history.total})` : ''}
           </button>
+          <button
+            className={'trial-tab' + (tab === 'encounters' ? ' on' : '')}
+            onClick={() => setTab('encounters')}
+          >
+            遇见记录
+          </button>
         </div>
       </div>
 
       {tab === 'run'
         ? (run
           ? <RunView run={run} active={data.active} />
-          : <div className="empty">还没有进行过一局</div>)
-        : (history
-          ? <HistoryView history={history} />
-          : <div className="empty">尚未收到账号档案(游戏内打开一次试炼面板后自动同步)</div>)}
+          : <div className="empty">还没有进行过一局(游戏内进入一次草系徽章试炼后自动同步)</div>)
+        : tab === 'history'
+          ? (history
+            ? <HistoryView history={history} />
+            : <div className="empty">尚未收到账号档案(游戏内打开一次试炼面板后自动同步)</div>)
+          : <EncountersView data={enc} onReload={() => setEncGen((n) => n + 1)} />}
+    </div>
+  )
+}
+
+// EncountersView 是「遇见记录」:三章各一张精灵图,遇到过的置灰。
+//
+// 两个设计点:
+//   - **每章独立**:同一只精灵在第 1 章遇到过,第 2 章的图里仍算未遇见 ——
+//     与 wiki 口径一致(页面注明「3 章首领按章节独立计算」),三张图的进度才各自真实。
+//   - **置灰而非高亮**:这是「待办清单」语义 —— 还差哪些没刷到要一眼看得见,
+//     故未遇见的保持原色、已遇见的压暗。wiki 那边反着来(高亮已遇见)是因为它
+//     主要用于「我刷到了什么」,这里更关心「还差什么」。
+//
+// 数据来自第三方 wiki(精灵池)+ 抓包记录(遇到情况),故顶部标注更新时间。
+function EncountersView({ data, onReload }) {
+  const [ch, setCh] = useState(1)
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState('')
+
+  // 清空记录:精灵池是第三方 wiki 的静态配置,游戏换版本换池子后旧记录会对不上
+  // (里头有当前版本根本遇不到的 petbase,进度永远停在某个不满的数)。
+  // 不可恢复,故走 confirmDialog 二次确认,且**只清当前这一章** —— 全清的入口
+  // 不放到界面上,真需要时用 curl,免得误触毁掉三章的累积。
+  const clear = async () => {
+    const name = cur ? cur.name || `第${cur.chapter}章` : ''
+    if (
+      !await confirmDialog({
+        message: `确认清空${name}的遇见记录?该章已遇见的 ${cur ? cur.seen : 0} 只会全部变为未遇见,不可恢复。`,
+        okText: '清空', danger: true,
+      })
+    ) return
+    setBusy(true); setErr('')
+    try {
+      await clearTrialEncounters(cur.chapter)
+      onReload()
+    } catch (e) {
+      setErr(e.message || '清空失败')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  if (!data) return <div className="empty">加载中…</div>
+  const books = data.chapters || []
+  if (!books.length) {
+    return (
+      <div className="empty">
+        没有试炼精灵池数据(需先跑 scripts/fetch_trial_data.py 与 gen_trial.py)
+      </div>
+    )
+  }
+  const cur = books.find((b) => b.chapter === ch) || books[0]
+  // 后端已保底给空数组,这里再兜一层:任一侧将来改动都不会让整页白屏。
+  // 普通池为空时分组整个不渲染 —— 空标题 + 空网格没有意义。
+  const normal = cur.normal || []
+  const boss = cur.boss || []
+  const pct = cur.total > 0 ? Math.round((cur.seen / cur.total) * 100) : 0
+  return (
+    <div>
+      {data.updated && (
+        <div className="muted trial-note">精灵池来自 wiki,{data.updated},可能与当前版本有出入</div>
+      )}
+      <div className="trial-tabs">
+        {books.map((b) => (
+          <button
+            key={b.chapter}
+            className={'trial-tab' + (b.chapter === cur.chapter ? ' on' : '')}
+            onClick={() => setCh(b.chapter)}
+          >
+            第{b.chapter}章 ({b.seen}/{b.total})
+          </button>
+        ))}
+      </div>
+      <div className="trial-enc-head">
+        <b>{cur.name || `第${cur.chapter}章`}</b>
+        <span className="muted">已遇见 {cur.seen}/{cur.total}</span>
+        <div className="trial-enc-bar">
+          <i style={{ width: pct + '%' }} />
+        </div>
+        <span className="muted">{pct}%</span>
+        <button
+          className="btn trial-enc-clear"
+          onClick={clear}
+          disabled={busy || cur.seen === 0}
+          title={cur.seen === 0 ? '本章还没有遇见记录,无需清空' : '清空本章遇见记录(不可恢复)'}
+        >
+          {busy ? '清空中…' : '清空本章'}
+        </button>
+      </div>
+      {err && <div className="trial-enc-err">{err}</div>}
+      {normal.length > 0 && (
+        <section className="trial-group">
+          <h4 className="trial-group-t">普通池({normal.length})——第 1/2/3/5 层</h4>
+          <PetGrid pets={normal} />
+        </section>
+      )}
+      {boss.length > 0 && (
+        <section className="trial-group">
+          <h4 className="trial-group-t">首领({boss.length})——第 4 层,三章共用</h4>
+          <PetGrid pets={boss} />
+        </section>
+      )}
+    </div>
+  )
+}
+
+// PetGrid 一图精灵:遇到过的置灰。
+function PetGrid({ pets }) {
+  return (
+    <div className="trial-grid">
+      {pets.map((p) => (
+        <div
+          key={p.base}
+          className={'trial-grid-item' + (p.seen ? ' is-seen' : '')}
+          title={p.name + (p.seen && p.time ? ` · ${fmtTime(p.time)}` : '')}
+        >
+          <ImgAvatar src={p.img} alt={p.name} className="trial-grid-img" />
+          <span className="trial-grid-name">{p.name || p.base}</span>
+        </div>
+      ))}
     </div>
   )
 }

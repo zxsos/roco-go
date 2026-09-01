@@ -313,6 +313,103 @@ func TestContractTrial(t *testing.T) {
 	checkGolden(t, "trial", get(t, s, "/api/trial?account="+contractAcc), nil)
 }
 
+// scrubEncTime 抹掉遇见记录里的时间取值。
+//
+// 顶层 ts 与每只精灵的 time 都取自「入库时刻」,每次跑测试都不同。契约锁的是
+// **键在不在**(kind/time 是可选指针,键出现与否本身就是契约的一部分),
+// 不是几点几分,故抹成 0 —— 与 scrubTS 同理,替换值须保持 JSON 合法。
+var encTimeRe = regexp.MustCompile(`"time": \d+`)
+
+func scrubEncTime(s string) string {
+	return encTimeRe.ReplaceAllString(scrubTS(s), `"time": 0`)
+}
+
+// TestContractTrialEncounters 锁定「遇见记录」的响应结构。
+//
+// 三条种子各守一条契约,改之前先想清楚守的是什么:
+//  1. 3001 记为**普通战**(kind=0):守 kind/time 用**指针**而非 omitempty 值类型 ——
+//     取值 0 时键必须仍在,否则前端分不清「普通战遇到过」与「压根没遇到」。
+//     这是全接口最易改坏的一处,Go 编译发现不了,肉眼看 JSON 也容易漏。
+//  2. 8101 记为首领:22 名首领三章共用,故三张图里都会出现同一批。
+//  3. 3005 只记在第 2 章:它在第 3 章池里也有,用来守「每章独立计算」——
+//     第 3 章那张图里 3005 必须仍显示未遇见。
+func TestContractTrialEncounters(t *testing.T) {
+	s := newTestServer(t)
+	for _, w := range []struct {
+		ch    uint32
+		kind  uint32
+		bases []uint32
+	}{
+		{1, 0, []uint32{3001}},
+		{1, 1, []uint32{8101}},
+		{2, 0, []uint32{3005}},
+	} {
+		if err := s.store.AddTrialEncounters(contractAcc, w.ch, w.kind, w.bases); err != nil {
+			t.Fatalf("写遇见记录(第%d章 %v): %v", w.ch, w.bases, err)
+		}
+	}
+	checkGolden(t, "trial-encounters",
+		get(t, s, "/api/trial/encounters?account="+contractAcc), scrubEncTime)
+}
+
+// TestContractTrialEncountersEmpty 锁定「一条遇见记录都没有」时的响应。
+//
+// 结论先行:**空账号下 chapters 照样存在**。精灵池来自静态配置(gamedata.TrialPool),
+// 与数据库无关 —— 只要 trial.json 在,三章的池就是满的,Total 恒 > 0。
+// 「还没有任何遇见记录」表现为每只 seen=false 且不带 kind/time,而非 chapters 缺席。
+//
+// 这条容易被想当然:Chapters 上挂着 `omitempty`,会让人以为无数据时键会消失。
+// 写本测试时正是这么假设的,跑出来才发现是错的 —— 那个 omitempty 因此是个**死标签**。
+// 留着不删是为了不无谓改动对外契约,但别指望它,真要判空请看 books.length。
+// 前端 EncountersView 的「没有试炼精灵池数据」分支,触发条件是静态配置缺失
+// (chapters 为空),不是「没打过试炼」。
+func TestContractTrialEncountersEmpty(t *testing.T) {
+	s := newTestServer(t)
+	var got map[string]any
+	if err := json.Unmarshal(get(t, s,
+		"/api/trial/encounters?account="+contractAcc), &got); err != nil {
+		t.Fatalf("解析: %v", err)
+	}
+	want := map[string]bool{"account": true, "ts": true, "updated": true, "chapters": true}
+	for k := range got {
+		if !want[k] {
+			t.Errorf("/api/trial/encounters(无记录) 多了字段 %q", k)
+		}
+	}
+	for k := range want {
+		if _, ok := got[k]; !ok {
+			t.Errorf("/api/trial/encounters(无记录) 少了字段 %q", k)
+		}
+	}
+	books, _ := got["chapters"].([]any)
+	if len(books) != 3 {
+		t.Fatalf("无记录时仍应有 3 章(池来自静态配置), 实际 %d", len(books))
+	}
+	// 三章都必须是「整章未遇见」,且不带 kind/time。
+	for _, b := range books {
+		book, _ := b.(map[string]any)
+		if seen, _ := book["seen"].(float64); seen != 0 {
+			t.Errorf("第%v章 无记录时 seen 应为 0, 实际 %v", book["chapter"], seen)
+		}
+		if total, _ := book["total"].(float64); total == 0 {
+			t.Errorf("第%v章 无记录时 total 不该为 0(池来自静态配置)", book["chapter"])
+		}
+		for _, p := range append(
+			book["normal"].([]any), book["boss"].([]any)...) {
+			pet, _ := p.(map[string]any)
+			if s, _ := pet["seen"].(bool); s {
+				t.Errorf("无记录时 base=%v 不该是 seen", pet["base"])
+			}
+			if _, ok := pet["kind"]; ok {
+				t.Errorf("无记录时 base=%v 不该带 kind 键", pet["base"])
+			}
+			if _, ok := pet["time"]; ok {
+				t.Errorf("无记录时 base=%v 不该带 time 键", pet["base"])
+			}
+		}
+	}
+}
+
 // contractTrial 造一份试炼快照:进行中的一局 + 账号档案。
 func contractTrial() *TrialPayload {
 	return &TrialPayload{
