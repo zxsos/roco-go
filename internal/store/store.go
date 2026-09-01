@@ -195,8 +195,10 @@ CREATE TABLE IF NOT EXISTS accounts (
 );
 CREATE INDEX IF NOT EXISTS idx_accounts_updated_at ON accounts(updated_at DESC);
 
--- 洛克贝快照(排行榜盈亏统计用):每次登录回包解析到洛克贝记一行,
--- 首行为「起始资金」基线,最新行即当前 coins;盈亏 = 当前 - 基线。
+-- 洛克贝快照(排行榜盈亏统计用):每次登录回包解析到洛克贝记一行。
+-- 盈亏按**自然日(北京时间)**切分:基线取当日 00:00 后的首条快照(无则带昨夜最后一条),
+-- 盈亏 = 当前 - 今日基线。不用「首次快照」—— 那会把不登录的人冻结在历史峰值(见
+-- store/account.go 的 dayStartBaselineSQL)。
 CREATE TABLE IF NOT EXISTS coin_snapshots (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   account TEXT NOT NULL,
