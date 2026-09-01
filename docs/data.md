@@ -1632,11 +1632,51 @@ HTML,**不走 api.php** —— api.php 的 GET 连续调用会被 CDN 限流返�
 GET 限流影响),正则提取 `|特性=` 与 `|特性描述=`。输出 `~/Downloads/rocom/
 features_raw.jsonl`(增量续传)。
 
-`data/features.json` 两块:
+`data/features.json` 三块(第三块来自 roco.world,见下):
 ```
-features:    [[特性名, 描述, [出现该特性的精灵...]], ...]   词典(190 个,均带描述)
-pet_feature: {精灵页名: 特性名}                               用于 id 桥接
+features:        [[特性名, 描述, [出现该特性的精灵...]], ...]   词典(234 个,均带描述)
+pet_feature:     {精灵页名: 特性名}        wiki,**按名字建键**,兼容保留
+petbase_feature: {petbase_id: 特性名}      roco.world,**按 id 建键,新代码首选**
 ```
+
+##### roco.world(`scripts/fetch_rocoworld.py`)—— 按 petbase_id 索引,首选
+
+`https://roco.world/zh/jini/<图鉴号>` 的图鉴页内嵌一份 SSR 的
+`<script type="application/json">`,里面有:
+
+```json
+page.data.petbase_id        // 与我方 petbase id **完全一致**(实测 594/594)
+page.data.handbook_id       // 图鉴号,与我方 b 字段一致
+page.data.passive_skills[]  // 特性 [{id, name, description}]
+page.data.stats / physical_profile / egg_groups / skills[]   // 附带数据
+```
+
+URL 清单从 `sitemap-zh-hans-jini.xml` 取(594 个,含 `/form/N` 形态页),
+不硬编码数量。**4 并发约 6 分钟抓完,增量续传**。
+
+于是可以直接**按 petbase_id 建索引**,不再依赖名字匹配:
+
+| | 覆盖率(640 个候选形态) | 抄串 |
+| --- | --- | --- |
+| roco.world 按 id | **569 (89%)** | 无 |
+| wiki 按名字 | 472 (74%) | **8 处** |
+
+抄串最典型的是**女王蜂(5015)与花魁蜂后(3157)** —— 两者是同一图鉴 84 的阶段 4
+与 3,wiki 把它们的特性对调了。roco.world 按形态给出的是对的
+(花魁蜂后=虫群鼓舞、女王蜂=虫群突袭)。
+
+⚠️ 故 `FeatureNameOfBase` 必须**先按 id 查、查不到才回退名字**。反过来会让
+那 8 只精灵一直显示错误的特性名 —— 名字匹配"成功"了,只是配错了,没有报错。
+守卫见 `TestFeatureNameOfBasePrefersIdIndex`(索引缺失时**硬失败**而非跳过,
+因为缺失会导致静默退化,CI 一片绿而线上在用较差的那条路)。
+
+顺带回答了此前悬而未决的问题:**特性 id 是跨精灵复用的** —— 喵喵(3001)、
+喵呜(3025)、魔力猫(3007)都是 `200076`「氧循环」。但**进化后会换新 id**,
+且新 id 落在 `280xxx` 段(迪莫 `200191`→圣光迪莫 `280025`、魔力猫 `200076`→
+叶冕魔力猫 `280002`、火神 `200146`→烈火战神 `280003`),442 个图鉴号里有 36 组。
+
+⚠️ roco.world 的特性 id 是 `200xxx`/`280xxx` 段,**与协议里的 `288xxx` 不是
+同一套编号,无法换算**。取的是「精灵 → 特性名」这层关系。
 
 **关键限制:wiki 只给名字,不给 id。** 190 个名字里没有一个是 `288xxx` 段 ——
 `id → 名` 的正向映射只能靠两条路补(均不做进 features.json):
