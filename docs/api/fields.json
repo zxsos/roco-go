@@ -827,9 +827,26 @@
               {}
             ],
             "level": "int",
+            "names": {
+              "7020430": "str",
+              "7020440": "str",
+              "7110340": "str",
+              "7160140": "str"
+            },
+            "pet": {
+              "base": "int",
+              "img": "str",
+              "name": "str"
+            },
+            "pool": [
+              {}
+            ],
             "reward": "int",
             "rewardCost": "int",
-            "slot": "int"
+            "slot": "int",
+            "used": [
+              {}
+            ]
           }
         ],
         "pet": {
@@ -837,13 +854,22 @@
           "equipped": [
             {}
           ],
+          "featureNames": {
+            "288135": "str"
+          },
           "features": [
+            {}
+          ],
+          "gainedFeatures": [
             {}
           ],
           "gid": "int",
           "growth": "int",
           "hp": "int",
           "img": "str",
+          "innateFeatures": [
+            {}
+          ],
           "level": "int",
           "maxHp": "int",
           "name": "str",
