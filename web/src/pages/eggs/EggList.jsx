@@ -147,6 +147,17 @@ export default function EggList() {
             e ? <EggCard key={e.gid} egg={e} now={now} onPet={setDetailGid} />
               : <div key={'s' + i} className="egg-slot-empty">空格子</div>
           ))}
+          {/* 全空时给一句解释:光秃秃 3 个空格子,用户分不清是「真没在孵」还是
+              「数据还没到」。蛋的完整数据只随背包全量(0x1344)下发 —— 那是玩家
+              在游戏内**打开一次背包**才发的,登录包只带「哪几颗在孵」的 id 清单
+              (见 internal/pipeline/eggs.go),光有 id 画不出卡片。
+              故首次使用(库里还没有蛋)时,提示去游戏内开一次背包。 */}
+          {incubating.length === 0 && bag.length === 0 && (
+            <div className="empty eggs-incu-hint">
+              孵蛋器是空的。若游戏里正在孵蛋,需在游戏内打开一次背包 ——
+              蛋的数据只随背包下发给服务端。
+            </div>
+          )}
         </aside>
 
         <div className="eggs-bar">
