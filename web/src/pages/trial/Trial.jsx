@@ -529,12 +529,38 @@ function PetCard({ pet }) {
       {(pet.features && pet.features.length > 0) || (pet.shards && pet.shards.length > 0)
         ? (
           <div className="trial-meta">
-            {pet.features && pet.features.length > 0 && (
-              <>
-                <span className="muted">特性</span>
-                {[...new Set(pet.features)].map((f) => <span key={f} className="trial-chip">{f}</span>)}
-              </>
-            )}
+            {/* 特性只有 id:游戏特性名表未接入(不像技能那样有 skills.json),
+                故一律按 id 展示 —— 编一个名字比留 id 更糟。
+                能拿到天生/获得的拆分时分开显示(局级 initial_feature_ids,
+                整局不变;与已获特性之差就是试炼中拿到的,见 trial.InitialFeatures);
+                拿不到就退回不区分的展示。 */}
+            {pet.innateFeatures || pet.gainedFeatures
+              ? (
+                <>
+                  {pet.innateFeatures && pet.innateFeatures.length > 0 && (
+                    <>
+                      <span className="muted" title="宠物自带的特性">特性·天生</span>
+                      {pet.innateFeatures.map((f) => (
+                        <span key={f} className="trial-chip trial-feat-innate">{f}</span>
+                      ))}
+                    </>
+                  )}
+                  {pet.gainedFeatures && pet.gainedFeatures.length > 0 && (
+                    <>
+                      <span className="muted" title="本局试炼中获得的特性">特性·获得</span>
+                      {pet.gainedFeatures.map((f) => (
+                        <span key={f} className="trial-chip trial-feat-gained">{f}</span>
+                      ))}
+                    </>
+                  )}
+                </>
+              )
+              : (
+                <>
+                  <span className="muted">特性</span>
+                  {[...new Set(pet.features)].map((f) => <span key={f} className="trial-chip">{f}</span>)}
+                </>
+              )}
             {pet.shards && pet.shards.length > 0 && (
               <>
                 <span className="muted">碎片</span>

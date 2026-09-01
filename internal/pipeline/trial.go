@@ -85,16 +85,19 @@ type trialRun struct {
 	chapters    []uint32
 	effects     []uint32
 	pet         *trial.Pet
-	selection   *trial.Selection
-	bless       *trial.BlessSelection
-	pending     *trial.PendingStep // 祝福的下一步(候选技能等)
-	reward      *trial.Reward      // 待处理的节点奖励
-	shop        []trial.ShopItem
-	boss        bool          // 已进 BOSS 战
-	active      bool          // 一局进行中
-	result      *trial.Settle // 上一局结算(active=false 时才有)
-	log         []trialLogEntry
-	startedAt   time.Time
+	// initialFeatures 是局级的天生特性(#33),用于把宠物的特性拆成
+	// 「天生」与「试炼获得」两组(见 trial.InitialFeatures)。
+	initialFeatures trial.InitialFeatures
+	selection       *trial.Selection
+	bless           *trial.BlessSelection
+	pending         *trial.PendingStep // 祝福的下一步(候选技能等)
+	reward          *trial.Reward      // 待处理的节点奖励
+	shop            []trial.ShopItem
+	boss            bool          // 已进 BOSS 战
+	active          bool          // 一局进行中
+	result          *trial.Settle // 上一局结算(active=false 时才有)
+	log             []trialLogEntry
+	startedAt       time.Time
 }
 
 // trialLogEntry 是操作流水里的一条。
@@ -384,6 +387,11 @@ func (r *trialRun) merge(c *trial.Challenge) {
 	if c.Pet != nil {
 		r.pet = c.Pet
 	}
+	// 天生特性整局不变,只在建局/恢复时取一次(#33 是局级字段,
+	// apply 类的增量回包里没有它,故不在这里更新,免得被空值覆盖)。
+	if len(c.InitialFeatures) > 0 {
+		r.initialFeatures = c.InitialFeatures
+	}
 	if c.Selection != nil {
 		r.selection = c.Selection
 	}
@@ -663,7 +671,7 @@ func (p *Pipeline) trialRunPayload(r *trialRun, damOf map[uint32]int32) *server.
 	out.Chapters = r.chapters
 	out.Effects = r.effects
 	if r.pet != nil {
-		out.Pet = p.trialPetPayload(r.pet)
+		out.Pet = p.trialPetPayload(r.pet, r.initialFeatures)
 	}
 	if r.selection != nil {
 		for _, e := range r.selection.Events {
@@ -716,11 +724,31 @@ func (p *Pipeline) trialRunPayload(r *trialRun, damOf map[uint32]int32) *server.
 }
 
 // trialPetPayload 把试炼宠物副本转成对外载荷:名称/头像走 gamedata 按 base_conf_id 查。
-func (p *Pipeline) trialPetPayload(tp *trial.Pet) *server.TrialPet {
+// initial 是局级的天生特性(#33),用来把 Features 拆成「天生」与「试炼获得」两组。
+func (p *Pipeline) trialPetPayload(tp *trial.Pet, initial trial.InitialFeatures) *server.TrialPet {
 	out := &server.TrialPet{
 		Gid: tp.Gid, Name: tp.Name, Level: tp.Level,
 		HP: tp.HP, MaxHP: tp.MaxHP, Energy: tp.EnergyCeil, Growth: tp.Growth,
 		Features: tp.Features, Shards: tp.Shards, Equipped: tp.Equipped,
+	}
+	// 天生 vs 试炼获得:两边都判,不按下标切片(见 InitialFeatures 的说明)。
+	// initial 缺失时(老快照/字段不存在)两组都留空 —— **不猜**,
+	// 标错比不标更糟,用户会把「天生」当成确定的事实。
+	if len(initial) > 0 {
+		// 去重保序:acquired 是累积追加的,同一个 id 可能出现多次
+		// (实测 features 里 288001 就有两个 —— 它是「已获得」的流水而非集合)。
+		seen := map[uint32]bool{}
+		for _, f := range tp.Features {
+			if f == 0 || seen[f] {
+				continue
+			}
+			seen[f] = true
+			if initial.Has(f) {
+				out.InnateFeatures = append(out.InnateFeatures, f)
+			} else {
+				out.GainedFeatures = append(out.GainedFeatures, f)
+			}
+		}
 	}
 	if info, ok := p.db.PetBase(tp.BaseConfID); ok {
 		out.Species = info.Name

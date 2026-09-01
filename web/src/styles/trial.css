@@ -240,6 +240,10 @@
   flex-shrink: 0; padding: 2px 10px; font-size: 12px;
 }
 .trial-enc-refresh:disabled { opacity: .5; cursor: not-allowed; }
+
+/* 特性只有 id(名字表未接入),用边框色区分天生/获得,免得一串数字分不清哪来的 */
+.trial-feat-innate { border-color: var(--accent); }
+.trial-feat-gained { opacity: .85; }
 .trial-enc-err { color: var(--danger); font-size: 12px; margin: 2px 0 6px; }
 
 /* 精灵网格:自适应列宽,头像下挂名字 */

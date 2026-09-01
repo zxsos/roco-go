@@ -300,8 +300,15 @@ type TrialPet struct {
 	Growth   uint32       `json:"growth"`
 	Skills   []TrialSkill `json:"skills,omitempty"`
 	Features []uint32     `json:"features,omitempty"` // 已获特性(288xxx)
-	Shards   []uint32     `json:"shards,omitempty"`   // 已获碎片(20xx/30xx)
-	Equipped []uint32     `json:"equipped,omitempty"` // 出战技能槽位
+	// 下面两组是 Features 的拆分,**只有能拿到天生特性时才给**:
+	//   InnateFeatures = 宠物天生的(局级 initial_feature_ids)
+	//   GainedFeatures = 试炼中获得的(已获 - 天生)
+	// 拿不到时两者都缺席、Features 仍在 —— 前端据此回退到「不区分」的展示。
+	// 刻意不猜:标错比不标更糟,用户会把「天生」当成确定的事实。
+	InnateFeatures []uint32 `json:"innateFeatures,omitempty"`
+	GainedFeatures []uint32 `json:"gainedFeatures,omitempty"`
+	Shards         []uint32 `json:"shards,omitempty"`   // 已获碎片(20xx/30xx)
+	Equipped       []uint32 `json:"equipped,omitempty"` // 出战技能槽位
 }
 
 // TrialSkill 是试炼宠物的一个技能槽(融合体)。

@@ -106,12 +106,46 @@ type Pet struct {
 	EnergyCeil uint32
 	Growth     uint32
 	Skills     []Skill
-	Features   []uint32 // 已获得的特性 id(288xxx)
+	Features   []uint32 // 已获得的特性 id(288xxx):天生 + 试炼中获得,见 InitialFeatures
 	Shards     []uint32 // 已获得的碎片 id(20xx/30xx)
 	Equipped   []uint32 // 出战技能槽位(equipped_skill_slots)
 	Name       string   // 昵称,取自内嵌 PetData 的 name(玩家可能改过名)
 	ConfID     uint32   // 宠物 conf_id(取自内嵌 PetData,供查种类名)
 }
+
+// Has 判断某特性是否属于天生。
+func (f InitialFeatures) Has(id uint32) bool {
+	for _, x := range f {
+		if x == id {
+			return true
+		}
+	}
+	return false
+}
+
+// InitialFeatures 是宠物**天生的**特性(局级 initial_feature_ids,#33)。
+//
+// 与 Pet.Features(宠物级 acquired_feature_ids,#11)的关系:
+//
+//	Features        = 天生 + 试炼中获得的(会随推进增长)
+//	InitialFeatures = 只有天生的(整局不变)
+//	差集            = 试炼中获得的
+//
+// 为什么值得区分 —— 实测一份完整试炼(17 场战斗)的特性序列:
+//
+//	第 1场 [288135]
+//	第 2场 [288135, 288001]
+//	第 6场 [288135, 288001, 288022]
+//	第17场 [288135, 288001, 288022, 288025, 288154, 288043]
+//
+// 288135 从头到尾都在、且始终是第一个,它就是宠物自带的特性;后面逐个累积的
+// 是打节点拿到的。玩家的这条经验(「第一个一定是自己本身的特性」)与数据完全吻合
+// —— 因为 initial_feature_ids 恒定,而 acquired 逐个追加。
+//
+// ⚠️ 别假设 InitialFeatures 是 Features 的前缀子集: acquired 是**累积追加**的,
+// 实测看确实是前缀,但那是观察到的行为而非协议保证。取差集时两边都查,
+// 不要只按下标切片。
+type InitialFeatures []uint32
 
 // NodeEvent 是当前节点里的一个候选事件(通常三个槽位,各带一个奖励)。
 type NodeEvent struct {
@@ -182,6 +216,9 @@ type Challenge struct {
 	Selection      *Selection
 	Effects        []uint32 // 本局生效的试炼词条(trial_effect_ids)
 	Chapters       []uint32 // 可选章节(3000/3001/3002)
+	// InitialFeatures 是宠物**天生的**特性(局级 #33,整局不变)。
+	// 与 Pet.Features 之差即「试炼中获得的」,详见 InitialFeatures 的说明。
+	InitialFeatures InitialFeatures
 }
 
 // Reward 是刚到账、等待玩家处理的节点奖励。
@@ -314,6 +351,10 @@ func ParseChallengeData(b []byte) *Challenge {
 			c.ChallengeID = v
 		case num == 31:
 			c.Chapters = appendU32(c.Chapters, val, typ, v)
+		case num == 33:
+			// initial_feature_ids(#33,局级):宠物天生的特性。
+			// 与宠物级 #11(acquired)之差即试炼中获得的 —— 见 InitialFeatures。
+			c.InitialFeatures = appendU32(c.InitialFeatures, val, typ, v)
 		}
 	})
 	return c

@@ -11,6 +11,48 @@ import (
 
 // 用 protowire 手工拼一份 GrassTrialChallengeData,喂给 ParseChallengeData 断言字段号。
 // 不依赖任何真实抓包,故测试可离线、可复现;字段号错了测试会红,即变异守卫。
+// TestParseChallengeDataInitialFeatures 守局级 #33(initial_feature_ids)。
+//
+// 它存在的意义是**区分宠物的天生特性与试炼中获得的特性**:
+// acquired(#11,宠物级)是累积追加的流水,initial(#33,局级)整局不变,
+// 两者之差就是本局拿到的。实测 17 场战斗的特性序列印证了这点 ——
+// 288135 从头到尾都在(天生),其余逐个累积(获得)。
+// 抓错字段号会解成空,两组拆分随之失效(且**不报错**,只是静默变成「不区分」)。
+func TestParseChallengeDataInitialFeatures(t *testing.T) {
+	var body []byte
+	body = protowire.AppendTag(body, 1, protowire.VarintType) // state
+	body = protowire.AppendVarint(body, 2)
+	for _, id := range []uint64{288135} { // initial_feature_ids(非 packed)
+		body = protowire.AppendTag(body, 33, protowire.VarintType)
+		body = protowire.AppendVarint(body, id)
+	}
+	c := ParseChallengeData(body)
+	if c == nil {
+		t.Fatal("ParseChallengeData 返回 nil")
+	}
+	if len(c.InitialFeatures) != 1 || c.InitialFeatures[0] != 288135 {
+		t.Fatalf("InitialFeatures = %v, 期望 [288135](字段号是 33 吗?)", c.InitialFeatures)
+	}
+	if !c.InitialFeatures.Has(288135) {
+		t.Error("Has(288135) 应为 true")
+	}
+	if c.InitialFeatures.Has(288001) {
+		t.Error("Has(288001) 应为 false —— 它不在天生列表里")
+	}
+
+	// packed 编码也要认(协议允许两种,repeated uint32 很常见)
+	var pk []byte
+	var packed []byte
+	packed = protowire.AppendVarint(packed, 288135)
+	packed = protowire.AppendVarint(packed, 288001)
+	pk = protowire.AppendTag(pk, 33, protowire.BytesType)
+	pk = protowire.AppendBytes(pk, packed)
+	c2 := ParseChallengeData(pk)
+	if len(c2.InitialFeatures) != 2 {
+		t.Errorf("packed 解出 %d 个, 期望 2: %v", len(c2.InitialFeatures), c2.InitialFeatures)
+	}
+}
+
 func TestParseChallengeData(t *testing.T) {
 	var body []byte
 	body = protowire.AppendTag(body, 1, protowire.VarintType) // state
