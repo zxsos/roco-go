@@ -13,10 +13,28 @@
 //   event   草系试炼的 event_conf_id → 对应哪只精灵,候选是全部精灵形态。
 // 前两类是「协议给了 id、缺名字」;第三类反过来 —— 协议连对象都没给(事件到精灵
 // 的映射表在游戏配置里,未解包),只能照着游戏画面标。
+//
+// ⚠️ ANNOTATION_KINDS 是 kind 的**唯一登记处**,其余地方一律从这里派生。
+// 这不是洁癖:新增 event 那一类时,前端有四处各写各的列表 ——
+// 提交弹窗的候选类型、Provider 的缓存键、审核面板的切换按钮、
+// 以及「全部」时实际去拉的那份数组。漏掉任何一处的**症状都是静默的**:
+// 玩家提交成功、数据进了库,但面板永远显示「暂无待审核」,
+// 或者标注了页面却读不到缓存 —— 没有任何报错指向真正的原因。
 import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { getAnnotations, getAnnotationCandidates, submitAnnotation, subscribe } from '../api'
 import { AnnotationsContext } from '../context'
 import { toast } from './toast'
+
+export const ANNOTATION_KINDS = [
+  { key: 'skill', label: '技能', codeLabel: 'id' },
+  { key: 'feature', label: '特性', codeLabel: 'id' },
+  // event 的 code 是 event_conf_id(事件编号)而非精灵 id —— 写「id 130056」
+  // 会把两件事说反,审核者会以为是哪个 id 对不上。
+  { key: 'event', label: '精灵', codeLabel: '事件' },
+]
+const ANNOTATION_KIND_KEYS = ANNOTATION_KINDS.map((k) => k.key)
+const KIND_LABEL = Object.fromEntries(ANNOTATION_KINDS.map((k) => [k.key, k.label]))
+const CODE_LABEL = Object.fromEntries(ANNOTATION_KINDS.map((k) => [k.key, k.codeLabel]))
 
 // AnnotationsProvider 拉取两类已审核标注并缓存。
 //
@@ -26,7 +44,11 @@ import { toast } from './toast'
 //      重拉。没有这条,审完必须手动刷浏览器才看得到,提交的人得不到反馈,
 //      下一个遇到同一 id 的人又会再标一次。
 export default function AnnotationsProvider({ children }) {
-  const [byKind, setByKind] = useState({ skill: {}, feature: {}, event: {} })
+  // 缓存按 kind 分格,初始每格空对象 —— 从 ANNOTATION_KIND_KEYS 派生,
+  // 免得新增 kind 时这里漏一格、查缓存恒为 undefined。
+  const [byKind, setByKind] = useState(
+    () => Object.fromEntries(ANNOTATION_KIND_KEYS.map((k) => [k, {}])),
+  )
   // 自己提交、还没通过审核的标注。只在本会话内可见(别人看不到),用来让
   // 「我刚标了」立刻有回显 —— 否则玩家提交后页面纹丝不动,只会以为没生效。
   const [mine, setMine] = useState({})
@@ -35,7 +57,7 @@ export default function AnnotationsProvider({ children }) {
   // (不能读 byKind 状态:那是上一次渲染的值,refresh 之后还没更新)。
   const refresh = useCallback(async () => {
     try {
-      const pairs = await Promise.all(['skill', 'feature', 'event'].map(async (kind) => {
+      const pairs = await Promise.all(ANNOTATION_KIND_KEYS.map(async (kind) => {
         const d = await getAnnotations(kind)
         const m = {}
         for (const it of (d.items || [])) m[it.code] = { name: it.name, desc: it.desc }
@@ -96,9 +118,6 @@ export default function AnnotationsProvider({ children }) {
 export function useAnnotations() {
   return useContext(AnnotationsContext)
 }
-
-// KIND_LABEL 是三类标注对象的中文名(弹窗标题、未知块提示都用)。
-const KIND_LABEL = { skill: '技能', feature: '特性', event: '精灵' }
 
 // AnnotationModal 标注弹窗。
 //   kind: 'skill' | 'feature' | 'event'   code: 协议里的未知 id

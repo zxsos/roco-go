@@ -663,8 +663,15 @@ func seedAnnotations(t *testing.T, s *Server) {
 	}); err != nil {
 		t.Fatalf("写已审核技能标注: %v", err)
 	}
-	// 前两条(按插入序 id=1/2)里只审通过 id=1,以及技能那条 id=3。
-	for _, id := range []int64{1, 3} {
+	// 试炼事件 → 精灵。code 是 event_conf_id 而非精灵 id(标注的对象是事件),
+	// name 是精灵形态全名 —— 后端据此反查形态取头像,故名字口径不能错。
+	if _, err := s.store.SubmitAnnotation(store.Annotation{
+		Kind: "event", Code: 130056, Name: "奇丽花", Submitter: "UID:3",
+	}); err != nil {
+		t.Fatalf("写已审核事件标注: %v", err)
+	}
+	// 前两条(按插入序 id=1/2)里只审通过 id=1,以及技能那条 id=3、事件那条 id=4。
+	for _, id := range []int64{1, 3, 4} {
 		if err := s.store.ReviewAnnotation(id, true, "admin"); err != nil {
 			t.Fatalf("审核 id=%d: %v", id, err)
 		}
@@ -684,6 +691,12 @@ func TestContractAnnotations(t *testing.T) {
 		get(t, s, "/api/annotations?kind=feature"), scrubAnnotationTime)
 	checkGolden(t, "annotations-skill",
 		get(t, s, "/api/annotations?kind=skill"), scrubAnnotationTime)
+	// event 这一类是后加的,端点没被 golden 守护过 —— 若哪天有人动 kind 的校验
+	// 白名单(annotationKind)忘了带 event,这里会红。
+	// ⚠️ golden 只管得住后端:前端审核面板的类别列表是另一套硬编码,
+	// 漏了它不报错、只是「面板永远空着」,本次就踩过(见 AnnotationsCard.jsx)。
+	checkGolden(t, "annotations-event",
+		get(t, s, "/api/annotations?kind=event"), scrubAnnotationTime)
 }
 
 // TestAnnotationsReviewFlow 钉住审核语义:

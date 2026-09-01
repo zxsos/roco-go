@@ -105,6 +105,22 @@
   `event` 标注的 `name` 必须**逐字**取自候选名单（形态全名，形态后缀用全角括号），
   否则后端反查不到形态、带不出头像。
 
+> **新增一个 kind 要同步改 6 处，漏掉任何一处的症状都是静默的。**
+> 加 `event` 时漏了前端审核面板那一处，结果是：玩家提交成功、数据进了库，
+> 管理员面板却永远显示「暂无待审核标注」——没有报错，也没有任何线索指向真正的原因。
+>
+> | # | 位置 | 漏了的症状 |
+> | --- | --- | --- |
+> | 1 | `internal/server/api_annotations.go` 的 `annotationKind` 白名单 | 接口 400 |
+> | 2 | 同上 `handleListCandidates` 的 switch | 标注弹窗候选为空 |
+> | 3 | `web/src/components/annotations.jsx` 的 `ANNOTATION_KINDS` | 前端根本不认这一类 |
+> | 4 | `web/src/pages/admin/AnnotationsCard.jsx` 的类别按钮 | **面板永远看不到待审**（本次踩的） |
+> | 5 | `internal/server/contract_test.go` 的 `seedAnnotations` + `checkGolden` | 端点失去契约守护 |
+> | 6 | `scripts/gen_apifields.py` 的 golden 元信息表 | `fields.json` 里 desc/endpoint 为空 |
+>
+> 第 3、4 项现已从同一份 `ANNOTATION_KINDS` 派生（它是前端的唯一登记处），
+> 但仍需人工记得第 1、2、5、6 项 —— 它们是 Go 与 Python 侧的，跨语言收敛不了。
+
 ## 远行商人
 
 | 方法 路径 | 鉴权 | 账号 | 说明 |
