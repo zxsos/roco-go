@@ -431,6 +431,25 @@ CREATE INDEX IF NOT EXISTS idx_annotations_code ON annotations(kind, code);
 		!strings.Contains(err.Error(), "duplicate column") {
 		return err
 	}
+	// 清洗历史标注名字里的空白(一次性,幂等)。
+	//
+	// wiki 图鉴页为排版在字间插空格,玩家照抄后提交成「魔 法 增 效 」这类名字
+	// (末尾还常带空格)。标注是给全服看名字的,名字脏了等于白标。提交侧的清洗
+	// (server.cleanAnnotationName)救不了已入库的记录,故这里补一遍。
+	//
+	// SQLite 没有 regexp_replace,故嵌套 replace 逐个去掉空白:半角空格、全角空格
+	// (U+3000)、制表、换行。覆盖常见来源(网页复制多为这几种)。
+	//
+	// **WHERE 子句不能省**:限定只动「含空白的行」。省掉会让 UPDATE 扫全表,而
+	// replace 对无空白的名字本无效果 —— 看似等价,实则埋雷:哪天 SQL 被改成清空式
+	// 写法(如 SET name=''),没有 WHERE 就会**清空全服所有标注的名字**,那比带空格
+	// 严重得多。故把「不该被改动的行」也纳入断言(见 anno_clean_test.go)。
+	if _, err := s.db.Exec(`UPDATE annotations SET name = replace(replace(replace(replace(replace(
+		name, char(9), ''), char(10), ''), char(13), ''), char(12288), ''), ' ', '')
+		WHERE name LIKE '% %' OR name LIKE '%' || char(9) || '%' OR name LIKE '%' || char(10) || '%'
+		   OR name LIKE '%' || char(13) || '%' OR name LIKE '%' || char(12288) || '%'`); err != nil {
+		return err
+	}
 	return nil
 }
 
