@@ -873,6 +873,16 @@
             }
           ],
           "chapter": "int",
+          "extra": [
+            {
+              "base": "int",
+              "img": "str",
+              "kind": "int",
+              "name": "str",
+              "seen": "bool",
+              "time": "int"
+            }
+          ],
           "name": "str",
           "normal": [
             {

@@ -438,6 +438,15 @@ type TrialEncounterBook struct {
 	Seen    uint32              `json:"seen"`           // 已遇见数
 	Normal  []TrialEncounterPet `json:"normal"`         // 普通池
 	Boss    []TrialEncounterPet `json:"boss,omitempty"` // 22 名首领
+	// Extra 是**见过但不在上面两组里**的精灵(NPC 战 / 最终 BOSS 等)。
+	//
+	// 静态配置没有第 7 层 NPC 与最终 BOSS 的精灵池(只有普通池与 22 名首领),
+	// 这些遭遇无处安放。宁可单列也不丢弃 —— 用户明明打过照面,图上却显示
+	// 未遇见,比少一个分组糟糕得多。
+	//
+	// **不计入 Total/Seen**:那两个字段的口径是「池子里还剩多少」,把来源
+	// 不明的条目塞进分母会让进度百分比失去意义。故单独展示。
+	Extra []TrialEncounterPet `json:"extra,omitempty"`
 }
 
 // TrialEncounterPet 是图里的一只精灵。

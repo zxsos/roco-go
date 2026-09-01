@@ -56,6 +56,21 @@ export default function Trial() {
     return () => { alive = false }
   }, [tab, account, encGen])
 
+  // 打完一场就重拉一次:管线记下新的遇会后广播 trial_enc(只发信号不带数据),
+  // 这里收到便让上面那个 effect 再跑一遍。
+  //
+  // 合并 400ms 内的连续触发:一场战斗可能带多只精灵、紧接着又进下一场,
+  // 每次都拉 786 条纯属浪费。合一下,视觉上也更稳(不会连闪)。
+  useEffect(() => {
+    let t = 0
+    // 断线重连时补拉一次:SSE 断开期间的消息全丢了,不补就会一直显示旧数据。
+    const un = subscribe('trial_enc', () => {
+      clearTimeout(t)
+      t = setTimeout(() => setEncGen((n) => n + 1), 400)
+    }, { onOpen: () => setEncGen((n) => n + 1) })
+    return () => { clearTimeout(t); un() }
+  }, [])
+
   useEffect(() => subscribe('trial', (d) => setData(d)), [setData])
 
   const run = data && data.run
@@ -160,6 +175,10 @@ function EncountersView({ data, onReload }) {
   // 普通池为空时分组整个不渲染 —— 空标题 + 空网格没有意义。
   const normal = cur.normal || []
   const boss = cur.boss || []
+  // 池外的实战遭遇(NPC 战 / 最终 BOSS):静态配置没有这两层的精灵池,
+  // 这些遭遇无处安放,单列一组展示 —— 丢掉的话用户明明打过照面却显示未遇见。
+  // 不计入进度(分母是池子大小,塞进来源不明的条目会让百分比失去意义)。
+  const extra = cur.extra || []
   const pct = cur.total > 0 ? Math.round((cur.seen / cur.total) * 100) : 0
   return (
     <div>
@@ -178,6 +197,14 @@ function EncountersView({ data, onReload }) {
         ))}
       </div>
       <div className="trial-enc-head">
+        <button
+          className="btn trial-enc-refresh"
+          onClick={onReload}
+          disabled={busy}
+          title="重新读取遇见记录"
+        >
+          {busy ? '…' : '刷新'}
+        </button>
         <b>{cur.name || `第${cur.chapter}章`}</b>
         <span className="muted">已遇见 {cur.seen}/{cur.total}</span>
         <div className="trial-enc-bar">
@@ -204,6 +231,16 @@ function EncountersView({ data, onReload }) {
         <section className="trial-group">
           <h4 className="trial-group-t">首领({boss.length})——第 4 层,三章共用</h4>
           <PetGrid pets={boss} />
+        </section>
+      )}
+      {extra.length > 0 && (
+        <section className="trial-group">
+          <h4 className="trial-group-t">其他遭遇({extra.length})</h4>
+          <div className="muted trial-note">
+            遇到过、但不在上面两组池子里(NPC 战 / 最终 BOSS 等)。静态配置只有普通池与
+            22 名首领,没有第 7 层的精灵池,故单列;不计入上方进度。
+          </div>
+          <PetGrid pets={extra} />
         </section>
       )}
     </div>

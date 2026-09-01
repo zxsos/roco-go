@@ -333,6 +333,9 @@ func scrubEncTime(s string) string {
 //  2. 8101 记为首领:22 名首领三章共用,故三张图里都会出现同一批。
 //  3. 3005 只记在第 2 章:它在第 3 章池里也有,用来守「每章独立计算」——
 //     第 3 章那张图里 3005 必须仍显示未遇见。
+//  4. 3027 / 5061 是**池外**遭遇:守 extra 组。这俩是回放实测撞上的真实例子 ——
+//     3027 是 NPC 战、5061 是最终 BOSS(敌方式斗酷猫),静态配置没有第 7 层的
+//     精灵池,按旧逻辑会静默丢失:用户明明遇到过,图上却永远显示未遇见。
 func TestContractTrialEncounters(t *testing.T) {
 	s := newTestServer(t)
 	for _, w := range []struct {
@@ -343,13 +346,93 @@ func TestContractTrialEncounters(t *testing.T) {
 		{1, 0, []uint32{3001}},
 		{1, 1, []uint32{8101}},
 		{2, 0, []uint32{3005}},
+		{1, 2, []uint32{3027}}, // NPC 战 —— 不在普通池也不在首领池
+		{3, 3, []uint32{5061}}, // 最终 BOSS —— 同上
 	} {
-		if err := s.store.AddTrialEncounters(contractAcc, w.ch, w.kind, w.bases); err != nil {
+		// ts 固定:这是「战斗发生的时刻」(见 AddTrialEncounters),
+		// golden 里由 scrubEncTime 抹成 0,故取值本身不进契约。
+		if err := s.store.AddTrialEncounters(contractAcc, w.ch, w.kind, w.bases, 1700000000); err != nil {
 			t.Fatalf("写遇见记录(第%d章 %v): %v", w.ch, w.bases, err)
 		}
 	}
 	checkGolden(t, "trial-encounters",
 		get(t, s, "/api/trial/encounters?account="+contractAcc), scrubEncTime)
+}
+
+// TestContractTrialEncountersExtra 单独锁 extra 组的**语义**:不计入 total/seen。
+//
+// golden 只能看出「extra 里有 3027」,看不出「它没有把 seen 加一」—— 而这个区别
+// 正是设计意图:total/seen 的口径是「池子里还剩多少」,把来源不明的条目塞进分母,
+// 进度百分比就会失去意义(golden 不会报警,因为它只比对结构)。
+// 故这里直接断言计数,把这条口径钉死。
+func TestContractTrialEncountersExtra(t *testing.T) {
+	s := newTestServer(t)
+	// 先量一份基线:没有任何记录时三章的 total
+	var base [4]uint32
+	var got struct {
+		Chapters []struct {
+			Chapter uint32 `json:"chapter"`
+			Total   uint32 `json:"total"`
+			Seen    uint32 `json:"seen"`
+			Extra   []struct {
+				Base uint32 `json:"base"`
+				Seen bool   `json:"seen"`
+				Kind *uint32
+			} `json:"extra"`
+		} `json:"chapters"`
+	}
+	if err := json.Unmarshal(get(t, s,
+		"/api/trial/encounters?account="+contractAcc), &got); err != nil {
+		t.Fatalf("解析: %v", err)
+	}
+	for _, c := range got.Chapters {
+		if c.Chapter >= 1 && c.Chapter <= 3 {
+			base[c.Chapter] = c.Total
+		}
+	}
+
+	// 记一条池外遭遇(NPC 战 3027,第 1 章)
+	if err := s.store.AddTrialEncounters(contractAcc, 1, 2, []uint32{3027}, 1700000000); err != nil {
+		t.Fatalf("写遇见记录: %v", err)
+	}
+	got.Chapters = nil
+	if err := json.Unmarshal(get(t, s,
+		"/api/trial/encounters?account="+contractAcc), &got); err != nil {
+		t.Fatalf("解析: %v", err)
+	}
+
+	var ch1 *struct {
+		Chapter uint32 `json:"chapter"`
+		Total   uint32 `json:"total"`
+		Seen    uint32 `json:"seen"`
+		Extra   []struct {
+			Base uint32 `json:"base"`
+			Seen bool   `json:"seen"`
+			Kind *uint32
+		} `json:"extra"`
+	}
+	for i := range got.Chapters {
+		if got.Chapters[i].Chapter == 1 {
+			ch1 = &got.Chapters[i]
+		}
+	}
+	if ch1 == nil {
+		t.Fatal("第1章缺失")
+	}
+	// 池外遭遇进了 extra
+	if len(ch1.Extra) != 1 || ch1.Extra[0].Base != 3027 {
+		t.Fatalf("extra 应为 [3027], 实际 %+v", ch1.Extra)
+	}
+	if ch1.Extra[0].Kind == nil || *ch1.Extra[0].Kind != 2 {
+		t.Errorf("extra 的 kind 应为 2(NPC 战), 实际 %v", ch1.Extra[0].Kind)
+	}
+	// 但**不该**改变 total/seen —— 这是本测试存在的全部理由
+	if ch1.Total != base[1] {
+		t.Errorf("extra 不该计入 total: 基线 %d, 现在 %d", base[1], ch1.Total)
+	}
+	if ch1.Seen != 0 {
+		t.Errorf("extra 不该计入 seen: 实际 %d, 期望 0", ch1.Seen)
+	}
 }
 
 // TestContractTrialEncountersEmpty 锁定「一条遇见记录都没有」时的响应。

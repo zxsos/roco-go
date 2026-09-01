@@ -23,11 +23,19 @@ type TrialEncounter struct {
 
 // AddTrialEncounters 记录一次战斗里遇到的精灵。chapter 为 0 时跳过 ——
 // 不知道是哪一章就没法归到某张图上,含糊入库比不记更糟。
-func (s *Store) AddTrialEncounters(account string, chapter uint32, kind uint32, petBases []uint32) error {
+//
+// ts 是**战斗发生的时刻**,取自抓包消息本身而非当前时间:
+// 离线回放历史 pcap 补录时,若写成入库时刻,补出来的记录会全部挤在回放那一下,
+// 「首次遇到」便失去了意义(而它正是进度条之外唯一带时间语义的信息)。
+// ts <= 0 时退回当前时间 —— 宁可不准,也别记成 1970。
+func (s *Store) AddTrialEncounters(account string, chapter uint32, kind uint32, petBases []uint32, ts int64) error {
 	if len(petBases) == 0 || chapter == 0 {
 		return nil
 	}
-	now := time.Now().Unix()
+	now := ts
+	if now <= 0 {
+		now = time.Now().Unix()
+	}
 	rows := make([][]any, 0, len(petBases))
 	for _, p := range petBases {
 		if p == 0 {

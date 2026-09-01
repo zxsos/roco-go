@@ -3,6 +3,7 @@ package server
 import (
 	"encoding/json"
 	"net/http"
+	"sort"
 	"strconv"
 	"time"
 
@@ -69,6 +70,26 @@ func (s *Server) handleTrialEncounters(w http.ResponseWriter, r *http.Request) {
 				n++
 			}
 		}
+		// 见过但**不在本章池里**的:主要是 NPC 战(kind=2)与最终 BOSS(kind=3)。
+		//
+		// 静态配置只有「普通池」(第 1/2/3/5 层)与「22 名首领」(第 4 层),**没有第 7 层的
+		// NPC 阵容和最终 BOSS 的精灵池** —— 实测回放就撞上了:3027(NPC 战)与 5061
+		// (最终 BOSS)都真实打过照面,却不在 pools/bosses 里,按上面的逻辑会无声丢失。
+		// 静默丢弃比不记录更糟:用户明明遇到过,图上却永远显示未遇见。
+		// 故单列一组,不混进上面的图 —— 那两组的进度口径是「池子里还剩多少」,
+		// 塞进来源不明的条目会让分母失去意义。
+		for base := range seen {
+			if inBook(base, book.Normal) || inBook(base, book.Boss) {
+				continue
+			}
+			book.Extra = append(book.Extra, s.encounterPet(base, seen))
+		}
+		sort.Slice(book.Extra, func(i, j int) bool {
+			if book.Extra[i].Time != nil && book.Extra[j].Time != nil {
+				return *book.Extra[i].Time < *book.Extra[j].Time
+			}
+			return book.Extra[i].Base < book.Extra[j].Base
+		})
 		book.Total = uint32(len(book.Normal) + len(book.Boss))
 		book.Seen = uint32(n)
 		if book.Total > 0 {
@@ -77,6 +98,17 @@ func (s *Server) handleTrialEncounters(w http.ResponseWriter, r *http.Request) {
 	}
 	out.Updated = trialDataUpdated()
 	writeJSON(w, out)
+}
+
+// inBook 判断某 petbase 是否已在某组里(O(n²) 但 n 最大 337,且只在组接口时跑一次)。
+// 用 map 更快,但避免为此多维护一份临时结构 —— 这个接口的量级完全撑得住。
+func inBook(base uint32, list []TrialEncounterPet) bool {
+	for _, p := range list {
+		if p.Base == base {
+			return true
+		}
+	}
+	return false
 }
 
 // encounterPet 组装图里的一只精灵:名字、头像、本章是否遇到过。

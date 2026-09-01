@@ -505,13 +505,24 @@ func (p *Pipeline) recordTrialEncounter(m capture.Message, acc string, st *trial
 	if ch == 0 {
 		return
 	}
-	if err := p.st.AddTrialEncounters(acc, ch, uint32(e.Type), e.PetBases); err != nil {
+	// 时间戳用**报文自带的时间**而非当前时刻:离线回放历史 pcap 补录时,
+	// 写成入库时刻会让补出来的记录全挤在回放那一下(见 AddTrialEncounters)。
+	if err := p.st.AddTrialEncounters(acc, ch, uint32(e.Type), e.PetBases, m.Time.Unix()); err != nil {
 		log.Printf("记录试炼遇见失败(第%d章 %v): %v", ch, e.PetBases, err)
 		return
 	}
 	for _, b := range e.PetBases {
 		log.Printf("试炼遇见: 第%d章 %s战 petbase=%d", ch, e.Type.Label(), b)
 	}
+	// 通知前端重拉「遇见记录」。
+	//
+	// 只发信号、不带数据:一张图 786 只精灵,整份塞进 SSE 太重,而前端那头本来
+	// 就有完整拉取逻辑(GET /api/trial/encounters),让它自己去取即可。
+	// 与 eggs 频道同一路数(见 eggs.go:69)。
+	//
+	// 这条不加的话:遇见记录是读库的累积历史、不走 trial 快照,打完一局页面
+	// 不会有任何变化,只有重进页面才看得到 —— 用过的人只会以为没记录上。
+	p.srv.Hub().Broadcast("trial_enc", acc, map[string]any{"account": acc})
 }
 
 // ---- 推送 ----

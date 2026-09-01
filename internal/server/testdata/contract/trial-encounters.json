@@ -139,6 +139,16 @@
         }
       ],
       "chapter": 1,
+      "extra": [
+        {
+          "base": 3027,
+          "img": "HeadIcon/3027.webp",
+          "kind": 2,
+          "name": "蒲公英娃娃",
+          "seen": true,
+          "time": 0
+        }
+      ],
       "name": "记忆中的索米亚草原",
       "normal": [
         {
@@ -3565,6 +3575,16 @@
         }
       ],
       "chapter": 3,
+      "extra": [
+        {
+          "base": 5061,
+          "img": "HeadIcon/3158.webp",
+          "kind": 3,
+          "name": "武斗酷猫",
+          "seen": true,
+          "time": 0
+        }
+      ],
       "name": "记忆中的普拉塔草原",
       "normal": [
         {

@@ -12,10 +12,11 @@ import (
 //  2. kind 取最大值 —— 同一只可能在普通池与首领池都遇到过;
 //  3. first_seen 保持首次、last_seen/times 累加 —— 进度条的「首次遇到」意义在此。
 
-// seedEnc 写入一条遇见记录,返回期望的首次时间。
+// seedEnc 写入一条遇见记录。ts 传 0 表示用当前时间。
+// 补录历史时 ts 应传报文自带的时间(见 AddTrialEncounters)。
 func seedEnc(t *testing.T, st *Store, acc string, ch, kind uint32, bases ...uint32) {
 	t.Helper()
-	if err := st.AddTrialEncounters(acc, ch, kind, bases); err != nil {
+	if err := st.AddTrialEncounters(acc, ch, kind, bases, 0); err != nil {
 		t.Fatalf("写遇见记录(第%d章 kind=%d %v): %v", ch, kind, bases, err)
 	}
 }
@@ -95,11 +96,11 @@ func TestTrialEncountersKindMax(t *testing.T) {
 func TestAddTrialEncountersSkips(t *testing.T) {
 	st := newTestStore(t)
 	// chapter=0 跳过:归不到某张图上的记录毫无用处
-	if err := st.AddTrialEncounters(testAcc, 0, 0, []uint32{3001}); err != nil {
+	if err := st.AddTrialEncounters(testAcc, 0, 0, []uint32{3001}, 0); err != nil {
 		t.Fatalf("chapter=0 不该报错: %v", err)
 	}
 	// petbase=0 跳过:协议里 0 是「没解析出来」,不是真编号
-	if err := st.AddTrialEncounters(testAcc, 1, 0, []uint32{0, 3002}); err != nil {
+	if err := st.AddTrialEncounters(testAcc, 1, 0, []uint32{0, 3002}, 0); err != nil {
 		t.Fatalf("含 0 不该报错: %v", err)
 	}
 	got := st.TrialEncounters(testAcc, 0)
@@ -113,8 +114,38 @@ func TestAddTrialEncountersSkips(t *testing.T) {
 		t.Errorf("同一批里的 3002 应正常入库, 得到 %+v (ok=%v)", e, ok)
 	}
 	// 空列表:不写也不报错
-	if err := st.AddTrialEncounters(testAcc, 1, 0, nil); err != nil {
+	if err := st.AddTrialEncounters(testAcc, 1, 0, nil, 0); err != nil {
 		t.Fatalf("空列表不该报错: %v", err)
+	}
+}
+
+// TestAddTrialEncountersTS 守「时间戳取战斗时刻而非入库时刻」。
+//
+// 这是为**离线回放补录**服务的:回放一份上周的 pcap,记录的 first_seen 就该是
+// 上周那场战斗的时间。若写成回放此刻,补出来的记录全挤在同一秒,
+// 「首次遇到」这个字段便彻底失去意义。
+func TestAddTrialEncountersTS(t *testing.T) {
+	st := newTestStore(t)
+	const battleTS = int64(1700000000) // 2023-11-14,刻意取一个远离当下的时刻
+
+	if err := st.AddTrialEncounters(testAcc, 1, 0, []uint32{3001}, battleTS); err != nil {
+		t.Fatalf("写入: %v", err)
+	}
+	e := st.TrialEncounters(testAcc, 1)[3001]
+	if e.FirstSeen != battleTS {
+		t.Errorf("first_seen 应取战斗时刻 %d, 实际 %d", battleTS, e.FirstSeen)
+	}
+	if e.LastSeen != battleTS {
+		t.Errorf("last_seen 应取战斗时刻 %d, 实际 %d", battleTS, e.LastSeen)
+	}
+
+	// ts<=0 是「拿不到时间」的情形:退回当前时刻,不能记成 1970
+	if err := st.AddTrialEncounters(testAcc, 2, 0, []uint32{3005}, 0); err != nil {
+		t.Fatalf("写入: %v", err)
+	}
+	now := time.Now().Unix()
+	if got := st.TrialEncounters(testAcc, 2)[3005].FirstSeen; got <= 0 || got > now+5 {
+		t.Errorf("ts<=0 应退回当前时刻(约 %d), 实际 %d", now, got)
 	}
 }
 
