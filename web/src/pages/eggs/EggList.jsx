@@ -112,12 +112,18 @@ export default function EggList() {
 
   useEffect(() => { load() }, [load])
   // 后端在蛋有变动(收蛋/入孵/进度/破壳)时推 eggs,收到就重拉。
-  useEffect(() => subscribe('eggs', load), [load])
+  // onOpen 断线重连时也要补拉:SSE 断开期间的推送全丢了,不补就一直显示旧数据
+  // (登录那次广播尤其可能正好落在断线窗口里 —— 见 pipeline/eggs.go 登录分支)。
+  useEffect(() => subscribe('eggs', load, { onOpen: load }), [load])
   // 孵化进度随时间涨:秒级刷新即可。
   useInterval(() => setNow(Date.now()), 1000)
 
   // 两段分类:孵蛋器=标记在孵且进度未满的蛋(保持后端槽位序);仓库=其余(后端已排好序,原样保留)。
-  // 进度满的蛋两处都不显示(见文件头说明)。
+  //
+  // ⚠️ 判定「进度未满」时**必须把 p==null 当成未满**:hatchProgress 在蛋从未有过进度采样
+  // 时返回 null(登录包只给在孵列表、不带进度,见 hatch.js),那不是「孵好了」,而是
+  // 「进度未知」。若把 null 也按「满了」排除,蛋会从孵蛋器和仓库两栏同时消失 ——
+  // 玩家看到的就是「孵蛋器空了 / 没刷新」。
   const withP = data.eggs.map((e) => ({ e, p: hatchProgress(e, now) }))
   const incubating = withP.filter((x) => x.e.hatching && (x.p == null || x.p.pct < 100)).map((x) => x.e)
   const bag = withP.filter((x) => !x.e.hatching).map((x) => x.e)
