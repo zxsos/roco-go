@@ -175,7 +175,9 @@ function EncountersView({ data, onReload }) {
   // 后端已保底给空数组,这里再兜一层:任一侧将来改动都不会让整页白屏。
   // 普通池为空时分组整个不渲染 —— 空标题 + 空网格没有意义。
   const normal = cur.normal || []
-  const boss = cur.boss || []
+  // boss 字段已由后端停止填充(22 名首领只在第 4 层出现、三章共用,无法归属
+  // 某一章),打过的首领改出现在 extra 里。这里不再渲染首领分组。
+  const boss = []
   // 池外的实战遭遇(NPC 战 / 最终 BOSS):静态配置没有这两层的精灵池,
   // 这些遭遇无处安放,单列一组展示 —— 丢掉的话用户明明打过照面却显示未遇见。
   // 不计入进度(分母是池子大小,塞进来源不明的条目会让百分比失去意义)。
@@ -228,18 +230,12 @@ function EncountersView({ data, onReload }) {
           <PetGrid pets={normal} />
         </section>
       )}
-      {boss.length > 0 && (
-        <section className="trial-group">
-          <h4 className="trial-group-t">首领({boss.length})——第 4 层,三章共用</h4>
-          <PetGrid pets={boss} />
-        </section>
-      )}
       {extra.length > 0 && (
         <section className="trial-group">
           <h4 className="trial-group-t">其他遭遇({extra.length})</h4>
           <div className="muted trial-note">
-            遇到过、但不在上面两组池子里(NPC 战 / 最终 BOSS 等)。静态配置只有普通池与
-            22 名首领,没有第 7 层的精灵池,故单列;不计入上方进度。
+            遇到过、但不在上面普通池里的(NPC 战 / 最终 BOSS / 第 4 层的首领)。
+            首领是三章共用、无法归属某一章,故不单列一组;不计入上方进度。
           </div>
           <PetGrid pets={extra} />
         </section>

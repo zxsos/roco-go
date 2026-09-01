@@ -55,31 +55,33 @@ func (s *Server) handleTrialEncounters(w http.ResponseWriter, r *http.Request) {
 		for _, base := range s.db.TrialPool(ch) {
 			book.Normal = append(book.Normal, s.encounterPet(base, seen))
 		}
-		// 首领:第 4 层的 22 人名单,三章共用
-		for _, base := range s.db.TrialBosses() {
-			book.Boss = append(book.Boss, s.encounterPet(base, seen))
-		}
+		//
+		// **首领不进图**。原先这里把 22 名首领(第 4 层,三章共用)也填满三组,
+		// 于是每张图都列出同样 22 个形态 —— 而它们只在第 4 层出现,在普通层
+		// 根本遇不到,用户看到只当是「池子里还有这么多没刷」。更麻烦的是
+		// boss 三章共用,无法判断某只首领属于哪一章,三张图都显示等于谁都不准。
+		//
+		// 故展示侧整组去掉,Total 也不再含它们(见下)。首领 id 仍由
+		// gamedata.TrialBosses 提供 —— 管线还在用它判定首领、决定要不要
+		// 拿它当涂地凭据(见 pipeline/wildpets.go),那与这里的展示无关。
+		// 已入库的首领遇见记录不删,只是不展示。
 		n := 0
 		for _, p := range book.Normal {
 			if p.Seen {
 				n++
 			}
 		}
-		for _, p := range book.Boss {
-			if p.Seen {
-				n++
-			}
-		}
-		// 见过但**不在本章池里**的:主要是 NPC 战(kind=2)与最终 BOSS(kind=3)。
+		// 见过但**不在本章池里**的:主要是 NPC 战(kind=2)、最终 BOSS(kind=3),
+		// 以及**第 4 层打过的首领**。
 		//
 		// 静态配置只有「普通池」(第 1/2/3/5 层)与「22 名首领」(第 4 层),**没有第 7 层的
 		// NPC 阵容和最终 BOSS 的精灵池** —— 实测回放就撞上了:3027(NPC 战)与 5061
 		// (最终 BOSS)都真实打过照面,却不在 pools/bosses 里,按上面的逻辑会无声丢失。
 		// 静默丢弃比不记录更糟:用户明明遇到过,图上却永远显示未遇见。
-		// 故单列一组,不混进上面的图 —— 那两组的进度口径是「池子里还剩多少」,
+		// 故单列一组,不混进上面的图 —— 上方的进度口径是「池子里还剩多少」,
 		// 塞进来源不明的条目会让分母失去意义。
 		for base := range seen {
-			if inBook(base, book.Normal) || inBook(base, book.Boss) {
+			if inBook(base, book.Normal) {
 				continue
 			}
 			book.Extra = append(book.Extra, s.encounterPet(base, seen))
@@ -90,7 +92,9 @@ func (s *Server) handleTrialEncounters(w http.ResponseWriter, r *http.Request) {
 			}
 			return book.Extra[i].Base < book.Extra[j].Base
 		})
-		book.Total = uint32(len(book.Normal) + len(book.Boss))
+		// Total 只算普通池:首领已从图上移除(见上),计入分母会让进度永远差 22,
+		// 用户看着「还有这么多没遇到」—— 而那些在第 4 层之外根本遇不到。
+		book.Total = uint32(len(book.Normal))
 		book.Seen = uint32(n)
 		if book.Total > 0 {
 			out.Chapters = append(out.Chapters, book)
