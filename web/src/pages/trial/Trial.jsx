@@ -63,12 +63,17 @@ export default function Trial() {
 
   // 从没见过试炼报文时**不整页拦掉**:「遇见记录」是累积历史、读库的,
   // 哪怕此刻没在打也该能翻。故空态下移到各 tab 内部判断。
+  //
+  // ⚠️ 代价:整页范围内**不能再无条件访问 data 的属性** —— 原本拦在这里的
+  // `if (!data) return` 一删,`data` 为 null(接口返回 null)时任何 `data.x`
+  // 都会让整页白屏。下面这行就栽过一次(data.active → TypeError,页面进不去)。
+  // 判空一律用可选链;只有 run/history 为真的分支里才能安全地直取 data。
   return (
     <div className="trial-page">
       <div className="toolbar">
         <h3 style={{ margin: 0 }}>草系试炼</h3>
         <span className="muted toolbar-hint">
-          {data.active ? '正在同步游戏内的一局' : '当前没有进行中的一局'}
+          {data?.active ? '正在同步游戏内的一局' : '当前没有进行中的一局'}
         </span>
         <div className="spacer" />
         <div className="trial-tabs">
