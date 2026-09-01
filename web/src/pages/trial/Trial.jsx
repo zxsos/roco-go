@@ -6,6 +6,7 @@ import { ImgAvatar } from '../../components/icons'
 import { confirmDialog } from '../../components/confirm'
 import { fmtTime } from '../../utils/format'
 import { UnknownChip, useAnnotations } from '../../components/annotations'
+import { Marks } from '../../components/badges'
 
 // 草系徽章试炼页:实时同步游戏内的一局。
 //
@@ -498,6 +499,12 @@ function PetCard({ pet }) {
           <div className="trial-pet-name">
             {pet.name || pet.species || '未知'}
             {pet.species && pet.species !== pet.name && <span className="muted"> · {pet.species}</span>}
+            {/* 异色/炫彩:试炼带的是玩家**自己的**精灵,外观原样带进去。
+                标记只显示不解释来源 —— 它来自协议 mutation_type,不是猜的。
+                ⚠️ 别拿 pet.img 反推异色:异色头像不是每只精灵都有素材,
+                没素材时后端静默回退普通图(此时 shiny 仍为 true)。
+                以 img 判断会把这些精灵全当成普通的。 */}
+            <Marks p={pet} />
           </div>
           <div className="trial-meta">
             <span className="trial-chip">Lv {pet.level}</span>
