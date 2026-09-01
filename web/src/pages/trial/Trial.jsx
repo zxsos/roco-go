@@ -650,6 +650,10 @@ function OptionCard({ o }) {
   // 名字,否则标注看着像没生效。
   const anno = lookup && lookup('event', o.event)
   const petName = (o.pet && o.pet.name) || (anno && anno.name) || ''
+  // 头像三个来源,按可靠度取:后端回填(已审核,权威)→ 本会话待审标记录的
+  // (自己刚标、还没审,后端此时**不会**回填 pet,不取这里就只剩占位)。
+  // ⚠️ 顺序别反:待审的图是本会话记的,不该盖过后端权威数据。
+  const petImg = (o.pet && o.pet.img) || (anno && anno.img) || ''
   const pool = o.pool || []
   const used = new Set(o.used || [])
   const name = (id) => (o.names || {})[String(id)]
@@ -660,7 +664,7 @@ function OptionCard({ o }) {
           {/* 头像右上角挂额外奖励(多是碎片):它是挂在**这个事件**上的,
               与抽取池里的奖励不是一回事,故单独成角标而非混进池子。 */}
           <div className="trial-opt-avatar">
-            <ImgAvatar src={o.pet && o.pet.img} alt={petName} className="trial-opt-img" />
+            <ImgAvatar src={petImg} alt={petName} className="trial-opt-img" />
             {o.extra && o.extra.length > 0 && (
               <span
                 className="trial-opt-extra"
