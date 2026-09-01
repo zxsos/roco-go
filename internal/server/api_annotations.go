@@ -179,6 +179,12 @@ func (s *Server) handleReviewAnnotation(w http.ResponseWriter, r *http.Request) 
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	// 广播让所有在线页面重拉标注:标注是全服共享的,而前端只在 App 挂载时拉一次,
+	// 不广播的话审核通过了对别人**不可见** —— 管理员审完,玩家刷新前仍显示裸 id,
+	// 众包就失去意义(提交的人看不到反馈,下一个遇到同 id 的人又会再标一次)。
+	// account 传空:共享数据不按账号分发,谁收到都该刷新。payload 不带内容 ——
+	// 前端只当信号用,重拉 GET /api/annotations 拿全量(量小,没必要做增量)。
+	s.hub.Broadcast("annotations", "", map[string]any{"id": id, "approve": req.Approve})
 	writeJSON(w, map[string]any{"ok": true})
 }
 

@@ -7,30 +7,80 @@
 // 数据流:玩家提交 → 管理员在 #/admin 审核 → 审核通过后 GET /api/annotations 全服下发,
 // 刷新页面即见。提交的标注在通过前只有管理员能看到(展示侧不显示 pending)。
 import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
-import { getAnnotations, getAnnotationCandidates, submitAnnotation } from '../api'
+import { getAnnotations, getAnnotationCandidates, submitAnnotation, subscribe } from '../api'
 import { AnnotationsContext } from '../context'
 import { toast } from './toast'
 
 // AnnotationsProvider 拉取两类已审核标注并缓存。
+//
+// 刷新时机有两条,缺一条都会「标注了却没变化」:
+//   1. 挂载时拉一次(基线);
+//   2. 订阅 SSE 的 annotations 事件 —— 管理员审核通过后后端广播,所有在线页面
+//      重拉。没有这条,审完必须手动刷浏览器才看得到,提交的人得不到反馈,
+//      下一个遇到同一 id 的人又会再标一次。
 export default function AnnotationsProvider({ children }) {
   const [byKind, setByKind] = useState({ skill: {}, feature: {} })
+  // 自己提交、还没通过审核的标注。只在本会话内可见(别人看不到),用来让
+  // 「我刚标了」立刻有回显 —— 否则玩家提交后页面纹丝不动,只会以为没生效。
+  const [mine, setMine] = useState({})
 
-  const refresh = useCallback(() => {
-    Promise.all(['skill', 'feature'].map(async (kind) => {
-      const d = await getAnnotations(kind)
-      const m = {}
-      for (const it of (d.items || [])) m[it.code] = { name: it.name, desc: it.desc }
-      setByKind((prev) => ({ ...prev, [kind]: m }))
-    })).catch(() => { /* 拉取失败时维持旧缓存,页面照常展示 id */ })
+  // 返回最新拉取到的 {kind: {code: {name,desc}}},供调用方据此清理本地回显
+  // (不能读 byKind 状态:那是上一次渲染的值,refresh 之后还没更新)。
+  const refresh = useCallback(async () => {
+    try {
+      const pairs = await Promise.all(['skill', 'feature'].map(async (kind) => {
+        const d = await getAnnotations(kind)
+        const m = {}
+        for (const it of (d.items || [])) m[it.code] = { name: it.name, desc: it.desc }
+        return [kind, m]
+      }))
+      const fresh = Object.fromEntries(pairs)
+      setByKind(fresh)
+      return fresh
+    } catch {
+      return null // 拉取失败时维持旧缓存,页面照常展示 id
+    }
   }, [])
 
   useEffect(() => { refresh() }, [refresh])
 
+  // 审核通过/拒绝都会广播:
+  //   - 通过的:重拉,别人刚标的名字已生效;
+  //   - 同时清掉已进入正式列表的本地回显 —— 那条已经由后端下发,不需要再靠
+  //     mine 顶着,否则它会一直带着「待审」标记(永远显示成未核实的状态)。
+  //     被管理员**拒绝**的条目不在正式列表里,故不会被剔除:它仍以「待审」
+  //     样式显示,这点是对的 —— 提交者应当知道自己标的被驳回了,而不是页面
+  //     悄无声息地变回裸 id(那会让人以为没提交成功)。
+  useEffect(() => subscribe('annotations', async () => {
+    const fresh = await refresh()
+    if (!fresh) return
+    setMine((prev) => {
+      const next = {}
+      let dropped = 0
+      for (const [key, v] of Object.entries(prev)) {
+        const [kind, code] = key.split(':')
+        if ((fresh[kind] || {})[code]) dropped++
+        else next[key] = v
+      }
+      return dropped === 0 ? prev : next
+    })
+  }), [refresh])
+
   const value = useMemo(() => ({
-    // lookup 查已审核标注:命中返回 {name,desc},未命中返回 null。
-    lookup: (kind, code) => (byKind[kind] || {})[code] || null,
+    // lookup 查标注:优先已审核(全服共享),其次自己提交待审的(仅本会话可见)。
+    // 命中返回 {name,desc,pending?};未命中返回 null。
+    lookup: (kind, code) => {
+      const approved = (byKind[kind] || {})[code]
+      if (approved) return approved
+      const own = mine[kind + ':' + code]
+      return own ? { ...own, pending: true } : null
+    },
+    // addMine 记录自己刚提交的标注,让本会话立即回显(见上)。
+    addMine: (kind, code, name, desc) => {
+      setMine((prev) => ({ ...prev, [kind + ':' + code]: { name, desc } }))
+    },
     refresh,
-  }), [byKind, refresh])
+  }), [byKind, mine, refresh])
 
   return <AnnotationsContext.Provider value={value}>{children}</AnnotationsContext.Provider>
 }
@@ -46,7 +96,7 @@ export function useAnnotations() {
 // 提示「已提交,等待管理员审核」并关闭。候选词典来自后端
 // GET /api/annotation-candidates(skill=全量技能目录,feature=wiki 特性词典)。
 export function AnnotationModal({ kind, code, onClose }) {
-  const { refresh } = useAnnotations()
+  const { refresh, addMine } = useAnnotations()
   const [candidates, setCandidates] = useState(null) // null = 加载中
   const [q, setQ] = useState('')
   const [name, setName] = useState('')
@@ -85,8 +135,11 @@ export function AnnotationModal({ kind, code, onClose }) {
     setErr('')
     try {
       await submitAnnotation(kind, code, name.trim(), desc.trim())
-      toast('已提交,等待管理员审核')
-      refresh() // 重新拉取(虽然本次 pending 不会出现,但保持缓存与后端一致)
+      // 立刻在本会话回显(带「待审」标记):提交后页面纹丝不动会让人以为没生效,
+      // 而等管理员审核可能要几小时。其他人要等审核通过才看得到。
+      addMine(kind, code, name.trim(), desc.trim())
+      toast('已提交,等待管理员审核(你这边已先显示)')
+      refresh()
       onClose()
     } catch (e) {
       setErr(e.message || '提交失败')

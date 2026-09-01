@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"encoding/json"
 	"net/http/httptest"
 	"os"
@@ -784,3 +785,64 @@ func TestAnnotationSubmit(t *testing.T) {
 		t.Errorf("重复提交应 409,实际 %d", code)
 	}
 }
+
+// TestAnnotationReviewBroadcasts 钉住「审核后要广播」这条链路。
+//
+// 为什么必须广播:标注是全服共享的,而前端只在 App 挂载时拉一次。不广播的话
+// 管理员审完之后,玩家不手动刷新浏览器就看不到任何变化 —— 提交的人得不到反馈
+// (只会以为没生效),下一个遇到同一 id 的人又会再标一次,众包就空转了。
+// 这条链路坏掉时接口照样 200、数据照样入库,只有 SSE 静默不响,故必须测。
+func TestAnnotationReviewBroadcasts(t *testing.T) {
+	s := newTestServer(t)
+	sub := s.Hub().subscribe()
+	defer s.Hub().unsubscribe(sub)
+
+	if _, err := s.store.SubmitAnnotation(store.Annotation{
+		Kind: "feature", Code: 288135, Name: "助燃", Submitter: "UID:1",
+	}); err != nil {
+		t.Fatalf("提交标注: %v", err)
+	}
+
+	// 审核(通过):走 HTTP 入口,顺带确认管理员鉴权之外的整条链路
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest("POST", "/api/admin/annotations/1/review", strings.NewReader(`{"approve":true}`))
+	req.Header.Set("X-Admin-Token", testAdminToken(t, s))
+	s.Handler().ServeHTTP(rr, req)
+	if rr.Code != 200 {
+		t.Fatalf("审核应 200,实际 %d: %s", rr.Code, rr.Body)
+	}
+
+	// 广播应当到达订阅者;account 为空(全服共享,不按账号分发)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	got, ok := sub.pop(ctx)
+	if !ok {
+		t.Fatal("审核后没有收到任何广播 —— 前端不会刷新,标注对玩家不可见")
+	}
+	if got.typ != "annotations" {
+		t.Errorf("广播类型应为 annotations,实际 %q", got.typ)
+	}
+	if got.account != "" {
+		t.Errorf("共享标注的广播不该带账号(会被前端按账号过滤掉),实际 %q", got.account)
+	}
+}
+
+// testAdminToken 设好管理员密码并返回令牌,供需要鉴权的测试用例使用。
+func testAdminToken(t *testing.T, s *Server) string {
+	t.Helper()
+	var res struct {
+		Token string `json:"token"`
+	}
+	rr := httptest.NewRecorder()
+	body := strings.NewReader(`{"password":"` + testAdminPw + `"}`)
+	s.Handler().ServeHTTP(rr, httptest.NewRequest("POST", "/api/admin/setup", body))
+	if rr.Code != 200 {
+		t.Fatalf("设置管理员密码: %d %s", rr.Code, rr.Body)
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &res); err != nil {
+		t.Fatalf("解析令牌: %v", err)
+	}
+	return res.Token
+}
+
+const testAdminPw = "contract-test-pw"

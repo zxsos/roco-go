@@ -484,9 +484,18 @@ function PetCard({ pet }) {
   // 这是「标注模式」在展示侧的落点,提交/审核见 components/annotations.jsx。
   const featureChip = (f) => {
     const a = lookup && lookup('feature', f)
-    return a
-      ? <span key={f} className="trial-chip anno-hit" title={`${a.desc || a.name}(玩家标注)`}>{a.name}</span>
-      : <UnknownChip key={f} kind="feature" code={f} />
+    if (!a) return <UnknownChip key={f} kind="feature" code={f} />
+    // a.pending:自己刚提交、管理员还没审 —— 只在本会话可见,故加待审标记,
+    // 免得把自己还没核实的猜测当成权威数据显示出去。
+    return (
+      <span
+        key={f}
+        className={'trial-chip anno-hit' + (a.pending ? ' anno-pending' : '')}
+        title={`${a.desc || a.name}${a.pending ? '(你提交的,待管理员审核)' : '(玩家标注)'}`}
+      >
+        {a.name}{a.pending ? ' ·待审' : ''}
+      </span>
+    )
   }
   return (
     <section className="trial-group">

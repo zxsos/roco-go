@@ -38,6 +38,13 @@
   padding-left: 6px;
 }
 
+/* 待审:自己刚提交、管理员还没通过 —— 只在本会话可见,故用虚线边框 + 减淡,
+   和上面那条实线(已核实)区分开,别把自己未核实的猜测显示得像权威数据。 */
+.anno-pending {
+  border-left-style: dashed;
+  opacity: .7;
+}
+
 /* —— 标注弹窗 —— */
 .anno-dialog {
   max-width: 420px;
