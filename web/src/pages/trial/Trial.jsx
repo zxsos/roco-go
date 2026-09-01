@@ -7,6 +7,7 @@ import { confirmDialog } from '../../components/confirm'
 import { fmtTime } from '../../utils/format'
 import { UnknownChip, useAnnotations } from '../../components/annotations'
 import { Marks } from '../../components/badges'
+import ElementWheel from './ElementWheel'
 
 // 草系徽章试炼页:实时同步游戏内的一局。
 //
@@ -752,14 +753,9 @@ function HistoryView({ history }) {
       {history.slots && history.slots.length > 0 && (
         <section className="trial-group">
           <h4 className="trial-group-t">各系通关(每个系 3 个难度)</h4>
-          <div className="trial-slots">
-            {history.slots.map((s) => (
-              <div key={s.slotId} className={'trial-slot' + (s.cleared >= 3 ? ' full' : '')}>
-                <span className="trial-slot-n">{s.damName || s.damType}</span>
-                <span className="trial-slot-c">{s.cleared}/3</span>
-              </div>
-            ))}
-          </div>
+          {/* theme 是本页徽章所属的属性系:星盘会把草系转到正上方并加冕,
+              中心印记也显示草系的进度。将来做火系/水系徽章页时改这一个值即可。 */}
+          <ElementWheel slots={history.slots} theme="草" />
         </section>
       )}
 
