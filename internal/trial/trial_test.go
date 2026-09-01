@@ -219,6 +219,64 @@ func TestParseLogRecord(t *testing.T) {
 	if l2.Discovered != 3 {
 		t.Errorf("packed 见闻录 discovered = %d, 期望 3", l2.Discovered)
 	}
+	if len(l2.DiscoveredIDs) != 3 || l2.DiscoveredIDs[0] != 1 ||
+		l2.DiscoveredIDs[1] != 2 || l2.DiscoveredIDs[2] != 3 {
+		t.Errorf("packed 的 id 列表 = %v, 期望 [1 2 3]", l2.DiscoveredIDs)
+	}
+}
+
+// TestParseLogRecordIDs 守「见闻录必须吐出**具体 id** 而非只有数量」。
+//
+// 这条曾真的坏过:原实现只 `Discovered++` 计数、把 id 全丢了。后果是登录后
+// 无法补录历史 —— 已遇见的几百只精灵全靠重新打一遍才会显示,而服务器明明
+// 在 0x1975 里下发了完整清单(实测 292 只 vs 抓包 17 场)。
+// 计数对、列表空,这种情况光看 Discovered 字段发现不了,故单独断言。
+func TestParseLogRecordIDs(t *testing.T) {
+	var b []byte
+	b = protowire.AppendTag(b, 1, protowire.VarintType) // log_conf_id = 101
+	b = protowire.AppendVarint(b, 101)
+	for _, id := range []uint64{3001, 3005, 8101, 3001} { // 故意重复一只,测不去重
+		b = protowire.AppendTag(b, 3, protowire.VarintType)
+		b = protowire.AppendVarint(b, id)
+	}
+	b = protowire.AppendTag(b, 6, protowire.VarintType) // total
+	b = protowire.AppendVarint(b, 337)
+
+	l := ParseLogRecord(b)
+	if l.LogConfID != 101 {
+		t.Fatalf("LogConfID = %d, 期望 101", l.LogConfID)
+	}
+	// 关键:具体 id 必须保留(顺序与重复都保留,去重交给 store 层)
+	want := []uint32{3001, 3005, 8101, 3001}
+	if len(l.DiscoveredIDs) != len(want) {
+		t.Fatalf("DiscoveredIDs = %v, 期望 %v(只拿到 %d 个,是否又退化成只计数了?)",
+			l.DiscoveredIDs, want, len(l.DiscoveredIDs))
+	}
+	for i := range want {
+		if l.DiscoveredIDs[i] != want[i] {
+			t.Errorf("DiscoveredIDs[%d] = %d, 期望 %d", i, l.DiscoveredIDs[i], want[i])
+		}
+	}
+	if l.Discovered != uint32(len(l.DiscoveredIDs)) {
+		t.Errorf("Discovered = %d, 应等于 len(DiscoveredIDs) = %d",
+			l.Discovered, len(l.DiscoveredIDs))
+	}
+	// 章节映射:认不出来的册号必须返回 0,让调用方丢弃而非硬套
+	if got := l.ChapterOf(); got != 2 {
+		t.Errorf("log_conf_id=101 应映射到第 2 章, 实际 %d", got)
+	}
+	for cid, want := range map[uint32]uint32{100: 1, 101: 2, 102: 3} {
+		r := &LogRecord{LogConfID: cid}
+		if got := r.ChapterOf(); got != want {
+			t.Errorf("log_conf_id=%d 应映射到第 %d 章, 实际 %d", cid, want, got)
+		}
+	}
+	for _, cid := range []uint32{0, 99, 103, 200, 999} {
+		r := &LogRecord{LogConfID: cid}
+		if got := r.ChapterOf(); got != 0 {
+			t.Errorf("log_conf_id=%d 认不出来应返回 0, 实际 %d(会污染别的章)", cid, got)
+		}
+	}
 }
 
 // TestParseRewardNotify 断言奖励通知的关键字段,以及「空通知」返回 nil。

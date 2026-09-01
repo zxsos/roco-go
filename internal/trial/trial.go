@@ -220,13 +220,42 @@ type SlotProgress struct {
 	ClearedIDs []uint32 // 已通关的 trial_conf_id
 }
 
-// LogRecord 是见闻录的一册(按章节记录见过的宠物数)。
+// LogRecord 是见闻录的一册(账号档案 0x1975 里下发,**服务器保存的完整历史**)。
+//
+// 这是「已经遇见过哪些精灵」的**权威来源**,比抓 0x1316 战斗通知全得多:
+// 战斗通知只能记到抓包期间发生的那几场,而见闻录是账号自始至终的累积
+// (实测同一账号:抓包 17 场 → 见闻录 292 只)。
+//
+// ⚠️ DiscoveredIDs 曾一度只被数成 Discovered 数量、把 id 全丢了 —— 那样
+// 登录后无法补录历史,已遇见的精灵得重新打一遍才会显示。别改回只计数。
 type LogRecord struct {
-	LogConfID  uint32
-	Chapters   []uint32
-	Discovered uint32 // 已发现的形态数
-	Total      uint32 // 该册总数
-	Unlocked   bool
+	LogConfID     uint32
+	Chapters      []uint32
+	DiscoveredIDs []uint32 // discovered_petbase_ids:已发现的 petbase id
+	Discovered    uint32   // 已发现的形态数(= len(DiscoveredIDs))
+	Total         uint32   // 该册总数
+	Unlocked      bool
+}
+
+// ChapterOf 返回本册对应第几章(1 起),认不出来返回 0。
+//
+// 映射 log_conf_id 100/101/102 → 第 1/2/3 章是**用实测数据验证过的**,
+// 不是照名字猜:三册各自减去「对应章的池 ∪ 22 名首领」后差集全为 0
+// (100: 148+19=167、101: 111+17=128、102: 87+14=101),吻合到个位。
+// 协议里的 chapters 字段实测为空,推不出章节,只能靠这个映射。
+//
+// 记错章的后果比不记更糟:会把一章的进度污染到另一章上,而用户很难察觉。
+// 故认不出来时返回 0,让调用方丢弃,而不是硬套一个默认值。
+func (l *LogRecord) ChapterOf() uint32 {
+	switch l.LogConfID {
+	case 100:
+		return 1
+	case 101:
+		return 2
+	case 102:
+		return 3
+	}
+	return 0
 }
 
 // Progress 是账号级的试炼档案(0x1975,约 55KB)。
@@ -563,11 +592,18 @@ func ParseLogRecord(b []byte) LogRecord {
 		case num == 3:
 			// discovered_petbase_ids 实测是**非 packed**(每个 id 一个独立 tag,392 个),
 			// 但协议允许 packed,故两种都认:packed 时一次到位,非 packed 时逐个累加。
+			// 这里要的是**具体 id** 而非数量(见 LogRecord 的说明)——
+			// 它们是补录「已经遇见过哪些精灵」的唯一来源。
 			if typ == protowire.BytesType {
-				l.Discovered += uint32(len(wire.PackedVarints(val)))
-			} else if typ == protowire.VarintType {
-				l.Discovered++
+				for _, id := range wire.PackedVarints(val) {
+					if id != 0 {
+						l.DiscoveredIDs = append(l.DiscoveredIDs, uint32(id))
+					}
+				}
+			} else if typ == protowire.VarintType && v != 0 {
+				l.DiscoveredIDs = append(l.DiscoveredIDs, uint32(v))
 			}
+			l.Discovered = uint32(len(l.DiscoveredIDs))
 		case num == 5 && typ == protowire.VarintType:
 			l.Unlocked = v != 0
 		case num == 6 && typ == protowire.VarintType:

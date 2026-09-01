@@ -330,6 +330,7 @@ func (p *Pipeline) handleTrial(m capture.Message, acc string) {
 		if prog := trial.ParseProgressSync(m.AppBody); prog != nil {
 			st.history = &trialHist{progress: prog, updatedAt: now}
 			st.finishFromReview(prog)
+			p.syncTrialEncounters(prog, acc, m.Time.Unix())
 			changed = true
 		}
 
@@ -523,6 +524,50 @@ func (p *Pipeline) recordTrialEncounter(m capture.Message, acc string, st *trial
 	// 这条不加的话:遇见记录是读库的累积历史、不走 trial 快照,打完一局页面
 	// 不会有任何变化,只有重进页面才看得到 —— 用过的人只会以为没记录上。
 	p.srv.Hub().Broadcast("trial_enc", acc, map[string]any{"account": acc})
+}
+
+// syncTrialEncounters 用账号档案(0x1975)里的见闻录补录「已经遇见过」的精灵。
+//
+// 为什么需要它:0x1316 战斗通知只能记到**抓包期间发生的那几场**,而见闻录是
+// 服务器保存的账号完整历史 —— 实测同一账号:抓包 17 场 vs 见闻录 292 只。
+// 没有这条,用户装好之后看到的是近乎空白的三张图,得重新打一遍才填得满,
+// 而实际上游戏里早就遇见过了。登录后档案一同步就能补齐(故不必回放历史 pcap)。
+//
+// 只补**缺的**:0x1975 是账号档案的全量推送,每次登录/同步都会重发一遍,
+// 若逐条 AddTrialEncounters 会把 times 反复累加、last_seen 一直被推到当下,
+// 「首次遇到」这个时间语义就废了。故先查已有记录,只写没见过的那些。
+func (p *Pipeline) syncTrialEncounters(prog *trial.Progress, acc string, ts int64) {
+	var added int
+	for i := range prog.Logs {
+		rec := &prog.Logs[i]
+		ch := rec.ChapterOf()
+		if ch == 0 || len(rec.DiscoveredIDs) == 0 {
+			continue
+		}
+		have := p.st.TrialEncounters(acc, ch)
+		var fresh []uint32
+		for _, id := range rec.DiscoveredIDs {
+			if _, ok := have[id]; !ok {
+				fresh = append(fresh, id)
+			}
+		}
+		if len(fresh) == 0 {
+			continue
+		}
+		// 见闻录不带战斗类型,这里记 BattleNormal(0):
+		// 它只保证「遇到过」,无法区分普通/首领/NPC。若之后再从战斗通知拿到
+		// 更具体的类型,AddTrialEncounters 的 kind 取最大规则会把它升上去,
+		// 不会被这里的 0 覆盖(见该函数的 SQL)。
+		if err := p.st.AddTrialEncounters(acc, ch, uint32(trial.BattleNormal), fresh, ts); err != nil {
+			log.Printf("补录试炼遇见失败(第%d章 %d 只): %v", ch, len(fresh), err)
+			continue
+		}
+		added += len(fresh)
+	}
+	if added > 0 {
+		log.Printf("见闻录补录: 新增 %d 只已遇见的精灵", added)
+		p.srv.Hub().Broadcast("trial_enc", acc, map[string]any{"account": acc})
+	}
 }
 
 // ---- 推送 ----
