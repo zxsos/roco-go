@@ -2,8 +2,7 @@
   "account": "UID:1",
   "chapters": [
     {
-      "chapter": 1,
-      "extra": [
+      "boss": [
         {
           "base": 8101,
           "img": "HeadIcon/4005.webp",
@@ -12,6 +11,135 @@
           "seen": true,
           "time": 0
         },
+        {
+          "base": 8102,
+          "img": "HeadIcon/4006.webp",
+          "name": "烈火战神_草系徽章-首领形态",
+          "seen": false
+        },
+        {
+          "base": 8103,
+          "img": "HeadIcon/4007.webp",
+          "name": "叶冕魔力猫_草系徽章-首领形态",
+          "seen": false
+        },
+        {
+          "base": 8104,
+          "img": "HeadIcon/4011.webp",
+          "name": "恶魔狼王_草系徽章-首领形态",
+          "seen": false
+        },
+        {
+          "base": 8105,
+          "img": "HeadIcon/4019.webp",
+          "name": "蹦蹦果_草系徽章-首领形态",
+          "seen": false
+        },
+        {
+          "base": 8106,
+          "img": "HeadIcon/4020.webp",
+          "name": "千棘海针_草系徽章-首领形态",
+          "seen": false
+        },
+        {
+          "base": 8107,
+          "img": "HeadIcon/4021.webp",
+          "name": "女王蜂_草系徽章-首领形态",
+          "seen": false
+        },
+        {
+          "base": 8108,
+          "img": "HeadIcon/4022.webp",
+          "name": "奇丽果_草系徽章-首领形态",
+          "seen": false
+        },
+        {
+          "base": 8109,
+          "img": "HeadIcon/4064.webp",
+          "name": "幻影荆棘_草系徽章-首领形态",
+          "seen": false
+        },
+        {
+          "base": 8110,
+          "img": "HeadIcon/4072.webp",
+          "name": "迷嶂布莱克_草系徽章-首领形态",
+          "seen": false
+        },
+        {
+          "base": 8111,
+          "img": "HeadIcon/4074_1.webp",
+          "name": "霜翼领主_草系徽章-首领形态",
+          "seen": false
+        },
+        {
+          "base": 8112,
+          "img": "HeadIcon/4078_1.webp",
+          "name": "风暴战犬_草系徽章-首领形态",
+          "seen": false
+        },
+        {
+          "base": 8113,
+          "img": "HeadIcon/4079.webp",
+          "name": "钻石蜗_草系徽章-首领形态",
+          "seen": false
+        },
+        {
+          "base": 8114,
+          "img": "HeadIcon/4083.webp",
+          "name": "黑猫密探_草系徽章-首领形态",
+          "seen": false
+        },
+        {
+          "base": 8115,
+          "img": "HeadIcon/4084.webp",
+          "name": "祭礼巨像_草系徽章-首领形态",
+          "seen": false
+        },
+        {
+          "base": 8116,
+          "img": "HeadIcon/4085.webp",
+          "name": "雪影冰灵_草系徽章-首领形态",
+          "seen": false
+        },
+        {
+          "base": 8117,
+          "img": "HeadIcon/4086.webp",
+          "name": "棋契陛下_草系徽章-首领形态",
+          "seen": false
+        },
+        {
+          "base": 8118,
+          "img": "HeadIcon/4087.webp",
+          "name": "奇梦咪_草系徽章-首领形态",
+          "seen": false
+        },
+        {
+          "base": 8119,
+          "img": "HeadIcon/4088.webp",
+          "name": "波普鹿_草系徽章-首领形态",
+          "seen": false
+        },
+        {
+          "base": 8120,
+          "img": "HeadIcon/4089.webp",
+          "name": "圣剑骑士_草系徽章-首领形态",
+          "seen": false
+        },
+        {
+          "base": 8121,
+          "img": "HeadIcon/4090.webp",
+          "name": "伊兰龙_草系徽章-首领形态",
+          "seen": false
+        },
+        {
+          "base": 8122,
+          "img": "HeadIcon/5053.webp",
+          "name": "深渊罗隐_草系徽章-首领形态",
+          "seen": false
+        }
+      ],
+      "chapter": 1,
+      "extra": [
         {
           "base": 3027,
           "img": "HeadIcon/3027.webp",
@@ -1274,10 +1402,144 @@
           "seen": false
         }
       ],
-      "seen": 1,
-      "total": 208
+      "seen": 2,
+      "total": 230
     },
     {
+      "boss": [
+        {
+          "base": 8101,
+          "img": "HeadIcon/4005.webp",
+          "name": "圣水守护_草系徽章-首领形态",
+          "seen": false
+        },
+        {
+          "base": 8102,
+          "img": "HeadIcon/4006.webp",
+          "name": "烈火战神_草系徽章-首领形态",
+          "seen": false
+        },
+        {
+          "base": 8103,
+          "img": "HeadIcon/4007.webp",
+          "name": "叶冕魔力猫_草系徽章-首领形态",
+          "seen": false
+        },
+        {
+          "base": 8104,
+          "img": "HeadIcon/4011.webp",
+          "name": "恶魔狼王_草系徽章-首领形态",
+          "seen": false
+        },
+        {
+          "base": 8105,
+          "img": "HeadIcon/4019.webp",
+          "name": "蹦蹦果_草系徽章-首领形态",
+          "seen": false
+        },
+        {
+          "base": 8106,
+          "img": "HeadIcon/4020.webp",
+          "name": "千棘海针_草系徽章-首领形态",
+          "seen": false
+        },
+        {
+          "base": 8107,
+          "img": "HeadIcon/4021.webp",
+          "name": "女王蜂_草系徽章-首领形态",
+          "seen": false
+        },
+        {
+          "base": 8108,
+          "img": "HeadIcon/4022.webp",
+          "name": "奇丽果_草系徽章-首领形态",
+          "seen": false
+        },
+        {
+          "base": 8109,
+          "img": "HeadIcon/4064.webp",
+          "name": "幻影荆棘_草系徽章-首领形态",
+          "seen": false
+        },
+        {
+          "base": 8110,
+          "img": "HeadIcon/4072.webp",
+          "name": "迷嶂布莱克_草系徽章-首领形态",
+          "seen": false
+        },
+        {
+          "base": 8111,
+          "img": "HeadIcon/4074_1.webp",
+          "name": "霜翼领主_草系徽章-首领形态",
+          "seen": false
+        },
+        {
+          "base": 8112,
+          "img": "HeadIcon/4078_1.webp",
+          "name": "风暴战犬_草系徽章-首领形态",
+          "seen": false
+        },
+        {
+          "base": 8113,
+          "img": "HeadIcon/4079.webp",
+          "name": "钻石蜗_草系徽章-首领形态",
+          "seen": false
+        },
+        {
+          "base": 8114,
+          "img": "HeadIcon/4083.webp",
+          "name": "黑猫密探_草系徽章-首领形态",
+          "seen": false
+        },
+        {
+          "base": 8115,
+          "img": "HeadIcon/4084.webp",
+          "name": "祭礼巨像_草系徽章-首领形态",
+          "seen": false
+        },
+        {
+          "base": 8116,
+          "img": "HeadIcon/4085.webp",
+          "name": "雪影冰灵_草系徽章-首领形态",
+          "seen": false
+        },
+        {
+          "base": 8117,
+          "img": "HeadIcon/4086.webp",
+          "name": "棋契陛下_草系徽章-首领形态",
+          "seen": false
+        },
+        {
+          "base": 8118,
+          "img": "HeadIcon/4087.webp",
+          "name": "奇梦咪_草系徽章-首领形态",
+          "seen": false
+        },
+        {
+          "base": 8119,
+          "img": "HeadIcon/4088.webp",
+          "name": "波普鹿_草系徽章-首领形态",
+          "seen": false
+        },
+        {
+          "base": 8120,
+          "img": "HeadIcon/4089.webp",
+          "name": "圣剑骑士_草系徽章-首领形态",
+          "seen": false
+        },
+        {
+          "base": 8121,
+          "img": "HeadIcon/4090.webp",
+          "name": "伊兰龙_草系徽章-首领形态",
+          "seen": false
+        },
+        {
+          "base": 8122,
+          "img": "HeadIcon/5053.webp",
+          "name": "深渊罗隐_草系徽章-首领形态",
+          "seen": false
+        }
+      ],
       "chapter": 2,
       "name": "记忆中的巨石阵",
       "normal": [
@@ -3175,9 +3437,143 @@
         }
       ],
       "seen": 1,
-      "total": 315
+      "total": 337
     },
     {
+      "boss": [
+        {
+          "base": 8101,
+          "img": "HeadIcon/4005.webp",
+          "name": "圣水守护_草系徽章-首领形态",
+          "seen": false
+        },
+        {
+          "base": 8102,
+          "img": "HeadIcon/4006.webp",
+          "name": "烈火战神_草系徽章-首领形态",
+          "seen": false
+        },
+        {
+          "base": 8103,
+          "img": "HeadIcon/4007.webp",
+          "name": "叶冕魔力猫_草系徽章-首领形态",
+          "seen": false
+        },
+        {
+          "base": 8104,
+          "img": "HeadIcon/4011.webp",
+          "name": "恶魔狼王_草系徽章-首领形态",
+          "seen": false
+        },
+        {
+          "base": 8105,
+          "img": "HeadIcon/4019.webp",
+          "name": "蹦蹦果_草系徽章-首领形态",
+          "seen": false
+        },
+        {
+          "base": 8106,
+          "img": "HeadIcon/4020.webp",
+          "name": "千棘海针_草系徽章-首领形态",
+          "seen": false
+        },
+        {
+          "base": 8107,
+          "img": "HeadIcon/4021.webp",
+          "name": "女王蜂_草系徽章-首领形态",
+          "seen": false
+        },
+        {
+          "base": 8108,
+          "img": "HeadIcon/4022.webp",
+          "name": "奇丽果_草系徽章-首领形态",
+          "seen": false
+        },
+        {
+          "base": 8109,
+          "img": "HeadIcon/4064.webp",
+          "name": "幻影荆棘_草系徽章-首领形态",
+          "seen": false
+        },
+        {
+          "base": 8110,
+          "img": "HeadIcon/4072.webp",
+          "name": "迷嶂布莱克_草系徽章-首领形态",
+          "seen": false
+        },
+        {
+          "base": 8111,
+          "img": "HeadIcon/4074_1.webp",
+          "name": "霜翼领主_草系徽章-首领形态",
+          "seen": false
+        },
+        {
+          "base": 8112,
+          "img": "HeadIcon/4078_1.webp",
+          "name": "风暴战犬_草系徽章-首领形态",
+          "seen": false
+        },
+        {
+          "base": 8113,
+          "img": "HeadIcon/4079.webp",
+          "name": "钻石蜗_草系徽章-首领形态",
+          "seen": false
+        },
+        {
+          "base": 8114,
+          "img": "HeadIcon/4083.webp",
+          "name": "黑猫密探_草系徽章-首领形态",
+          "seen": false
+        },
+        {
+          "base": 8115,
+          "img": "HeadIcon/4084.webp",
+          "name": "祭礼巨像_草系徽章-首领形态",
+          "seen": false
+        },
+        {
+          "base": 8116,
+          "img": "HeadIcon/4085.webp",
+          "name": "雪影冰灵_草系徽章-首领形态",
+          "seen": false
+        },
+        {
+          "base": 8117,
+          "img": "HeadIcon/4086.webp",
+          "name": "棋契陛下_草系徽章-首领形态",
+          "seen": false
+        },
+        {
+          "base": 8118,
+          "img": "HeadIcon/4087.webp",
+          "name": "奇梦咪_草系徽章-首领形态",
+          "seen": false
+        },
+        {
+          "base": 8119,
+          "img": "HeadIcon/4088.webp",
+          "name": "波普鹿_草系徽章-首领形态",
+          "seen": false
+        },
+        {
+          "base": 8120,
+          "img": "HeadIcon/4089.webp",
+          "name": "圣剑骑士_草系徽章-首领形态",
+          "seen": false
+        },
+        {
+          "base": 8121,
+          "img": "HeadIcon/4090.webp",
+          "name": "伊兰龙_草系徽章-首领形态",
+          "seen": false
+        },
+        {
+          "base": 8122,
+          "img": "HeadIcon/5053.webp",
+          "name": "深渊罗隐_草系徽章-首领形态",
+          "seen": false
+        }
+      ],
       "chapter": 3,
       "extra": [
         {
@@ -4375,7 +4771,7 @@
         }
       ],
       "seen": 0,
-      "total": 197
+      "total": 219
     }
   ],
   "ts": 0,

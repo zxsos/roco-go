@@ -898,6 +898,16 @@
       "account": "str",
       "chapters": [
         {
+          "boss": [
+            {
+              "base": "int",
+              "img": "str",
+              "kind": "int",
+              "name": "str",
+              "seen": "bool",
+              "time": "int"
+            }
+          ],
           "chapter": "int",
           "extra": [
             {

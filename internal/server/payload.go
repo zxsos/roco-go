@@ -441,15 +441,10 @@ type TrialEncountersPayload struct {
 type TrialEncounterBook struct {
 	Chapter uint32              `json:"chapter"`        // 1 起
 	Name    string              `json:"name,omitempty"` // 章节名(如「记忆中的索米亚草原」)
-	Total   uint32              `json:"total"`          // 本章精灵总数(只算普通池,见下)
+	Total   uint32              `json:"total"`          // 本章精灵总数(普通池 + 首领)
 	Seen    uint32              `json:"seen"`           // 已遇见数
 	Normal  []TrialEncounterPet `json:"normal"`         // 普通池
-	// Boss 字段**保留但不再填充**:22 名首领只在第 4 层出现,而它们是三章共用的,
-	// 无法判断属于哪一章 —— 原先三张图各列一遍同样 22 个形态,用户只当是「还有
-	// 这么多没遇到」。故展示侧整组去掉(含 Total),见 handleTrialEncounters。
-	// 首领 id 仍由 gamedata.TrialBosses 提供给管线用(判定首领/涂地凭据),
-	// 打过的首领改出现在 Extra 里。
-	Boss []TrialEncounterPet `json:"boss,omitempty"`
+	Boss    []TrialEncounterPet `json:"boss,omitempty"` // 22 名首领
 	// Extra 是**见过但不在上面两组里**的精灵(NPC 战 / 最终 BOSS 等)。
 	//
 	// 静态配置没有第 7 层 NPC 与最终 BOSS 的精灵池(只有普通池与 22 名首领),

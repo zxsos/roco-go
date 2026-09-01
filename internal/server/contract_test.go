@@ -478,13 +478,8 @@ func TestContractTrialEncountersEmpty(t *testing.T) {
 		if total, _ := book["total"].(float64); total == 0 {
 			t.Errorf("第%v章 无记录时 total 不该为 0(池来自静态配置)", book["chapter"])
 		}
-		// 首领**不进图**:22 名首领只在第 4 层出现、三章共用无法归属某章,
-		// 故 boss 不再填充(见 handleTrialEncounters 的说明)。
-		if boss, ok := book["boss"]; ok && boss != nil {
-			t.Errorf("第%v章 不该再带 boss 组(首领已从图上移除), 实际 %v 条",
-				book["chapter"], len(boss.([]any)))
-		}
-		for _, p := range book["normal"].([]any) {
+		for _, p := range append(
+			book["normal"].([]any), book["boss"].([]any)...) {
 			pet, _ := p.(map[string]any)
 			if s, _ := pet["seen"].(bool); s {
 				t.Errorf("无记录时 base=%v 不该是 seen", pet["base"])
