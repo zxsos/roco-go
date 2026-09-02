@@ -42,15 +42,6 @@ export const STATUS = {
   idle: { cls: 'off', text: '已打烊' },
 }
 
-// 数据源 → 徽标文案与悬停说明。
-//
-// 为什么要让玩家看见来源:两个源出自不同第三方,数据可能有出入(换源后同一轮货单
-// 未必逐条一致)。标出来源,万一有出入玩家能判断该信哪个、也便于反馈。
-export const SOURCE = {
-  xianyu: { text: '咸鱼源', title: '货单来自第三方数据接口' },
-  haoyou: { text: '好游快爆源', title: '货单来自好游快爆页面:商品图是外链,邮件客户端可能拦截显示为裂图' },
-}
-
 // 后端 merchant 槽存的是第三方原始响应(带 code/msg/data 壳,见 api_merchant.go
 // PutMerchantSlot(string(body))),业务字段(merchant_name/items/round…)都在 data 里。
 // unwrap 取出 data 层;老缓存可能直接存裸 data,typeof 判断兜底兼容。
