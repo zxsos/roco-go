@@ -15,10 +15,12 @@ import { PetDetailModal } from '../../components/PetDetailModal'
 import { GlassChip, rkpetURL } from '../../components/badges'
 
 // wildTitle 组一条野生宠物标记的悬停说明(见 MapPage 原实现)。
-export function wildTitle(p) {
+// rangeRules 传进去让标签带上区间规则的名字 —— 自定义区间在后端 kinds 里没有对应标签,
+// 不传的话悬停时看不出这只宠是因为什么被圈出来的。
+export function wildTitle(p, rangeRules = []) {
   const head = [p.n || '野生宠物']
   if (p.lv) head.push('Lv.' + p.lv)
-  head.push(...wildTags(p.kinds))
+  head.push(...wildTags(p, rangeRules))
   const w = p.weightPct != null ? `${Math.round(p.weightPct * 10) / 10}%` : '-'
   let s = `${head.join(' ')} W ${w} V ${p.voice}`
   if (p.stale) s += ' (已离开视野)'
@@ -331,7 +333,10 @@ export function MapViz({ engine, layersActive, onToggleLayers, pip }) {
             <RouteLayer marks={routes.marks} mapPx={mapPx} />
             <PoiLayer marks={pois.marks} mapPx={mapPx} />
             <NestLayer marks={home.marks} mapPx={mapPx} />
-            <WildLayer marks={wilds.marks} mapPx={mapPx} wildTip={wildTip} dist={wildDist} />
+            <WildLayer
+              marks={wilds.marks} mapPx={mapPx} wildTip={wildTip} dist={wildDist}
+              rangeRules={wilds.rangeRules}
+            />
           </div>
           <div className="map-arrow" ref={arrowRef}>
             <svg viewBox="0 0 24 24" width="30" height="30">
@@ -378,7 +383,7 @@ const NestLayer = React.memo(({ marks, mapPx }) => (
   ))}</>
 ))
 
-const WildLayer = React.memo(({ marks, mapPx, wildTip, dist }) => {
+const WildLayer = React.memo(({ marks, mapPx, wildTip, dist, rangeRules = [] }) => {
   const icons = React.useContext(IconsContext)
   return (
     <>{marks.map((p) => {
@@ -403,7 +408,7 @@ const WildLayer = React.memo(({ marks, mapPx, wildTip, dist }) => {
         : ''
       const rkpet = rkpetURL(p) // 3D 外链;缺形态编号或缺炫彩数据时为 null(见 rkpetURL)
       return [
-        <div key={p.id} data-id={p.id} title={wildTitle(p)}
+        <div key={p.id} data-id={p.id} title={wildTitle(p, rangeRules)}
           className={'map-wild' + (p.stale ? ' stale' : '') + (p.inject ? ' inject' : '') + (tip ? ' tip' : '') + (rare ? ' rare' : '')}
           style={{ left: p.u * mapPx, top: p.v * mapPx, ...p.style }}>
           <span className="map-wild-rare-halo" />
