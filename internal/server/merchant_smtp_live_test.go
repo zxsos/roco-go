@@ -56,9 +56,8 @@ func TestMerchantSMTPLive(t *testing.T) {
 
 	// 正文合规:交给 SMTP 的 HTML 不能含字面 \r\n(与 TestMerchantMailDeliveredNoLiteralCRLF 同一条不变量,
 	// 这里额外覆盖真实发信路径,因为注入 sendFn 的测试不会走到 merchantMailMessage 组装)。
-	var imgs []merchantMailImg
-	html := merchantMailBody(body, &imgs)
-	msg := merchantMailMessage(sender.from(), to, "【测试】rocom SMTP 冒烟", html, imgs)
+	html := merchantMailBody(body)
+	msg := merchantMailMessage(sender.from(), to, "【测试】rocom SMTP 冒烟", html)
 	if strings.Contains(msg, `\r\n`) {
 		t.Error("邮件原文含字面 \\r\\n")
 	}
