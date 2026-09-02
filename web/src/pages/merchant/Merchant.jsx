@@ -5,7 +5,7 @@ import RankTitle from '../../components/RankTitle'
 import { confirmDialog } from '../../components/confirm'
 import { Skeleton, SkeletonRows } from '../../components/Skeleton'
 import { useAsyncData } from '../../hooks/useAsyncData'
-import { STATUS, count, unwrap } from './format'
+import { STATUS, SOURCE, count, unwrap } from './format'
 import { RoundSteps, MerchantTurn } from './components'
 import SubCard from './SubCard'
 
@@ -123,6 +123,13 @@ export default function Merchant() {
             )}
             {rankErr && <span className="merchant-rank-err">{rankErr}</span>}
             <span className={`merchant-status merchant-status-${st.cls}`}>{st.text}</span>
+            {/* 来源徽标:两个源出自不同第三方,数据可能有出入,标出来便于玩家判断
+                与反馈;未知来源(后端比前端新)不渲染。 */}
+            {d && SOURCE[d.source] && (
+              <span className="merchant-source" title={SOURCE[d.source].title}>
+                {SOURCE[d.source].text}
+              </span>
+            )}
             <span className="merchant-day">{dayText}</span>
             {m && m.round && m.round.countdown && (
               <span className="merchant-countdown" title="距本轮结束">⏳ {m.round.countdown}</span>

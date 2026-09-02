@@ -46,6 +46,13 @@
 .merchant-status { padding: 4px 12px; border-radius: 999px; font-size: 12px; font-weight: 700; line-height: 1.4; }
 .merchant-status-ok { background: rgba(var(--c-earn-rgb), .14); color: var(--c-earn); border: 1px solid rgba(var(--c-earn-rgb), .4); }
 .merchant-status-off { background: var(--bg-2); color: var(--fg-dim); border: 1px solid var(--line); }
+/* 数据来源徽标:样式弱于营业状态徽标(状态是主要信息,来源是说明),
+   悬停给出该源的出处 —— 两个源出自不同第三方,数据可能有出入,要让人能查。 */
+.merchant-source {
+  padding: 3px 9px; border-radius: 999px; font-size: 11px; font-weight: 600; line-height: 1.4;
+  color: var(--fg-dim); background: var(--bg-2); border: 1px dashed var(--line);
+  cursor: help; white-space: nowrap;
+}
 .merchant-day { font-size: 13px; color: var(--fg-dim); font-weight: 600; }
 .merchant-countdown { font-size: 12px; color: var(--fg-dim); font-variant-numeric: tabular-nums; }
 
