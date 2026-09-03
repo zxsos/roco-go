@@ -57,7 +57,10 @@ func checkGolden(t *testing.T, name string, body []byte, scrub func(string) stri
 		t.Fatalf("读 golden %s 失败(先跑 UPDATE_CONTRACT=1 生成): %v", path, err)
 	}
 	// 写入时补了尾随换行,比对前去掉,免得每次都因一个 \n 判不一致。
-	if got != strings.TrimRight(string(want), "\n") {
+	// 顺手剥掉全部 \r:core.autocrlf=true 的机器 checkout 会把 golden 的每行行尾
+	// 都转成 CRLF(不只是尾行),留着会导致所有契约测试误报不一致。
+	wantStr := strings.TrimRight(strings.ReplaceAll(string(want), "\r", ""), "\n")
+	if got != wantStr {
 		t.Errorf("%s 响应与 golden 不一致\n--- golden ---\n%s\n--- got ---\n%s", name, want, got)
 	}
 }
@@ -493,7 +496,12 @@ func TestContractTrialEncountersEmpty(t *testing.T) {
 		"/api/trial/encounters?account="+contractAcc), &got); err != nil {
 		t.Fatalf("解析: %v", err)
 	}
-	want := map[string]bool{"account": true, "ts": true, "updated": true, "chapters": true}
+	// 顶层字段清单要跟 payload 同步加:source/activity 是官方配置提交(2026-09)加的,
+	// 白名单漏了它们会把「本来就是契约」的字段误报成多余。
+	want := map[string]bool{
+		"account": true, "ts": true, "updated": true, "chapters": true,
+		"source": true, "activity": true,
+	}
 	for k := range got {
 		if !want[k] {
 			t.Errorf("/api/trial/encounters(无记录) 多了字段 %q", k)

@@ -28,6 +28,8 @@ func TestMigrateCleansExistingSpacesOnDeploy(t *testing.T) {
 		if err != nil {
 			t.Fatalf("建库: %v", err)
 		}
+		// 不 Close 的话句柄一直占着文件,Windows 上 TempDir 清理必然失败
+		defer st.Close()
 		for i, d := range dirty {
 			if _, err := st.db.Exec(`INSERT INTO annotations(kind, code, name, desc, submitter, status, created_at)
 				VALUES('skill', ?, ?, '', 'UID:906129335', 'approved', 0)`, 7880001+i, d.name); err != nil {
@@ -41,6 +43,7 @@ func TestMigrateCleansExistingSpacesOnDeploy(t *testing.T) {
 	if err != nil {
 		t.Fatalf("重开库: %v", err)
 	}
+	defer st2.Close()
 
 	for i, d := range dirty {
 		var got string
