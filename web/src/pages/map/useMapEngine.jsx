@@ -6,6 +6,7 @@ import { useAsyncRun } from '../../hooks/useAsyncData'
 import { ZOOM_FALLBACK, defaultZoom, SMOOTH_TAU as SMOOTH_TAU_FALLBACK, TAU_CUTOFF, snap, posAt, makeAnchor } from './motion'
 import { usePanZoom } from './usePanZoom'
 import { usePois } from './usePois'
+import { useGathers } from './useGathers'
 import { useRoutes, RouteLayer } from './useRoutes.jsx'
 import { useWildPets } from './useWildPets'
 import { wildTags } from './wildMatch'
@@ -75,6 +76,7 @@ export function useMapEngine(account) {
   const pois = usePois(account, pos && pos.sceneResId)
   const wilds = useWildPets(account)
   wildsRef.current = wilds.marks
+  const gathers = useGathers(account)
   const home = useHomeNests(account)
   const paint = usePaint(account, pos && pos.sceneResId, pos && pos.layer && pos.layer.id, pos && pos.paintable)
   const routes = useRoutes(account, pos)
@@ -240,7 +242,7 @@ export function useMapEngine(account) {
   return {
     pos, hasMap, imgError, layerError, setImgError, setLayerError,
     view, worldRef, arrowRef, applyFrame,
-    pois, wilds, home, paint, routes,
+    pois, wilds, gathers, home, paint, routes,
     detailGid, setDetailGid, wildTip, setWildTip, wildDist, setWildDist, onTap, clearUiState,
     // canvas PiP 用:暴露当前帧的渲染参数(供 renderToCanvas 画到外部 canvas)
     // 这些 ref 在 applyFrame 里每帧更新,canvas 渲染循环直接读,不触发 React 重渲染。
@@ -257,7 +259,7 @@ export function useMapEngine(account) {
 // pip 是画中画控制器(见 usePip.js);不传则不显示画中画按钮。
 export function MapViz({ engine, layersActive, onToggleLayers, pip }) {
   const { pos, hasMap, layerError, setImgError, setLayerError,
-    view, worldRef, arrowRef, pois, wilds, home, paint, routes,
+    view, worldRef, arrowRef, pois, wilds, gathers, home, paint, routes,
     detailGid, setDetailGid, wildTip, wildDist,
     draggingRef, pokeFrame } = engine
   const mapPx = (Math.min(view.vp.w, view.vp.h) || 1) * view.zoom
@@ -332,6 +334,9 @@ export function MapViz({ engine, layersActive, onToggleLayers, pip }) {
             </>)}
             <RouteLayer marks={routes.marks} mapPx={mapPx} />
             <PoiLayer marks={pois.marks} mapPx={mapPx} />
+            {/* 实时采集物叠在候选点之上:候选点(POI 图层)是暗色底,这里标此刻真有的。
+                顺序在 NestLayer/WildLayer 之前 —— 采集物是地面静态物,不该压住宠物标记。 */}
+            <GatherLayer marks={gathers.marks} mapPx={mapPx} />
             <NestLayer marks={home.marks} mapPx={mapPx} />
             <WildLayer
               marks={wilds.marks} mapPx={mapPx} wildTip={wildTip} dist={wildDist}
@@ -366,6 +371,19 @@ const PoiLayer = React.memo(({ marks, mapPx }) => (
       className={'map-poi' + (p.sure ? ' sure' : '')}
       src={imgURL(p.icon)} title={p.n}
       style={{ left: p.u * mapPx, top: p.v * mapPx }} />
+  ))}</>
+))
+
+// GatherLayer 实时采集物:此刻玩家周围真刷着的那些(与 PoiLayer 的候选点相对)。
+// 图标用**实体自己的品种图标**;查不到品种时退回一个通用标记,不在图上留空白。
+const GatherLayer = React.memo(({ marks, mapPx }) => (
+  <>{marks.map((g) => (
+    <div key={g.id} className="map-gather" title={g.n || '采集物'}
+      style={{ left: g.u * mapPx, top: g.v * mapPx }}>
+      {g.icon
+        ? <img src={imgURL(g.icon)} alt="" draggable={false} />
+        : <span className="map-gather-dot" />}
+    </div>
   ))}</>
 ))
 
