@@ -76,8 +76,7 @@ export function useMapEngine(account) {
   const pois = usePois(account, pos && pos.sceneResId)
   const wilds = useWildPets(account)
   wildsRef.current = wilds.marks
-  // 采集物品种清单取自 POI 候选点表,故 useGathers 依赖 pois(顺序不能调)。
-  const gathers = useGathers(account, pois)
+  const gathers = useGathers(account)
   const home = useHomeNests(account)
   const paint = usePaint(account, pos && pos.sceneResId, pos && pos.layer && pos.layer.id, pos && pos.paintable)
   const routes = useRoutes(account, pos)

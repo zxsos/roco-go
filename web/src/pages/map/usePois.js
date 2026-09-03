@@ -152,12 +152,5 @@ export function usePois(account, res) {
       .map((p) => ({ ...p, icon: p.i || iconOf[p.k], sure: collectOn.has(p.k) && starSt[p.r] === ST_UNCOLLECTED }))
   }, [poi, poiOn, collectOn, starSt, doneZones, iconOf])
 
-  // allPois 是本场景**未经过滤**的原始点位(4226 个,含全部 41 个采集物品种)。
-  //
-  // 与 marks 的区别:marks 按图层开关与收集状态筛过(采集物图层默认是关的,
-  // 故 marks 里常常一个采集物都没有),只适合拿去画;
-  // allPois 是配置的完整面貌,给**需要枚举品种**的地方用 —— 实时采集物图层
-  // 的品种清单必须从这里取,否则清单就只剩「此刻视野内的那几个」,
-  // 用户没法预先勾选看不见的品种(表现为「只能存这 4 个」)。
-  return { allPois: poi.pois, kinds, iconOf, marks, zoneStats, poiOn, togglePoi, collectOn, toggleCollect }
+  return { kinds, iconOf, marks, zoneStats, poiOn, togglePoi, collectOn, toggleCollect }
 }

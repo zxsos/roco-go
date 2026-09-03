@@ -4,7 +4,6 @@ import { confirmDialog } from '../../components/confirm'
 import { WILD_LAYERS } from './wildConfig'
 import RangeRules from '../../components/RangeRules'
 import ZonePanel from './ZonePanel'
-import GatherPlans from './GatherPlans'
 
 // LayerPanel 图层侧栏:POI 图层开关;可收集图层(眠枭之星/不咕钟零件)行右侧另有收集模式小开关
 // (开 = 隐藏该图层已收集的点,判定来源见 usePois.js)。另有「野生宠物」一组:不是固定点位,
@@ -67,59 +66,8 @@ export default function LayerPanel({ pois, wilds, gathers, paint, routes, collap
             </button>
           </div>
           <div className="map-gather-hint muted">
-            只画此刻真刷着的(约三成候选点会真刷出)。品种见下方筛选
+            只画此刻真刷着的(约三成候选点会真刷出),全部品种,不可筛选
           </div>
-          {/* 采集方案:常用的品种组合存个名字,点一下切换(见 GatherPlans.jsx)。
-              放在品种筛选上面 —— 先选方案再微调,是符合直觉的顺序。 */}
-          <GatherPlans
-            plans={gathers.plans}
-            activeId={gathers.activeId}
-            onActivate={gathers.activatePlan}
-            onDeactivate={gathers.deactivatePlan}
-            onCreate={gathers.createPlan}
-            onRename={gathers.renamePlan}
-            onDelete={gathers.deletePlan}
-          />
-          {/* 品种筛选:41 个品种全列出来很长,故收在折叠按钮下(参照下面跑图路线那组)。
-              计数显示「此刻视野内 / 已选品种数」,收起时也能看出筛掉了多少。
-              排序让此刻有的排前面 —— 多数时候用户只想开关当前这几个。 */}
-          <div className="map-routes-head">
-            <button className="map-medal-toggle" onClick={gathers.toggleKindsOpen}
-              aria-expanded={gathers.kindsOpen}
-              title="按品种筛选。清单是本场景登记的全部品种(41 个),不受此刻视野限制,可预先勾选;品种会随版本增删">
-              <span>品种筛选</span>
-              <span className="map-route-count">
-                {gathers.shownKinds}/{gathers.kinds.length}<i className="muted">▾</i>
-              </span>
-            </button>
-            <span className="map-routes-all">
-              <button onClick={() => gathers.setAllKinds(true)} title="显示全部品种" aria-label="全开">全开</button>
-              <button onClick={() => gathers.setAllKinds(false)} title="全部隐藏" aria-label="全关">全关</button>
-            </span>
-          </div>
-          {gathers.kindsOpen && (
-            // 41 个品种整体可滚,免得展开后把下面几组(跑图路线/涂色)顶出屏幕。
-            <div className="map-gather-kinds">
-              {gathers.kinds.map((k) => (
-                <div className={'map-route-row' + (k.live ? ' has-live' : '')} key={k.name}
-                  title={`本场景登记 ${k.cand} 个候选点 · 此刻视野内 ${k.live} 个`}>
-                  <button className={'map-collect-btn' + (!gathers.kindsOff.has(k.name) ? ' on' : '')}
-                    onClick={() => gathers.toggleKind(k.name)}
-                    aria-label={`${k.name}开关`} aria-pressed={!gathers.kindsOff.has(k.name)}>✓</button>
-                  {/* 品种图标:让用户能一眼认出这是矿还是花,不必逐个读名字。
-                      图标取自点位表(品种级),与地图标记上画的是同一张。 */}
-                  {k.icon
-                    ? <img className="map-gather-kind-ic" src={imgURL(k.icon)} alt="" draggable={false} />
-                    : <span className="map-gather-kind-ic" />}
-                  <span className="map-layer-name">{k.name}</span>
-                  <span className="muted">{k.live || '·'}</span>
-                </div>
-              ))}
-              {gathers.kinds.length === 0 && (
-                <span className="muted" style={{ fontSize: 13 }}>该场景没有采集物</span>
-              )}
-            </div>
-          )}
         </div>
         <div className="filter-group">
           {/* 清空按钮放进 label 内:复用 .filter-group > label 的既有 flex 布局
