@@ -16,7 +16,7 @@ import (
 //  1. floors:按 node_index 索引的层类型(普通/首领/商人/NPC);
 //  2. pools:各章普通池与 22 名首领(能显示头像);
 //  3. npc:第 7 层 NPC 的候选阵容(按难度 × 章);
-//  4. events:官方事件 → 精灵(实时视图把事件号翻译成头像,免人工标注);
+//  4. events:官方事件 → 精灵(实时视图把事件号直接翻译成头像);
 //  5. event_names:特殊事件 → 事件名(商人/魔力之源这类非单只精灵遭遇,events 表
 //     查不到,给实时视图一个可读名而不是裸 id);
 //  6. effects:试炼效果(GRASS_TRIAL_EFFECT_CONF)effect_id → 名 —— 1000 段是
@@ -232,8 +232,8 @@ func (db *DB) TrialNPCOpponents(modeID, chapterIdx uint32) []TrialOpponent {
 //
 // 数据来自客户端 GRASS_TRIAL_EVENT_CONF(gen_trial_official.py 落表):普通遭遇
 // (100k/110k 段)与首领(200k 段)官方直接给精灵;**NPC 阵容(300xxx+,整队)/
-// 祝福/商人等事件不是单只精灵,查不到返回 0** —— 调用方应退回众包标注或占位
-// (见 pipeline.trialEventPet)。表外返回 0 同样意味着"官方没这个事件"。
+// 祝福/商人等事件不是单只精灵,查不到返回 0**(见 pipeline.trialEventPet)。
+// 表外返回 0 同样意味着"官方没这个事件"。
 func (db *DB) TrialEventPetBase(eventConfID uint32) uint32 {
 	if db.trial == nil {
 		return 0
@@ -245,7 +245,7 @@ func (db *DB) TrialEventPetBase(eventConfID uint32) uint32 {
 //
 // 与 TrialEventPetBase 互补:普通遭遇/首领能映射出精灵(显示头像),这类特殊事件
 // (商人/魔力之源等)没有单只精灵可映射,靠本方法给名字。查不到返回空串,调用方
-// 退回「事件 {id}」或众包标注。
+// 退回「事件 {id}」。
 func (db *DB) TrialEventName(eventConfID uint32) string {
 	if db.trial == nil {
 		return ""

@@ -269,15 +269,14 @@ func (db *DB) HasInnateSkills(petbaseID uint32) bool {
 	return db.skills != nil && len(db.skills.innate[petbaseID]) > 0
 }
 
-// SkillCatalogEntry 是技能候选目录里的一条(标注模式搜索候选用)。
+// SkillCatalogEntry 是技能目录里的一条。
 type SkillCatalogEntry struct {
 	ID   uint32 `json:"id"`
 	Name string `json:"name"`
 }
 
 // SkillCatalog 返回全部技能(含重名技能)的 id -> 名目录,按 id 升序。
-// 标注模式里玩家对未知技能 id 从这份目录搜索选取名字;也供宠物详情等场景
-// 做「全量技能名表」展示。
+// 供宠物详情等场景做「全量技能名表」展示。
 func (db *DB) SkillCatalog() []SkillCatalogEntry {
 	sdb := db.skills
 	if sdb == nil {

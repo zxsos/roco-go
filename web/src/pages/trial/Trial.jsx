@@ -5,7 +5,6 @@ import { useAsyncData } from '../../hooks/useAsyncData'
 import { ImgAvatar, imgURL } from '../../components/icons'
 import { confirmDialog } from '../../components/confirm'
 import { fmtTime } from '../../utils/format'
-import { UnknownChip, useAnnotations } from '../../components/annotations'
 import { Marks } from '../../components/badges'
 import ElementWheel from './ElementWheel'
 
@@ -16,8 +15,10 @@ import ElementWheel from './ElementWheel'
 //   - 之后由 SSE 的 trial 消息整份覆盖(服务器每次下发都是全量,前端不做增量合并);
 //   - 页面只做展示,不向游戏发任何指令。
 //
-// 技能/特性/碎片**只有 id**:游戏技能名表尚未接入本项目(names.json 里没有,
-// 见 docs/data.md「待校准」),故一律按 id 原样展示 —— 编一个名字比留 id 更糟。
+// 命名来源:技能名与效果文案来自官方 SKILL_CONF(gen_skill_official.py 落表,
+// 后端随包下发 names/descs,协议 id 是 base_skill_id 也能直接查);特性只有 288xxx
+// id —— wiki「精灵→特性」表桥接(精灵天生的那条,pet.featureNames)能给名,
+// 其余一律按 id 原样展示 —— 编一个名字比留 id 更糟。
 
 // 草系徽章试炼的语义映射(来自 BWIKI「草系徽章试炼」攻略页,仅名称,无协议 id):
 //   - 三章主题名:服务器只下发 chapter_id(3000/3001/3002),名字见 wiki。
@@ -475,23 +476,10 @@ function OpponentCard({ o }) {
 
 function PetCard({ pet }) {
   const pct = pet.maxHp > 0 ? Math.round((pet.hp / pet.maxHp) * 100) : 0
-  const { lookup } = useAnnotations() || {}
-  // 特性在协议里只有 id —— 内置名表接不进来(不像技能有 skills.json)。
-  // 这是「标注模式」在展示侧的落点,提交/审核见 components/annotations.jsx。
-  // 三条取名路径,优先级从高到低:
-  //   1. 全服已审核标注(管理员核实过);
-  //   2. wiki「精灵 → 特性」表桥接(pet.featureNames,这只精灵天生的那条)——
-  //      开局就能带上,玩家不必再标一次;
-  //   3. 自己刚提交、待审的(只在本会话可见)。
+  // 特性在协议里只有 id —— 没有内置名表(不像技能有 skills.json)。
+  // 名字来源:wiki「精灵 → 特性」表桥接(pet.featureNames,这只精灵天生的那条),
+  // 开局就能带上;其余 288xxx 只能按 id 展示 —— 编一个名字比留 id 更糟。
   const featureChip = (f) => {
-    const a = lookup && lookup('feature', f)
-    if (a && !a.pending) {
-      return (
-        <span key={f} className="trial-chip anno-hit" title={`${a.desc || a.name}(玩家标注,已审核)`}>
-          {a.name}
-        </span>
-      )
-    }
     const wiki = (pet.featureNames || {})[String(f)]
     if (wiki) {
       return (
@@ -504,18 +492,7 @@ function PetCard({ pet }) {
         </span>
       )
     }
-    if (a) { // 待审:只在本会话可见,故加待审标记
-      return (
-        <span
-          key={f}
-          className="trial-chip anno-hit anno-pending"
-          title={`${a.desc || a.name}(你提交的,待管理员审核)`}
-        >
-          {a.name} ·待审
-        </span>
-      )
-    }
-    return <UnknownChip key={f} kind="feature" code={f} />
+    return <span key={f} className="trial-chip" title={`未知特性 id ${f}`}>{f}</span>
   }
   return (
     <section className="trial-group">
@@ -551,27 +528,14 @@ function PetCard({ pet }) {
             <div key={s.slot} className={'trial-skill' + (pet.equipped && pet.equipped.includes(s.slot) ? ' on' : '')}>
               <div className="trial-skill-head">
                 <span className="trial-skill-slot">槽 {s.slot}</span>
-                {/* 技能名按 id 查(融合不改 id,故融合态也有名);skills.json 只覆盖到
-                    已实证的那批(788 段仍有未收录),查不到时先看全服已审核标注 ——
-                    玩家标过、管理员审过就显示名字(不再要求每次重新标);
-                    都没有才回退成可标注的 id。 */}
+                {/* 技能名由后端随包下发(s.name,查官方 SKILL_CONF,融合不改 id 也有名);
+                    官方表外的才按 id 展示。 */}
                 {(() => {
-                  const a = lookup && lookup('skill', s.id)
                   if (s.name) {
                     // 悬停给官方效果文案(下挂 desc 行与之互补:行内一眼看得到)
                     return <span className="trial-skill-id" title={s.desc ? `效果:${s.desc} · 技能 id ${s.id}` : `技能 id ${s.id}`}>{s.name}</span>
                   }
-                  if (a) {
-                    return (
-                      <span
-                        className="trial-skill-id"
-                        title={`${a.desc || a.name}(${a.pending ? '你提交的,待管理员审核' : '玩家标注,已审核'})`}
-                      >
-                        {a.name}{a.pending && ' ·待审'}
-                      </span>
-                    )
-                  }
-                  return <UnknownChip kind="skill" code={s.id} />
+                  return <span className="trial-skill-id" title={`技能 id ${s.id}`}>{s.id}</span>
                 })()}
               </div>
               {/* 官方效果文案常驻一行(小灰字),不悬停也能看懂这技能是干嘛的;
@@ -596,7 +560,6 @@ function PetCard({ pet }) {
         ? (
           <div className="trial-meta">
             {/* 特性只有 id:游戏特性名表未接入(不像技能那样有 skills.json)。
-                展示优先级:全服已审核标注(查不到时)→ UnknownChip(让玩家标注)。
                 能拿到天生/获得的拆分时分开显示(局级 initial_feature_ids,
                 整局不变;与已获特性之差就是试炼中拿到的,见 trial.InitialFeatures);
                 拿不到就退回不区分的展示。 */}
@@ -636,44 +599,34 @@ function PetCard({ pet }) {
   )
 }
 
-// IdChip 渲染一个协议 id:查得到名字就显示名字,查不到给标注入口。
+// IdChip 渲染一个协议 id:查得到名字就显示名字,查不到就原样展示 id。
 //
-// 三类 id 的"名字"来源不同,故走三条路:
-//   技能(7xxxxx)—— 后端 names 来自官方 SKILL_CONF(与协议同源,含试炼 788 段),
-//                   个别表外的再查全服已审核标注(玩家标过、管理员审过即显示名);
-//   特性(288xxx)—— 没有内置名表,先查全服标注,查不到才是未知;
+// 名字来源按 id 分段:
+//   技能(7xxxxx)—— 后端 names 来自官方 SKILL_CONF(与协议同源,含试炼 788 段);
+//   特性(288xxx)—— 没有内置名表,名字只来自后端桥接出的 o.names
+//                   (有精灵可查时按「精灵→特性」表带上精灵天生的那条);
 //   碎片/效果(20xx/30xx)—— 官方 GRASS_TRIAL_EFFECT_CONF 有名字(如 2016=魔攻特调),
-//                   后端带在 names 里,name 参数优先显示;官方表外的才显示 id。
+//                   后端带在 names 里。
 //
 // used 标出**本节点已经抽过**的:重掷时服务器排除它们,压暗显示能让人一眼看出
 // 「换奖励还剩下哪些可能」。desc 是后端随包下发的官方技能效果文案(仅技能 id),
 // 悬停即看「这技能是干嘛的」。
 function IdChip({ id, name, used, current, desc }) {
-  const { lookup } = useAnnotations() || {}
   const isFeat = isFeatureID(id)
   const isSkill = isSkillID(id)
-  // 标注类型:特性/技能都能查(kind=feature/skill);碎片没有标注对象。
-  const annoKind = isFeat ? 'feature' : isSkill ? 'skill' : null
-  const anno = annoKind && lookup ? lookup(annoKind, id) : null
-  const text = name || (anno && anno.name)
-  // 名字来自 wiki 桥接(标注精灵后自动带出的)时提示来源:它是按精灵反查出来的,
-  // 与玩家提交、管理员核实的标注不是一回事,不该看着一样。
-  const from = name ? 'wiki 精灵→特性表' : anno ? '玩家标注' : ''
+  const text = name
   return (
     <span
       className={'trial-chip trial-id' + (used ? ' trial-id-used' : '') +
-        (isFeat ? ' trial-id-feat' : '') + (current ? ' trial-id-cur' : '') +
-        (anno && anno.pending ? ' anno-pending' : '')}
+        (isFeat ? ' trial-id-feat' : '') + (current ? ' trial-id-cur' : '')}
       title={[
-        text ? `${text}${from ? `(${from})` : ''}` : `未知${isFeat ? '特性' : isSkill ? '技能' : 'id'} ${id}`,
+        text ? text : `未知${isFeat ? '特性' : isSkill ? '技能' : 'id'} ${id}`,
         desc ? `效果:${desc}` : '',
         current ? '当前抽到的(与上方「技能」一致)' : '',
         used ? '本节点已抽过,重掷不会再出' : '',
       ].filter(Boolean).join(' · ')}
     >
-      {text || (annoKind
-        ? <UnknownChip kind={annoKind} code={id} />
-        : id)}
+      {text || id}
     </span>
   )
 }
@@ -698,16 +651,10 @@ function IdChip({ id, name, used, current, desc }) {
 // 换事件连精灵一起换掉(抽取池随之变成新精灵的那一套)—— 它不属于"这只精灵"
 // 的内容,放在方框外,免得被读成"这只精灵的一项"。
 function OptionCard({ o }) {
-  const { lookup } = useAnnotations() || {}
-  // 精灵:后端按**已审核**标注回填(带头像);没回填时退回本会话提交的(待审)。
-  // 后者不是多余 —— 管理员审核前后端不会带 pet,但提交的人应当立刻看到自己标的
-  // 名字,否则标注看着像没生效。
-  const anno = lookup && lookup('event', o.event)
-  const petName = (o.pet && o.pet.name) || (anno && anno.name) || ''
-  // 头像三个来源,按可靠度取:后端回填(已审核,权威)→ 本会话待审标记录的
-  // (自己刚标、还没审,后端此时**不会**回填 pet,不取这里就只剩占位)。
-  // ⚠️ 顺序别反:待审的图是本会话记的,不该盖过后端权威数据。
-  const petImg = (o.pet && o.pet.img) || (anno && anno.img) || ''
+  // 精灵:后端按官方 GRASS_TRIAL_EVENT_CONF 回填(带头像);官方表外的事件
+  // (NPC 阵容/祝福/商人等)没有单只精灵可映射,显示「事件 {id}」占位。
+  const petName = (o.pet && o.pet.name) || ''
+  const petImg = (o.pet && o.pet.img) || ''
   const pool = o.pool || []
   const used = new Set(o.used || [])
   const name = (id) => (o.names || {})[String(id)]
@@ -733,7 +680,7 @@ function OptionCard({ o }) {
             )}
           </div>
           <div className="trial-opt-petname">
-            {petName || <UnknownChip kind="event" code={o.event} />}
+            {petName || <span className="trial-chip" title={`未知事件 id ${o.event}`}>事件 {o.event}</span>}
           </div>
         </div>
 
@@ -771,7 +718,7 @@ function OptionCard({ o }) {
         换事件 🪙 {o.eventCost || 0}
         {/* 槽位行:优先给可读名 —— 事件映射到精灵就显示精灵名(豆丁鱼),特殊事件
             (商人/魔力之源等)显示后端下发的 eventName;两者都没有才退回裸事件 id。
-            原始 event_conf_id 保留在 title 里,方便对照抓包/标注。 */}
+            原始 event_conf_id 保留在 title 里,方便对照抓包。 */}
         <span className="muted trial-opt-slot" title={`event_conf_id ${o.event}`}>
           槽 {o.slot} · {o.eventName || (o.pet && o.pet.name) || ('事件 ' + o.event)}
         </span>

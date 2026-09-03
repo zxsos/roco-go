@@ -404,10 +404,9 @@ type TrialOption struct {
 	// Pet 是本事件对应的精灵(头像+名字)。
 	//
 	// ⚠️ 协议**不下发**它:GrassTrialNodeEvent 只有 event_conf_id。到精灵的映射
-	// 现来自解包后的官方 GRASS_TRIAL_EVENT_CONF(gamedata.TrialEventPetBase,普通
-	// 遭遇/首领段可直接命中);官方表外的再由**众包标注**补(标注类型 event,
-	// 玩法见 internal/server/api_annotations.go)。两者都拿不到就缺失,前端显示
-	// 占位并给标注入口。别把它当成"服务器说是这只"。
+	// 来自解包后的官方 GRASS_TRIAL_EVENT_CONF(gamedata.TrialEventPetBase,普通
+	// 遭遇/首领段可直接命中);官方表查不到就缺失,前端显示占位。
+	// 别把它当成"服务器说是这只"。
 	Pet *TrialOppPet `json:"pet,omitempty"`
 	// EventName 是特殊事件的可读名(如「魔力之源」)。
 	//
