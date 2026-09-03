@@ -82,13 +82,6 @@ export function useMapEngine(account) {
   const paint = usePaint(account, pos && pos.sceneResId, pos && pos.layer && pos.layer.id, pos && pos.paintable)
   const routes = useRoutes(account, pos)
 
-  // 品种筛选对**两个采集物图层同时生效**:pois.marks 是候选点(3552 个),
-  // gathers.marks 是实时实体。只筛一层的话,打开候选点时图上还是画满被关掉的品种,
-  // 看起来就像筛选没生效。
-  const poiMarks = useMemo(
-    () => pois.marks.filter((p) => p.k !== 'gather' || gathers.allowName(p.n)),
-    [pois.marks, gathers.allowName])
-
   const anchorRef = useRef(null)
   const dispRef = useRef(null)
   const worldRef = useRef(null)
@@ -266,6 +259,8 @@ export function useMapEngine(account) {
 // engine 由 useMapEngine 产出(内部持有 sceneRef/layerRef/anchorRef 等,这里只读 pos)。
 // pip 是画中画控制器(见 usePip.js);不传则不显示画中画按钮。
 export function MapViz({ engine, layersActive, onToggleLayers, pip }) {
+  // 本函数与 useMapEngine **不是同一个作用域**,漏传就只在运行时炸 ReferenceError
+  // (vite build 不做 no-undef 检查,构建照样过)—— 曾因此地图整页白屏。
   const { pos, hasMap, layerError, setImgError, setLayerError,
     view, worldRef, arrowRef, pois, wilds, gathers, home, paint, routes,
     detailGid, setDetailGid, wildTip, wildDist,
@@ -341,7 +336,7 @@ export function MapViz({ engine, layersActive, onToggleLayers, pip }) {
               </svg>
             </>)}
             <RouteLayer marks={routes.marks} mapPx={mapPx} />
-            <PoiLayer marks={poiMarks} mapPx={mapPx} />
+            <PoiLayer marks={pois.marks} mapPx={mapPx} />
             {/* 实时采集物叠在候选点之上:候选点(POI 图层)是暗色底,这里标此刻真有的。
                 顺序在 NestLayer/WildLayer 之前 —— 采集物是地面静态物,不该压住宠物标记。 */}
             <GatherLayer marks={gathers.marks} mapPx={mapPx} />

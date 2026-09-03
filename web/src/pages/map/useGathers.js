@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, useCallback } from 'react'
 import { getGathers, subscribe } from '../../api'
 import { useAsyncData } from '../../hooks/useAsyncData'
 import { PLANS_LS_KEY, sanitizePlans, newPlanId } from './GatherPlans'
+import { GATHER_KIND } from './usePois'
 
 // —— 实时采集物图层(花/草/菌/矿/果树)——
 //
@@ -21,7 +22,9 @@ import { PLANS_LS_KEY, sanitizePlans, newPlanId } from './GatherPlans'
 //   - 每次推送都是**全量**(实体进出按 150ms 合并),直接替换即可。
 
 // 空数据的兜底常量:引用稳定,免得每次渲染都造新对象、打穿下游的 useMemo。
+// 清单有 41 项,每次渲染重算一遍不值当,故空数组也用同一个常量。
 const NO_GATHERS = { gathers: [] }
+const NO_POIS = []
 const GATHER_LS_KEY = 'map.gatherLayer'
 const KINDS_LS_KEY = 'map.gatherKinds.v1'
 
@@ -61,10 +64,17 @@ export function useGathers(account, pois) {
     useCallback(() => getGathers(), []),
     { fallback: NO_GATHERS, reloadKey: account },
   )
-  const gathers = (data || NO_GATHERS).gathers || []
+  // 收紧成 useMemo:`(data || {}).gathers || []` 每次渲染都造一个新数组,
+  // 会让下面三个 useMemo 的依赖**每次都变**,等于缓存全废 —— 实时层每秒推好几次,
+  // 而品种清单(41 项)与 marks 的重算本可跳过。
+  const gathers = useMemo(() => (data || NO_GATHERS).gathers || [], [data])
   const [on, setOn] = useState(loadOn)
   const [offKinds, setOffKinds] = useState(loadOffKinds)
   const [kindsOpen, setKindsOpen] = useState(false)
+  // 本场景的全部 POI(未经图层开关过滤),品种清单的静态来源。
+  // 用模块级常量兜底:`pois.allPois || []` 每次渲染都会造新数组,
+  // 会让下面 kinds 的 useMemo 依赖失效、每次重算 41 项。
+  const allPois = pois?.allPois || NO_POIS
   // 采集方案:用户自定义的一组品种,激活时替代手动勾选成为筛选依据。
   //
   // 没用 useStoredJSON:它内部对 storage.getItem/setItem 不做容错,而隐私模式下
@@ -100,10 +110,14 @@ export function useGathers(account, pois) {
   // 取并集而非只用候选点表:点位表对某些品种登记不全(实测 npc_cfg_id 50047 在刷,
   // 点位表一条都没有,见 docs/data.md 3.3),只用静态清单会让这些品种**筛不掉** ——
   // 它们照样显示在图上,而面板里根本没有对应的开关。
+  //
+  // 静态那一半必须取 **allPois**(未过滤),不能取 marks:
+  // marks 按图层开关筛过,而采集物图层默认是**关**的,marks 里一个采集物都没有 ——
+  // 那样清单就只剩此刻视野内的几个,用户勾不到视野外的品种。
   const kinds = useMemo(() => {
     const info = new Map() // 品种名 -> { icon, cand }
-    for (const p of (pois?.pois || [])) {
-      if (p.k !== 'gather' || !p.n) continue
+    for (const p of allPois) {
+      if (p.k !== GATHER_KIND || !p.n) continue
       const e = info.get(p.n) || { icon: '', cand: 0 }
       e.cand++
       if (p.i) e.icon = p.i // 图标是品种级的,任取一点即可
@@ -128,7 +142,7 @@ export function useGathers(account, pois) {
     return [...info.entries()]
       .map(([name, e]) => ({ name, icon: e.icon, cand: e.cand, live: liveCount.get(name) || 0 }))
       .sort((a, b) => a.name.localeCompare(b.name, 'zh'))
-  }, [pois, gathers, liveCount])
+  }, [allPois, gathers, liveCount])
 
   const toggle = () => setOn((v) => !v)
 

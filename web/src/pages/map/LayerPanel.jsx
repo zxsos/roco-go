@@ -67,7 +67,7 @@ export default function LayerPanel({ pois, wilds, gathers, paint, routes, collap
             </button>
           </div>
           <div className="map-gather-hint muted">
-            只画此刻真刷着的;候选点在上面的「采集物」图层(约三成会真刷出)
+            只画此刻真刷着的(约三成候选点会真刷出)。品种见下方筛选
           </div>
           {/* 采集方案:常用的品种组合存个名字,点一下切换(见 GatherPlans.jsx)。
               放在品种筛选上面 —— 先选方案再微调,是符合直觉的顺序。 */}
@@ -86,7 +86,7 @@ export default function LayerPanel({ pois, wilds, gathers, paint, routes, collap
           <div className="map-routes-head">
             <button className="map-medal-toggle" onClick={gathers.toggleKindsOpen}
               aria-expanded={gathers.kindsOpen}
-              title="按品种筛选:两个采集物图层(候选点与实时)同时生效。品种会随版本增删,新增的默认显示">
+              title="按品种筛选。清单是本场景登记的全部品种(41 个),不受此刻视野限制,可预先勾选;品种会随版本增删">
               <span>品种筛选</span>
               <span className="map-route-count">
                 {gathers.shownKinds}/{gathers.kinds.length}<i className="muted">▾</i>
@@ -102,7 +102,7 @@ export default function LayerPanel({ pois, wilds, gathers, paint, routes, collap
             <div className="map-gather-kinds">
               {gathers.kinds.map((k) => (
                 <div className={'map-route-row' + (k.live ? ' has-live' : '')} key={k.name}
-                  title={`候选点 ${k.cand} 个 · 此刻视野内 ${k.live} 个`}>
+                  title={`本场景登记 ${k.cand} 个候选点 · 此刻视野内 ${k.live} 个`}>
                   <button className={'map-collect-btn' + (!gathers.kindsOff.has(k.name) ? ' on' : '')}
                     onClick={() => gathers.toggleKind(k.name)}
                     aria-label={`${k.name}开关`} aria-pressed={!gathers.kindsOff.has(k.name)}>✓</button>
