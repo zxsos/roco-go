@@ -76,10 +76,18 @@ export function useMapEngine(account) {
   const pois = usePois(account, pos && pos.sceneResId)
   const wilds = useWildPets(account)
   wildsRef.current = wilds.marks
-  const gathers = useGathers(account)
+  // 采集物品种清单取自 POI 候选点表,故 useGathers 依赖 pois(顺序不能调)。
+  const gathers = useGathers(account, pois)
   const home = useHomeNests(account)
   const paint = usePaint(account, pos && pos.sceneResId, pos && pos.layer && pos.layer.id, pos && pos.paintable)
   const routes = useRoutes(account, pos)
+
+  // 品种筛选对**两个采集物图层同时生效**:pois.marks 是候选点(3552 个),
+  // gathers.marks 是实时实体。只筛一层的话,打开候选点时图上还是画满被关掉的品种,
+  // 看起来就像筛选没生效。
+  const poiMarks = useMemo(
+    () => pois.marks.filter((p) => p.k !== 'gather' || gathers.allowName(p.n)),
+    [pois.marks, gathers.allowName])
 
   const anchorRef = useRef(null)
   const dispRef = useRef(null)
@@ -333,7 +341,7 @@ export function MapViz({ engine, layersActive, onToggleLayers, pip }) {
               </svg>
             </>)}
             <RouteLayer marks={routes.marks} mapPx={mapPx} />
-            <PoiLayer marks={pois.marks} mapPx={mapPx} />
+            <PoiLayer marks={poiMarks} mapPx={mapPx} />
             {/* 实时采集物叠在候选点之上:候选点(POI 图层)是暗色底,这里标此刻真有的。
                 顺序在 NestLayer/WildLayer 之前 —— 采集物是地面静态物,不该压住宠物标记。 */}
             <GatherLayer marks={gathers.marks} mapPx={mapPx} />
