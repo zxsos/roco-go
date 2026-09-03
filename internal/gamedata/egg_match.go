@@ -3,6 +3,7 @@ package gamedata
 import (
 	"math"
 	"sort"
+	"strings"
 )
 
 // 随机蛋(神奇的蛋)的候选物种反推(算法见 docs/data.md「随机蛋的区间藏在哪」)。
@@ -28,6 +29,11 @@ type EggCandidate struct {
 	Score     float64 `json:"score"`         // 匹配度 0-100,越大越可能是它
 	HeightPct float64 `json:"heightPct"`     // 蛋的身高落在该物种区间内的百分位
 	WeightPct float64 `json:"weightPct"`     // 同上,体重
+	// 蛋品类 precious_egg_type,只用于内部归并与剔除变体(见 dedupeEggCandidates)。
+	// 不进 JSON:对外契约由 internal/server 的 eggMatchEntry 另行组装。
+	Precious int32 `json:"-"`
+	// 外形 model_id,同上,只用于内部归并。
+	ModelID uint32 `json:"-"`
 }
 
 // MatchRandomEgg 反推随机蛋可能孵出的物种,按匹配度降序返回。
@@ -61,8 +67,11 @@ func (db *DB) MatchRandomEgg(heightM, weightKg float64, maxSecs int32) []EggCand
 			Score:     matchScore(c, h, w),
 			HeightPct: spanPct(c.HeightLow, c.HeightHigh, h),
 			WeightPct: spanPct(c.WeightLow, c.WeightHigh, w),
+			Precious:  c.Precious,
+			ModelID:   c.ModelID,
 		})
 	}
+	out = dedupeEggCandidates(out)
 	// 同分时按 conf_id 升序:map 遍历次序随机,不定序则每次刷新候选顺序都在跳。
 	sort.Slice(out, func(i, j int) bool {
 		if out[i].Score != out[j].Score {
@@ -71,6 +80,73 @@ func (db *DB) MatchRandomEgg(heightM, weightKg float64, maxSecs int32) []EggCand
 		return out[i].ConfID < out[j].ConfID
 	})
 	return out
+}
+
+// dedupeEggCandidates 把候选按「孵出来是谁」收敛成一条一个。
+//
+// 原始筛选给出的是**蛋配置行**,而同一个物种在表里占很多行:血脉变体、异色形态、
+// 首领版本,以及活动纪念蛋借用的那一批。它们区间与时长完全一致,于是会整组一起
+// 落进候选 —— 一颗蛋能刷出 8 条候选,里面只有 4 个不同的物种,看着像坏了。
+//
+// 两步收敛:
+//
+//  1. **先剔变体** —— 异色(品类 2)、血脉、首领。随机蛋孵的是普通个体,这些不该单独占位。
+//     判异色必须看**品类**,不能只匹配名字:110 条异色蛋里有 16 条名字不带「异色」
+//     (如 3360002 蝴蝶陶陶),按名字过滤会漏掉它们,候选里照样出现两个一样的蝴蝶陶陶。
+//
+//  2. **再按外形归并** —— 同一个 model_id 只留一条,优先留**基础形态**(conf_id == model_id)。
+//     血脉变体、活动纪念蛋的 model 都指向基础形态那一行,故这一步自然把「草头鸭」和
+//     「草头鸭(水系血脉)」并成一个。
+//
+// 最后再按**物种名**收一次:蹦蹦种子有 4 个地区形态(草地/火山/沙地/雪山),各自一个
+// model、名字却完全一样。对「猜孵出谁」这个问题它们是同一个答案,列 3 遍只是噪音。
+//
+// 剔变体可能把整组剔空(异色蛋的 model 常指向基础形态之外的 id),此时该组整体不出现 ——
+// 实测这些物种都有对应的基础形态条目在同一时长下兜住,故不会真的漏掉物种
+// (唯一的例外是 3062003 小独角兽(首领血脉),它本就是该被剔掉的变体本身)。
+func dedupeEggCandidates(in []EggCandidate) []EggCandidate {
+	byModel := make(map[uint32]EggCandidate, len(in))
+	for _, c := range in {
+		if isVariantEgg(c) {
+			continue
+		}
+		if prev, ok := byModel[c.ModelID]; !ok || betterEggCandidate(c, prev) {
+			byModel[c.ModelID] = c
+		}
+	}
+	byName := make(map[string]EggCandidate, len(byModel))
+	for _, c := range byModel {
+		if prev, ok := byName[c.Name]; !ok || betterEggCandidate(c, prev) {
+			byName[c.Name] = c
+		}
+	}
+	out := make([]EggCandidate, 0, len(byName))
+	for _, c := range byName {
+		out = append(out, c)
+	}
+	return out
+}
+
+// isVariantEgg 判断这条蛋配置是不是不该单独列出的变体。
+func isVariantEgg(c EggCandidate) bool {
+	// 异色:品类 2。名字不可靠(见 dedupeEggCandidates 的说明)。
+	if c.Precious == 2 {
+		return true
+	}
+	return strings.Contains(c.Name, "血脉") || strings.Contains(c.Name, "首领")
+}
+
+// betterEggCandidate 决定同一组里留哪条:基础形态优先,其次匹配度高的,最后 conf_id 小的。
+// 最后一条纯粹是为了结果稳定 —— 否则同分时留谁取决于 map 遍历次序,每次刷新都在跳。
+func betterEggCandidate(a, b EggCandidate) bool {
+	aBase, bBase := a.ConfID == a.ModelID, b.ConfID == b.ModelID
+	if aBase != bBase {
+		return aBase
+	}
+	if a.Score != b.Score {
+		return a.Score > b.Score
+	}
+	return a.ConfID < b.ConfID
 }
 
 // eggCandidateImg 取候选物种的头像;异色/炫彩蛋孵的是异色个体,但随机蛋无从知道品类,
@@ -86,8 +162,12 @@ func (db *DB) eggCandidateImg(conf uint32) string {
 // matchScore 算匹配度 0-100:**离区间中心越近越高**。
 //
 // 尺寸是在区间内均匀滚的,所以真值落在哪都可能 —— 打分只是把「最像的那个」排前面,
-// 不是概率。合成测试(每维独立均匀、全表做池)下真值进前 3 只有约一半,
-// 故这个分数**只能用来排序,不能用来断言「就是它」**。
+// 不是概率。合成测试(每维独立均匀、全表做池,**未去重**)下真值进前 1 约两成、
+// 进前 3 约一半,故这个分数**只能用来排序,不能用来断言「就是它」**。
+//
+// 注:那个比例是对**未去重**的候选集量出来的;去重剔掉了同物种的重复行(血脉/异色/
+// 首领/地区形态),列表变短,但排序本身没变,故这里的结论仍成立 —— 只是别拿那两个
+// 百分比去描述页面上看到的列表长度。
 func matchScore(c EggConf, h, w int32) float64 {
 	return 100 * (1 - (spanDev(c.HeightLow, c.HeightHigh, h) + spanDev(c.WeightLow, c.WeightHigh, w)))
 }

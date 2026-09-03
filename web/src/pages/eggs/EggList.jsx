@@ -333,9 +333,11 @@ function EggCard({ egg, now, onPet }) {
                             {/* 本地源额外给出蛋落在候选区间内的百分位:两条都齐时才显示,
                                 第三方不提供这两维,故只显示 note(孵化时长文案)。 */}
                             <div className="muted">
-                              匹配度 {m.score}
+                              {/* score 是后端算的 float,原样渲染会出「81.90337105999757」
+                                  这种长尾 —— 它只用于排序,精度到小数一位足够。 */}
+                              匹配度 {m.score?.toFixed(1) ?? '—'}
                               {m.heightPct != null && m.weightPct != null
-                                ? ` · 百分位 身高${m.heightPct.toFixed(2)}% 体重${m.weightPct.toFixed(2)}%`
+                                ? ` · 百分位 身高${m.heightPct.toFixed(1)}% 体重${m.weightPct.toFixed(1)}%`
                                 : m.note ? ` · ${m.note}` : ''}
                             </div>
                           </div>
