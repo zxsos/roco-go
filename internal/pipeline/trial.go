@@ -678,6 +678,16 @@ func (p *Pipeline) trialRunPayload(r *trialRun, damOf map[uint32]int32) *server.
 	out.ChapterName = p.db.TrialChapterName(out.ChapterIdx)
 	out.Chapters = r.chapters
 	out.Effects = r.effects
+	// 词条只给 effect_id 时显示成「本周词条 1001」玩家看不出在改什么规则,
+	// 官方 GRASS_TRIAL_EFFECT_CONF 有名字,顺手带上(查不到的仍只留 id)。
+	for _, e := range r.effects {
+		if n := p.db.TrialEffectName(e); n != "" {
+			if out.EffectsNames == nil {
+				out.EffectsNames = map[uint32]string{}
+			}
+			out.EffectsNames[e] = n
+		}
+	}
 	if r.pet != nil {
 		out.Pet = p.trialPetPayload(r.pet, r.initialFeatures)
 	}
@@ -688,8 +698,13 @@ func (p *Pipeline) trialRunPayload(r *trialRun, damOf map[uint32]int32) *server.
 				Level: e.Level, EventCost: e.EventCost, RewardCost: e.RewardCost,
 				Extra: e.ExtraRewards, Pool: e.RandomSkills, Used: e.UsedRewards,
 			}
-			// 事件对应哪只精灵协议不说,靠标注补(见 trialEventPet)。
+			// 事件对应哪只精灵协议不说,靠官方表/标注补(见 trialEventPet)。
 			o.Pet = p.trialEventPet(e.EventConfID)
+			// 有精灵就不用事件名(头像即是名字);查不到精灵的特殊事件
+			// (商人/魔力之源等)用官方事件名,免得槽位只剩裸 event id。
+			if o.Pet == nil {
+				o.EventName = p.db.TrialEventName(e.EventConfID)
+			}
 			p.trialOptionNames(&o)
 			out.Options = append(out.Options, o)
 		}
@@ -709,6 +724,26 @@ func (p *Pipeline) trialRunPayload(r *trialRun, damOf map[uint32]int32) *server.
 	if r.reward != nil {
 		out.Reward = &server.TrialReward{Event: r.reward.EventConfID, ID: r.reward.RewardID,
 			Extra: r.reward.ExtraIDs, Coin: r.reward.Coin}
+		// 奖励与额外奖励的名:技能查 skills.json,碎片特调(20xx/30xx)查官方效果表。
+		// 特性(288xxx)没有名称表,不带 —— 前端回退 kind+id。
+		if n := p.db.SkillName(r.reward.RewardID); n != "" {
+			out.Reward.Name = n
+		} else if n := p.db.TrialEffectName(r.reward.RewardID); n != "" {
+			out.Reward.Name = n
+		}
+		for _, x := range r.reward.ExtraIDs {
+			n := p.db.TrialEffectName(x)
+			if n == "" {
+				n = p.db.SkillName(x)
+			}
+			if n == "" {
+				continue
+			}
+			if out.Reward.Names == nil {
+				out.Reward.Names = map[uint32]string{}
+			}
+			out.Reward.Names[x] = n
+		}
 	}
 	for _, it := range r.shop {
 		s := server.TrialShopItem{Type: it.ItemType, ID: it.ItemID, Price: it.Price,
@@ -776,9 +811,13 @@ func trialOppPetOf(db *gamedata.DB, base uint32) *server.TrialOppPet {
 	return pet
 }
 
-// trialOptionNames 给一个事件卡片里出现的 id 补中文名(技能 + 能确定的那条特性)。
+// trialOptionNames 给一个事件卡片里出现的 id 补中文名(技能 + 试炼效果 + 能确定
+// 的那条特性)。
 //
-// 技能:按 id 查 skills.json,融合不改 base_skill_id 故融合态同样查得到。
+// 技能:按 id 查 skills.json(官方同源,含 788 试炼段)。
+//
+// 效果:碎片/奖励的 id(20xx 特调、30xx 事件效果等)走官方 GRASS_TRIAL_EFFECT_CONF
+// 的名字 —— 这正是「生命特调/魔攻特调」这类 +1 角标背后要显示的东西。
 //
 // 特性:没有内置名表,但**标出精灵之后就有了** —— 池里那条 288xxx 就是这只精灵
 // 自身的特性,拿形态去查「精灵 → 特性」表即得(见 gamedata.FeatureNameOfBase)。
@@ -796,6 +835,13 @@ func (p *Pipeline) trialOptionNames(o *server.TrialOption) {
 		}
 		if trial.IsFeatureID(id) {
 			feats = append(feats, id)
+			continue
+		}
+		if n := p.db.TrialEffectName(id); n != "" {
+			if o.Names == nil {
+				o.Names = map[uint32]string{}
+			}
+			o.Names[id] = n
 			continue
 		}
 		if n := p.db.SkillName(id); n != "" {
@@ -885,6 +931,19 @@ func (p *Pipeline) trialPetPayload(tp *trial.Pet, initial trial.InitialFeatures)
 		// name 缺失、前端回退显示 id。
 		if n := p.db.SkillName(s.BaseID); n != "" {
 			sk.Name = n
+		}
+		// 被融合来源技能(协议只给 id)查个名,前端「+N」那行才好读;查不到仍只留 id。
+		if len(s.Merged) > 0 {
+			for _, m := range s.Merged {
+				n := p.db.SkillName(m)
+				if n == "" {
+					continue
+				}
+				if sk.MergedNames == nil {
+					sk.MergedNames = map[uint32]string{}
+				}
+				sk.MergedNames[m] = n
+			}
 		}
 		out.Skills = append(out.Skills, sk)
 	}

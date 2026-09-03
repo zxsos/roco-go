@@ -291,7 +291,13 @@ function RunView({ run, active }) {
         {run.effects && run.effects.length > 0 && (
           <div className="trial-meta">
             <span className="muted">本周词条</span>
-            {run.effects.map((e) => <span key={e} className="trial-chip">{e}</span>)}
+            {/* 词条只给 effect_id 时是「1001/1008/…」,后端把官方名字一并下发
+                (effectNames),如 1001=融合次数 —— 只看编号看不出词条在改什么规则 */}
+            {run.effects.map((e) => (
+              <span key={e} className="trial-chip" title={`词条 effect_id ${e}`}>
+                {(run.effectNames && run.effectNames[e]) || e}
+              </span>
+            ))}
           </div>
         )}
       </section>
@@ -354,10 +360,18 @@ function RunView({ run, active }) {
           <h4 className="trial-group-t">待处理奖励</h4>
           <div className="trial-meta">
             <span className="muted">事件 {run.reward.event}</span>
-            <span className="trial-chip trial-reward">{rewardKind(run.reward.id)} {run.reward.id}</span>
-            {run.reward.extra && run.reward.extra.map((x) => (
-              <span key={x} className="trial-chip">额外 {rewardKind(x)} {x}</span>
-            ))}
+            {/* 奖励的名由后端给(name:技能/碎片效果查得到时),查不到回退 kind+id */}
+            <span className="trial-chip trial-reward" title={`reward_id ${run.reward.id}`}>
+              {run.reward.name || `${rewardKind(run.reward.id)} ${run.reward.id}`}
+            </span>
+            {run.reward.extra && run.reward.extra.map((x) => {
+              const en = (run.reward.names && run.reward.names[x]) || ''
+              return (
+                <span key={x} className="trial-chip" title={en ? `额外 reward_id ${x}` : ''}>
+                  额外 {en || `${rewardKind(x)} ${x}`}
+                </span>
+              )
+            })}
           </div>
         </section>
       )}
@@ -533,11 +547,27 @@ function PetCard({ pet }) {
             <div key={s.slot} className={'trial-skill' + (pet.equipped && pet.equipped.includes(s.slot) ? ' on' : '')}>
               <div className="trial-skill-head">
                 <span className="trial-skill-slot">槽 {s.slot}</span>
-                {/* 技能名按 id 查(融合不改 id,故融合态也有名);
-                    资料站未收录的新技能查不到,回退成可标注的 id(玩家可提交名字) */}
-                <span className="trial-skill-id" title={`技能 id ${s.id}`}>
-                  {s.name || <UnknownChip kind="skill" code={s.id} />}
-                </span>
+                {/* 技能名按 id 查(融合不改 id,故融合态也有名);skills.json 只覆盖到
+                    已实证的那批(788 段仍有未收录),查不到时先看全服已审核标注 ——
+                    玩家标过、管理员审过就显示名字(不再要求每次重新标);
+                    都没有才回退成可标注的 id。 */}
+                {(() => {
+                  const a = lookup && lookup('skill', s.id)
+                  if (s.name) {
+                    return <span className="trial-skill-id" title={`技能 id ${s.id}`}>{s.name}</span>
+                  }
+                  if (a) {
+                    return (
+                      <span
+                        className="trial-skill-id"
+                        title={`${a.desc || a.name}(${a.pending ? '你提交的,待管理员审核' : '玩家标注,已审核'})`}
+                      >
+                        {a.name}{a.pending && ' ·待审'}
+                      </span>
+                    )
+                  }
+                  return <UnknownChip kind="skill" code={s.id} />
+                })()}
               </div>
               <div className="trial-skill-meta">
                 <span title="融合后威力">威力 {s.power}</span>
@@ -545,8 +575,8 @@ function PetCard({ pet }) {
                 {s.fusion > 0 && <span className="trial-skill-fusion" title="融合次数">融合 ×{s.fusion}</span>}
               </div>
               {s.merged && s.merged.length > 0 && (
-                <div className="trial-skill-merged" title="被融合进来的技能">
-                  + {s.merged.join(' , ')}
+                <div className="trial-skill-merged" title="被融合进来的技能(融合次数在上方)">
+                  + {s.merged.map((m) => (s.mergedNames || {})[String(m)] || m).join(' , ')}
                 </div>
               )}
             </div>
@@ -601,16 +631,21 @@ function PetCard({ pet }) {
 // IdChip 渲染一个协议 id:查得到名字就显示名字,查不到给标注入口。
 //
 // 三类 id 的"名字"来源不同,故走三条路:
-//   技能(7xxxxx)—— 后端 names 兜了绝大部分(覆盖率 98.7%),没有的是资料站未收录;
+//   技能(7xxxxx)—— 后端 names 来自官方 SKILL_CONF(与协议同源,含试炼 788 段),
+//                   个别表外的再查全服已审核标注(玩家标过、管理员审过即显示名);
 //   特性(288xxx)—— 没有内置名表,先查全服标注,查不到才是未知;
-//   碎片(20xx/30xx)—— 本就无名可查,直接显示 id(玩家也不靠名字认碎片)。
+//   碎片/效果(20xx/30xx)—— 官方 GRASS_TRIAL_EFFECT_CONF 有名字(如 2016=魔攻特调),
+//                   后端带在 names 里,name 参数优先显示;官方表外的才显示 id。
 //
 // used 标出**本节点已经抽过**的:重掷时服务器排除它们,压暗显示能让人一眼看出
 // 「换奖励还剩下哪些可能」。
 function IdChip({ id, name, used, current }) {
   const { lookup } = useAnnotations() || {}
   const isFeat = isFeatureID(id)
-  const anno = isFeat && lookup ? lookup('feature', id) : null
+  const isSkill = isSkillID(id)
+  // 标注类型:特性/技能都能查(kind=feature/skill);碎片没有标注对象。
+  const annoKind = isFeat ? 'feature' : isSkill ? 'skill' : null
+  const anno = annoKind && lookup ? lookup(annoKind, id) : null
   const text = name || (anno && anno.name)
   // 名字来自 wiki 桥接(标注精灵后自动带出的)时提示来源:它是按精灵反查出来的,
   // 与玩家提交、管理员核实的标注不是一回事,不该看着一样。
@@ -621,13 +656,13 @@ function IdChip({ id, name, used, current }) {
         (isFeat ? ' trial-id-feat' : '') + (current ? ' trial-id-cur' : '') +
         (anno && anno.pending ? ' anno-pending' : '')}
       title={[
-        text ? `${text}${from ? `(${from})` : ''}` : `未知${isFeat ? '特性' : '技能'} id ${id}`,
+        text ? `${text}${from ? `(${from})` : ''}` : `未知${isFeat ? '特性' : isSkill ? '技能' : 'id'} ${id}`,
         current ? '当前抽到的(与上方「技能」一致)' : '',
         used ? '本节点已抽过,重掷不会再出' : '',
       ].filter(Boolean).join(' · ')}
     >
-      {text || (isFeat || isSkillID(id)
-        ? <UnknownChip kind={isFeat ? 'feature' : 'skill'} code={id} />
+      {text || (annoKind
+        ? <UnknownChip kind={annoKind} code={id} />
         : id)}
     </span>
   )
@@ -677,7 +712,7 @@ function OptionCard({ o }) {
             {o.extra && o.extra.length > 0 && (
               <span
                 className="trial-opt-extra"
-                title={`额外奖励:${o.extra.map((x) => rewardKind(x) + ' ' + x).join('、')}`}
+                title={`额外奖励:${o.extra.map((x) => name(x) || (rewardKind(x) + ' ' + x)).join('、')}`}
               >
                 +{o.extra.length}
               </span>
@@ -720,7 +755,12 @@ function OptionCard({ o }) {
 
       <div className="trial-opt-swap" title="换掉整只精灵,抽取池随之换成新精灵的一套">
         换事件 🪙 {o.eventCost || 0}
-        <span className="muted trial-opt-slot">槽 {o.slot} · 事件 {o.event}</span>
+        {/* 槽位行:优先给可读名 —— 事件映射到精灵就显示精灵名(豆丁鱼),特殊事件
+            (商人/魔力之源等)显示后端下发的 eventName;两者都没有才退回裸事件 id。
+            原始 event_conf_id 保留在 title 里,方便对照抓包/标注。 */}
+        <span className="muted trial-opt-slot" title={`event_conf_id ${o.event}`}>
+          槽 {o.slot} · {o.eventName || (o.pet && o.pet.name) || ('事件 ' + o.event)}
+        </span>
       </div>
     </div>
   )
