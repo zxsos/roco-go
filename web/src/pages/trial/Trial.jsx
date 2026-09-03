@@ -360,8 +360,12 @@ function RunView({ run, active }) {
           <h4 className="trial-group-t">待处理奖励</h4>
           <div className="trial-meta">
             <span className="muted">事件 {run.reward.event}</span>
-            {/* 奖励的名由后端给(name:技能/碎片效果查得到时),查不到回退 kind+id */}
-            <span className="trial-chip trial-reward" title={`reward_id ${run.reward.id}`}>
+            {/* 奖励的名由后端给(name:技能/碎片效果查得到时),查不到回退 kind+id;
+                技能类主奖励带 desc(官方效果文案),悬停即看它是干嘛的 */}
+            <span
+              className="trial-chip trial-reward"
+              title={run.reward.desc ? `效果:${run.reward.desc} · reward_id ${run.reward.id}` : `reward_id ${run.reward.id}`}
+            >
               {run.reward.name || `${rewardKind(run.reward.id)} ${run.reward.id}`}
             </span>
             {run.reward.extra && run.reward.extra.map((x) => {
@@ -554,7 +558,8 @@ function PetCard({ pet }) {
                 {(() => {
                   const a = lookup && lookup('skill', s.id)
                   if (s.name) {
-                    return <span className="trial-skill-id" title={`技能 id ${s.id}`}>{s.name}</span>
+                    // 悬停给官方效果文案(下挂 desc 行与之互补:行内一眼看得到)
+                    return <span className="trial-skill-id" title={s.desc ? `效果:${s.desc} · 技能 id ${s.id}` : `技能 id ${s.id}`}>{s.name}</span>
                   }
                   if (a) {
                     return (
@@ -569,6 +574,9 @@ function PetCard({ pet }) {
                   return <UnknownChip kind="skill" code={s.id} />
                 })()}
               </div>
+              {/* 官方效果文案常驻一行(小灰字),不悬停也能看懂这技能是干嘛的;
+                  desc 与 name 同源同键,官方表内技能必有,查不到就没有这行 */}
+              {s.desc && <div className="trial-skill-desc">{s.desc}</div>}
               <div className="trial-skill-meta">
                 <span title="融合后威力">威力 {s.power}</span>
                 <span title="融合后能耗">能耗 {s.cost}</span>
@@ -638,8 +646,9 @@ function PetCard({ pet }) {
 //                   后端带在 names 里,name 参数优先显示;官方表外的才显示 id。
 //
 // used 标出**本节点已经抽过**的:重掷时服务器排除它们,压暗显示能让人一眼看出
-// 「换奖励还剩下哪些可能」。
-function IdChip({ id, name, used, current }) {
+// 「换奖励还剩下哪些可能」。desc 是后端随包下发的官方技能效果文案(仅技能 id),
+// 悬停即看「这技能是干嘛的」。
+function IdChip({ id, name, used, current, desc }) {
   const { lookup } = useAnnotations() || {}
   const isFeat = isFeatureID(id)
   const isSkill = isSkillID(id)
@@ -657,6 +666,7 @@ function IdChip({ id, name, used, current }) {
         (anno && anno.pending ? ' anno-pending' : '')}
       title={[
         text ? `${text}${from ? `(${from})` : ''}` : `未知${isFeat ? '特性' : isSkill ? '技能' : 'id'} ${id}`,
+        desc ? `效果:${desc}` : '',
         current ? '当前抽到的(与上方「技能」一致)' : '',
         used ? '本节点已抽过,重掷不会再出' : '',
       ].filter(Boolean).join(' · ')}
@@ -701,6 +711,8 @@ function OptionCard({ o }) {
   const pool = o.pool || []
   const used = new Set(o.used || [])
   const name = (id) => (o.names || {})[String(id)]
+  // 效果文案:后端只给技能类 id 带(见 TrialOption.Descs),特性/碎片查不到。
+  const desc = (id) => (o.descs || {})[String(id)]
   return (
     <div className="trial-opt">
       <div className="trial-opt-box">
@@ -712,7 +724,9 @@ function OptionCard({ o }) {
             {o.extra && o.extra.length > 0 && (
               <span
                 className="trial-opt-extra"
-                title={`额外奖励:${o.extra.map((x) => name(x) || (rewardKind(x) + ' ' + x)).join('、')}`}
+                title={`额外奖励:${o.extra.map((x) =>
+                  `${name(x) || (rewardKind(x) + ' ' + x)}${desc(x) ? `:${desc(x)}` : ''}`
+                ).join('、')}`}
               >
                 +{o.extra.length}
               </span>
@@ -726,8 +740,8 @@ function OptionCard({ o }) {
         <div className="trial-opt-reward">
           <span className="muted trial-opt-kind">{rewardKind(o.reward)}</span>
           {name(o.reward)
-            ? <b className="trial-opt-name">{name(o.reward)}</b>
-            : <IdChip id={o.reward} />}
+            ? <b className="trial-opt-name" title={desc(o.reward) ? `效果:${desc(o.reward)}` : ''}>{name(o.reward)}</b>
+            : <IdChip id={o.reward} desc={desc(o.reward)} />}
         </div>
 
         <div className="trial-opt-meta">
@@ -745,7 +759,7 @@ function OptionCard({ o }) {
                 {pool.map((id) => (
                   // current:池里这一条就是当前抽到的(与上方「技能」是同一个 id),
                   // 圈出来免得看着像「两个不同的奖励」。
-                  <IdChip key={id} id={id} name={name(id)} used={used.has(id)} current={id === o.reward} />
+                  <IdChip key={id} id={id} name={name(id)} desc={desc(id)} used={used.has(id)} current={id === o.reward} />
                 ))}
               </div>
             </div>

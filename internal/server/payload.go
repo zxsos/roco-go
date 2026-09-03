@@ -350,6 +350,7 @@ type TrialPet struct {
 type TrialSkill struct {
 	ID     uint32   `json:"id"`               // base_skill_id
 	Name   string   `json:"name,omitempty"`   // 技能中文名;查不到时缺失(见下)
+	Desc   string   `json:"desc,omitempty"`   // 官方效果文案(SKILL_CONF.desc 纯文本);供技能行常驻展示
 	Power  uint32   `json:"power"`            // 融合后威力
 	Cost   uint32   `json:"cost"`             // 融合后能耗
 	Fusion uint32   `json:"fusion,omitempty"` // 融合次数(0=未融合)
@@ -381,8 +382,13 @@ type TrialOption struct {
 	// 特性名则要**先标出精灵**才能查 —— 走「精灵 → 特性」表(见
 	// gamedata.FeatureNameOfBase),这正是标注精灵省下的那一步:池里那条 288xxx
 	// 不用玩家再标一次。查不到的 id 不进这张表,前端显示裸 id 并给标注入口。
-	Names      map[uint32]string `json:"names,omitempty"`
-	Level      uint32            `json:"level,omitempty"`
+	Names map[uint32]string `json:"names,omitempty"`
+	// Descs 是本卡片里**技能类** id 的官方效果文案(id -> desc,查得到才进表)。
+	//
+	// 与 Names 互补:Names 管「叫什么」,Descs 管「是干嘛的」——技能 chip 悬停
+	// (以及候选池/奖励行)贴出效果,玩家不查游戏也能看懂。特性/碎片没有效果文案。
+	Descs map[uint32]string `json:"descs,omitempty"`
+	Level uint32            `json:"level,omitempty"`
 	EventCost  uint32            `json:"eventCost,omitempty"`  // 重掷该事件的报价
 	RewardCost uint32            `json:"rewardCost,omitempty"` // 重掷奖励的报价
 	Extra      []uint32          `json:"extra,omitempty"`      // 额外奖励(多是碎片)
@@ -426,6 +432,9 @@ type TrialReward struct {
 	// Name 是奖励的中文名(技能 7xxxxx / 碎片效果 20xx-30xx 查得到时):
 	// 特性 288xxx 无名称表故不带,前端回退 kind+id。
 	Name string `json:"name,omitempty"`
+	// Desc 是主奖励的效果文案:奖励是技能时才带(其余类型无 desc),
+	// 悬停即可看这技能是干嘛的。
+	Desc string `json:"desc,omitempty"`
 	// Names 是 Extra 里查得到中文名的 id -> 名字(来源同 Name),让额外奖励那排
 	// 碎片也能显示「魔攻特调」而不是「碎片 2016」。查不到的 id 不进这张表。
 	Names map[uint32]string `json:"names,omitempty"`

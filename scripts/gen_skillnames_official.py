@@ -22,6 +22,7 @@
 """
 import json
 import os
+import re
 import sys
 
 SKILL_CONF = os.environ.get(
@@ -38,11 +39,19 @@ with open(SKILL_CONF, encoding="utf-8") as f:
     rows = json.load(f)["RocoDataRows"]
 
 official = {}
+descs = {}
 for k, v in rows.items():
     nm = (v.get("name") or "").strip()
     if not nm:
         continue
     official[int(k)] = nm
+    d = (v.get("desc") or "").strip()
+    # desc 里用 <desc_id=1002>灼烧</> 引用词条(标签中间就是可显示的词条名),
+    # 直接剥掉标签、保留词条名做纯文本 —— tooltip / 效果行按纯文本渲染。
+    d = re.sub(r"<desc_id=\d+>", "", d)
+    d = d.replace("</>", "")
+    if d:
+        descs[int(k)] = d
 
 with open(DATA, encoding="utf-8") as f:
     out = json.load(f)
@@ -51,20 +60,25 @@ old = {int(k): v for k, v in out.get("names", {}).items()}
 added = {k: v for k, v in official.items() if k not in old}
 renamed = {k: (old[k], v) for k, v in official.items() if k in old and old[k] != v}
 dropped = {k: v for k, v in old.items() if k not in official}
+empty_desc = sum(1 for k in official if k not in descs)
 
 # 试炼专属 788 段的覆盖情况(重点:早先只能手抄 13 条,官方整段都在)
 trial_off = {k: v for k, v in official.items() if 7880000 <= k < 7890000}
 
 out["names"] = {str(k): official[k] for k in sorted(official)}
+out["descs"] = {str(k): descs[k] for k in sorted(descs)}
 out["_source"] = (
-    "names: 官方解包 BinDataCompressed/SKILL_CONF.json(与协议 base_skill_id 同源,"
-    "含试炼专属 788 段整段);skills/innate/stone/blood: skillIds.json(aismile.dev)"
+    "names/descs: 官方解包 BinDataCompressed/SKILL_CONF.json(与协议 base_skill_id 同源,"
+    "含试炼专属 788 段整段;desc 为官方效果文案,已剥 <desc_id=…></> 标签成纯文本);"
+    "skills/innate/stone/blood: skillIds.json(aismile.dev)"
     "+skillGuideData.json(arkmeng.cn),第三方资料站过渡方案"
 )
 out["_note"] = (
-    "names: 技能 id -> 名,供只给 id 的场景直接查(试炼页/宠物详情)。"
-    "由 scripts/gen_skillnames_official.py 刷新,非手抄 —— 7880012=炙热波动等新技能"
-    "不必再走众包标注。官方表含 200xxx 老编号与 7xxxxx,id 与协议同源。"
+    "names: 技能 id -> 名,供只给 id 的场景直接查(试炼页/宠物详情);"
+    "descs: 技能 id -> 官方效果文案(每个技能都有,1918/1918 非空),"
+    "试炼实时视图技能槽/技能池显示效果用。均由 scripts/gen_skillnames_official.py"
+    "刷新,非手抄 —— 7880012=炙热波动等新技能不必再走众包标注。"
+    "官方表含 200xxx 老编号与 7xxxxx,id 与协议同源。"
     "skills/innate/stone/blood 的说明见 gen_skills.py。"
 )
 
@@ -75,7 +89,8 @@ print(
     f"已刷新 {DATA}\n"
     f"  names: {len(old)} -> {len(official)}(官方 SKILL_CONF 全量)\n"
     f"  新增 {len(added)} 个 id,改名 {len(renamed)} 个,移除 {len(dropped)} 个\n"
-    f"  试炼 788 段官方覆盖: {len(trial_off)} 条"
+    f"  试炼 788 段官方覆盖: {len(trial_off)} 条\n"
+    f"  descs: {len(descs)} 条官方效果文案(全量非空;{empty_desc} 条仅名无文案)"
 )
 if renamed:
     print("  改名示例:")

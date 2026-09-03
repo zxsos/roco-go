@@ -726,8 +726,10 @@ func (p *Pipeline) trialRunPayload(r *trialRun, damOf map[uint32]int32) *server.
 			Extra: r.reward.ExtraIDs, Coin: r.reward.Coin}
 		// 奖励与额外奖励的名:技能查 skills.json,碎片特调(20xx/30xx)查官方效果表。
 		// 特性(288xxx)没有名称表,不带 —— 前端回退 kind+id。
+		// Desc 只有主奖励是技能时才给效果文案(技能名悬停即看它是干嘛的)。
 		if n := p.db.SkillName(r.reward.RewardID); n != "" {
 			out.Reward.Name = n
+			out.Reward.Desc = p.db.SkillDesc(r.reward.RewardID)
 		} else if n := p.db.TrialEffectName(r.reward.RewardID); n != "" {
 			out.Reward.Name = n
 		}
@@ -850,6 +852,12 @@ func (p *Pipeline) trialOptionNames(o *server.TrialOption) {
 			}
 			o.Names[id] = n
 		}
+		if d := p.db.SkillDesc(id); d != "" {
+			if o.Descs == nil {
+				o.Descs = map[uint32]string{}
+			}
+			o.Descs[id] = d
+		}
 	}
 	if len(feats) != 1 || o.Pet == nil {
 		return
@@ -926,12 +934,13 @@ func (p *Pipeline) trialPetPayload(tp *trial.Pet, initial trial.InitialFeatures)
 			ID: s.BaseID, Power: s.Power, Cost: s.EnergyCost,
 			Fusion: s.FusionCount, Slot: s.SlotPos, Merged: s.Merged,
 		}
-		// 技能名按 base_skill_id 查。融合**不会**改变 base_skill_id(只改威力与
-		// fusion_count),故融合态技能同样能查到名。查不到即资料站未收录,
-		// name 缺失、前端回退显示 id。
+		// 技能名/效果按 base_skill_id 查官方 SKILL_CONF。融合**不会**改变
+		// base_skill_id(只改威力与 fusion_count),故融合态技能同样能查到。
+		// names 与 descs 同键全量覆盖(1918 条),个别表外 id 才缺失回退显示 id。
 		if n := p.db.SkillName(s.BaseID); n != "" {
 			sk.Name = n
 		}
+		sk.Desc = p.db.SkillDesc(s.BaseID)
 		// 被融合来源技能(协议只给 id)查个名,前端「+N」那行才好读;查不到仍只留 id。
 		if len(s.Merged) > 0 {
 			for _, m := range s.Merged {
