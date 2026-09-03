@@ -202,21 +202,20 @@ export const getEggs = (params) => getJSON('/api/eggs?' + buildQuery(params), { 
 
 // queryEggMatch 查随机蛋(神奇的蛋)可能孵出的物种。
 //
-// 默认走**本地解包数据**(后端按 PET_EGG_CONF 反推,零外部依赖、无限流、离线可用);
-// useAPI=true 时改用第三方图鉴复核(需服务端配 -egg-api-key,限流 10 次/分钟,
-// 比本地多给系别)。两条路径的响应结构一致,前端不分支:
-//   {source:"local"|"api", total, apiAvailable,
-//    matches:[{name,img,hatchSecs,score,heightPct,weightPct,confId,note}]}
+// **用哪个数据源由服务端配置决定,前端传不了** —— 数据源是对全服生效的运维选项,
+// 若能让请求参数覆盖,任何玩家都能夹带 src=xianyu 去烧第三方额度。想换源只能走
+// 管理面板(见 adminEggSourceSet)。
+//
+// 两个源的响应结构一致,前端不分支:
+//   {source:"local"|"xianyu", total, matches:[{name,img,hatchSecs,score,heightPct,weightPct,confId,note}]}
 //
 // img 是**可直接赋给 <img src> 的完整值**:本地给 /img/ 开头的站内路径、第三方给外链,
 // 故这里不要再用 imgURL() 去拼(其它接口给的是相对路径,唯独这条不是)。
 //
-// maxSecs 是这颗蛋孵满所需的秒数,本地路径拿它当最强的一维约束(见 docs/data.md
+// maxSecs 是这颗蛋孵满所需的秒数,本地源拿它当最强的一维约束(见 docs/data.md
 // 「随机蛋的区间藏在哪」),能传一定要传。
-export const queryEggMatch = async (height, weight, maxSecs, useAPI = false) => {
-  const params = { height, weight, maxSecs }
-  if (useAPI) params.src = 'api'
-  const r = await fetch('/api/eggs/query?' + buildQuery(params))
+export const queryEggMatch = async (height, weight, maxSecs) => {
+  const r = await fetch('/api/eggs/query?' + buildQuery({ height, weight, maxSecs }))
   if (!r.ok) throw await httpError(r, '查询失败')
   return r.json()
 }
@@ -502,6 +501,18 @@ export const adminMerchantSource = () => adminFetch('/api/admin/merchant-source'
 // 后端切换时会清空当日已缓存货单并按新源重新获取,故这个调用比一般的保存慢一点,
 // 前端要给出「保存中」的状态(见 MerchantSourceCard)。
 export const adminMerchantSourceSet = (source) => postJSON('/api/admin/merchant-source', { source })
+
+// adminEggSource 查蛋数据源:{source, keySet, sources:[{id, name, needKey}]}。
+// sources 由后端下发(合法标识只有后端能校验),前端只负责展示文案。
+export const adminEggSource = () => adminFetch('/api/admin/egg-source').then(async (r) => {
+  if (!r.ok) throw await adminError(r, '拉取数据源失败')
+  return r.json()
+})
+
+// adminEggSourceSet 切换查蛋数据源(本地源 / 咸鱼源)。
+// 与远行商人不同,这里切源**没有代价**:两个源都是每次请求实时算、没有跨源缓存,
+// 故切换立即生效,也不用清任何东西。
+export const adminEggSourceSet = (source) => postJSON('/api/admin/egg-source', { source })
 
 // adminTestMail 发送测试邮件验证 SMTP 配置(错误信息透传后端 SMTP 具体报错)。
 // subject/body 可自定义,为空则后端用默认标题/内容。

@@ -10,16 +10,18 @@ import (
 	"testing"
 )
 
-// 本文件锁住 /api/eggs/query 的两条路径与它们共用的那份契约。
+// 本文件锁住 /api/eggs/query 的两个数据源与它们共用的那份契约,以及管理面板的切源。
 //
 // 为什么值得测:这条接口是**两个数据源对同一个问题的两套答案**,而前端只认一份契约。
-// 任何一边悄悄改了字段名、或者 src 参数没生效(默认走了第三方),都不会报错 ——
-// 页面照样列出候选,只是烧了不该烧的令牌额度、或者候选少了系别那列。
+// 任何一边悄悄改了字段名、或者默认源不对,都不会报错 —— 页面照样列出候选,
+// 只是烧了不该烧的第三方额度,或者候选里混进了时长根本对不上的物种。
 //
-// 三条最要紧的:
-//  1. 默认必须走本地 —— 否则每次点「猜猜孵出谁」都在烧第三方额度,而这正是换本地的初衷。
-//  2. 两条路径的响应结构必须一致 —— 前端不分支,结构一岔就是静默丢字段。
-//  3. src=api 未配令牌必须 503 且**不落统计** —— 统计是给「烧了多少额度」看的,
+// 四条最要紧的:
+//  1. 默认必须走本地 —— 本地更准(用 maxSecs 硬筛),且不会烧第三方额度。
+//  2. 用哪个源由**服务端配置**决定,请求参数覆盖不了 —— 否则任何玩家都能夹带
+//     src=xianyu 去烧额度。
+//  3. 两个源的响应结构必须一致 —— 前端不分支,结构一岔就是静默丢字段。
+//  4. 咸鱼源未配令牌必须 503 且**不落统计** —— 统计是给「烧了多少额度」看的,
 //     没发出去的请求不该算进去。
 
 // stubMerchantFetch 挡住远行商人的后台回源。
@@ -70,10 +72,6 @@ func TestEggQueryDefaultsToLocal(t *testing.T) {
 	if out.Total != len(out.Matches) {
 		t.Errorf("total=%d 与 matches 长度 %d 不一致", out.Total, len(out.Matches))
 	}
-	// 未配令牌时复核按钮不该出现。
-	if out.APIAvailable {
-		t.Error("未配 -egg-api-key 时 apiAvailable 应为 false")
-	}
 	// 破壳真值必须在候选里,且**百分位要与当年那份实测记录对得上**。
 	//
 	// 百分位这条比"在不在候选里"严格得多:docs/data.md 记着这颗蛋落在权杖-Ⅱ 区间内的
@@ -113,7 +111,7 @@ func TestEggQueryDefaultsToLocal(t *testing.T) {
 	}
 }
 
-// TestEggQueryLocalNeedsNoKey 本地路径与令牌彻底解耦:配了令牌也仍走本地。
+// TestEggQueryLocalNeedsNoKey 本地路径与令牌彻底解耦:配了令牌也仍走本地(默认源)。
 func TestEggQueryLocalNeedsNoKey(t *testing.T) {
 	s := newTestServer(t)
 	stubMerchantFetch(t)
@@ -122,25 +120,51 @@ func TestEggQueryLocalNeedsNoKey(t *testing.T) {
 	if rr.Code != http.StatusOK {
 		t.Fatalf("本地查询失败: %d %s", rr.Code, rr.Body.String())
 	}
-	if out.Source != "local" {
-		t.Errorf("显式 src=local 之外,默认也必须是 local,实际 %q", out.Source)
-	}
-	if !out.APIAvailable {
-		t.Error("已配 -egg-api-key 时 apiAvailable 应为 true(前端据此显示复核按钮)")
+	if out.Source != eggSrcLocal {
+		t.Errorf("source = %q, 期望 %s(默认源,即便配了令牌)", out.Source, eggSrcLocal)
 	}
 }
 
-// TestEggQueryAPIWithoutKey src=api 未配令牌:503,且不落统计。
-func TestEggQueryAPIWithoutKey(t *testing.T) {
-	s := newTestServer(t) // eggAPIKey 为空
-	rr, _ := eggQuery(t, s, "height=0.20&weight=11.443&src=api")
-	if rr.Code != http.StatusServiceUnavailable {
-		t.Errorf("未配令牌时 src=api 应返回 503,实际 %d: %s", rr.Code, rr.Body.String())
+// TestEggQuerySrcParamIgnored 请求参数里的 src 必须**无效**。
+//
+// 为什么值得单独测:数据源是对全服生效的运维选项,且咸鱼源限流 10 次/分钟。若能让
+// 请求参数覆盖,任何玩家都能夹带 src=xianyu 去烧额度 —— 而页面上没有任何迹象。
+// 这条断言挡的就是「顺手把 src 参数接回来」。
+func TestEggQuerySrcParamIgnored(t *testing.T) {
+	s := newTestServer(t)
+	stubMerchantFetch(t)
+	s.eggAPIKey = "test-key"
+	for _, q := range []string{
+		"height=0.20&weight=11.443&maxSecs=57600&src=xianyu",
+		"height=0.20&weight=11.443&maxSecs=57600&src=api",
+	} {
+		rr, out := eggQuery(t, s, q)
+		if rr.Code != http.StatusOK {
+			t.Fatalf("带 src=%q 的请求失败: %d %s", q, rr.Code, rr.Body.String())
+		}
+		if out.Source != eggSrcLocal {
+			t.Errorf("请求带 %q 时 source = %q —— src 参数不该能覆盖服务端配置", q, out.Source)
+		}
 	}
-	// 本地路径不受影响,仍有结果可选 —— 复核失败不该让「猜猜孵出谁」整个不可用。
+}
+
+// TestEggQueryXianyuWithoutKey 咸鱼源未配令牌:503,且不落统计。
+func TestEggQueryXianyuWithoutKey(t *testing.T) {
+	s := newTestServer(t) // eggAPIKey 为空
+	if err := s.eggSetSource(eggSrcXianyu); err != nil {
+		t.Fatalf("切源: %v", err)
+	}
+	rr, _ := eggQuery(t, s, "height=0.20&weight=11.443")
+	if rr.Code != http.StatusServiceUnavailable {
+		t.Errorf("咸鱼源未配令牌应返回 503,实际 %d: %s", rr.Code, rr.Body.String())
+	}
+	// 切回本地后立刻可用 —— 面板上改一下就能恢复,不用重启。
+	if err := s.eggSetSource(eggSrcLocal); err != nil {
+		t.Fatalf("切回本地: %v", err)
+	}
 	rr2, out := eggQuery(t, s, "height=0.20&weight=11.443&maxSecs=57600")
 	if rr2.Code != http.StatusOK || out.Total == 0 {
-		t.Errorf("未配令牌时本地路径仍应可用: %d / %+v", rr2.Code, out)
+		t.Errorf("切回本地后应立刻可用: %d / %+v", rr2.Code, out)
 	}
 }
 
@@ -169,15 +193,23 @@ func TestEggQueryBothSourcesShareShape(t *testing.T) {
 	s := newTestServer(t)
 	stubMerchantFetch(t)
 	s.eggAPIKey = "test-key"
-	rr, apiOut := eggQuery(t, s, "height=0.20&weight=11.443&src=api")
-	if rr.Code != http.StatusOK {
-		t.Fatalf("src=api 失败: %d %s", rr.Code, rr.Body.String())
+	// 两个源的响应要分别取:先用当前(本地)源查一次,再切到咸鱼源查一次。
+	_, localOut := eggQuery(t, s, "height=0.20&weight=11.443&maxSecs=57600")
+	if err := s.eggSetSource(eggSrcXianyu); err != nil {
+		t.Fatalf("切到咸鱼源: %v", err)
 	}
-	if apiOut.Source != "api" {
-		t.Errorf("source = %q, 期望 api", apiOut.Source)
+	rr, apiOut := eggQuery(t, s, "height=0.20&weight=11.443")
+	if rr.Code != http.StatusOK {
+		t.Fatalf("咸鱼源查询失败: %d %s", rr.Code, rr.Body.String())
+	}
+	if apiOut.Source != eggSrcXianyu {
+		t.Errorf("source = %q, 期望 %s", apiOut.Source, eggSrcXianyu)
 	}
 	if len(apiOut.Matches) != 1 {
 		t.Fatalf("第三方候选应为 1 条,实际 %d", len(apiOut.Matches))
+	}
+	if localOut.Source != eggSrcLocal {
+		t.Errorf("切到咸鱼源后,先前那份本地结果的 source = %q,期望 %s", localOut.Source, eggSrcLocal)
 	}
 	// 外链原样透出(前端直接给 <img src>,不拼 /img/)。
 	if apiOut.Matches[0].Img != "https://example.com/a.png" {
@@ -187,12 +219,11 @@ func TestEggQueryBothSourcesShareShape(t *testing.T) {
 		t.Errorf("第三方 note 应取 hatch_label,实际 %q", apiOut.Matches[0].Note)
 	}
 
-	_, localOut := eggQuery(t, s, "height=0.20&weight=11.443&maxSecs=57600")
 	// 结构同一:两边都得有 name / img / hatchSecs / score / note 这些键。
 	for _, label := range []struct {
 		what string
 		out  eggMatchOut
-	}{{"local", localOut}, {"api", apiOut}} {
+	}{{"local", localOut}, {"xianyu", apiOut}} {
 		for _, m := range label.out.Matches {
 			if m.Name == "" {
 				t.Errorf("[%s] 候选缺 name: %+v", label.what, m)
@@ -227,6 +258,158 @@ func TestEggQueryLocalNote(t *testing.T) {
 	_, out3 := eggQuery(t, s, "height=0.20&weight=11.443&maxSecs=300")
 	if len(out3.Matches) > 0 && out3.Matches[0].Note != "孵化 5 分钟" {
 		t.Errorf("300 秒的文案应是「孵化 5 分钟」,实际 %q", out3.Matches[0].Note)
+	}
+}
+
+// TestAdminEggSourceSwitch 走 HTTP 入口验证切源:默认源、合法性校验、即时生效。
+//
+// 与远行商人的切源有两点不同,故这里**不**照抄它的断言:
+//   - 不清缓存(两个源都是实时算,没有跨源复用的缓存),故切源没有「当天数据为空」
+//     的代价,也就不用断言缓存被清空;
+//   - 默认源是本地(而非咸鱼),且本地源**不需要令牌** —— 咸鱼源才是需要令牌的那个。
+func TestAdminEggSourceSwitch(t *testing.T) {
+	s := newTestServer(t)
+	stubMerchantFetch(t)
+	token := testAdminToken(t, s)
+
+	adminGet := func() map[string]any {
+		t.Helper()
+		rr := httptest.NewRecorder()
+		req := httptest.NewRequest("GET", "/api/admin/egg-source", nil)
+		req.Header.Set("X-Admin-Token", token)
+		s.Handler().ServeHTTP(rr, req)
+		if rr.Code != http.StatusOK {
+			t.Fatalf("GET egg-source = %d: %s", rr.Code, rr.Body.String())
+		}
+		var got map[string]any
+		if err := json.Unmarshal(rr.Body.Bytes(), &got); err != nil {
+			t.Fatalf("解析: %v", err)
+		}
+		return got
+	}
+	adminPost := func(src string) int {
+		t.Helper()
+		rr := httptest.NewRecorder()
+		req := httptest.NewRequest("POST", "/api/admin/egg-source",
+			strings.NewReader(`{"source":"`+src+`"}`))
+		req.Header.Set("X-Admin-Token", token)
+		s.Handler().ServeHTTP(rr, req)
+		return rr.Code
+	}
+
+	// ① 默认源是本地,且源清单由后端下发
+	got := adminGet()
+	if got["source"] != eggSrcLocal {
+		t.Errorf("默认源 = %v, 期望 %s", got["source"], eggSrcLocal)
+	}
+	if got["keySet"] != false {
+		t.Errorf("keySet = %v, 期望 false(newTestServer 不带 -egg-api-key)", got["keySet"])
+	}
+	sources, _ := got["sources"].([]any)
+	if len(sources) != 2 {
+		t.Errorf("源清单应为 2 个,实际 %d", len(sources))
+	}
+
+	// ② 非法标识必须被拒,且**不能**改动当前配置
+	if code := adminPost("nope"); code != http.StatusBadRequest {
+		t.Errorf("切到未知源 = %d, 期望 400", code)
+	}
+	if s.eggSource() != eggSrcLocal {
+		t.Errorf("被拒的切换仍改了当前源: %s", s.eggSource())
+	}
+
+	// ③ 切到咸鱼源:未配令牌时查询应 503(它确实需要令牌)
+	if code := adminPost(eggSrcXianyu); code != http.StatusOK {
+		t.Fatalf("切到咸鱼源 = %d, 期望 200", code)
+	}
+	if s.eggSource() != eggSrcXianyu {
+		t.Fatalf("切换后当前源 = %s, 期望 %s", s.eggSource(), eggSrcXianyu)
+	}
+	rr := httptest.NewRecorder()
+	s.Handler().ServeHTTP(rr, httptest.NewRequest("GET", "/api/eggs/query?height=0.2&weight=11.443", nil))
+	if rr.Code != http.StatusServiceUnavailable {
+		t.Errorf("咸鱼源未配令牌 = %d, 期望 503", rr.Code)
+	}
+
+	// ④ 切回本地源:立刻可用,无需重启 —— 这正是「面板改方式」的意义
+	if code := adminPost(eggSrcLocal); code != http.StatusOK {
+		t.Fatalf("切回本地源 = %d, 期望 200", code)
+	}
+	rr = httptest.NewRecorder()
+	s.Handler().ServeHTTP(rr, httptest.NewRequest("GET", "/api/eggs/query?height=0.20&weight=11.443&maxSecs=57600", nil))
+	if rr.Code != http.StatusOK {
+		t.Errorf("切回本地源后 = %d, 期望 200: %s", rr.Code, rr.Body.String())
+	}
+	var out eggMatchOut
+	if err := json.Unmarshal(rr.Body.Bytes(), &out); err != nil {
+		t.Fatalf("解析: %v", err)
+	}
+	if out.Source != eggSrcLocal {
+		t.Errorf("响应 source = %q, 期望 %q(前端据此标注来源,错了就是标注说谎)", out.Source, eggSrcLocal)
+	}
+	if out.Total == 0 {
+		t.Error("切回本地源后应有候选")
+	}
+}
+
+// TestEggSourcePersists 切过的源必须落库,重启后仍是它。
+//
+// 只改内存镜像的实现能过上面那条测试(同一进程内看不出来),却会在重启后悄悄回到
+// 默认源 —— 管理员以为自己切过的源还生效着,看到的却是另一份数据。
+//
+// 必须**经 eggSetSource 切**(而不是直接 SetEggSource 写库):直接写库测的是 store,
+// 而「切源这个动作到底有没有落库」才是要守的东西 —— 少了那次写入,内存里是对的了,
+// 重启后却回到默认源,而这条断言如果只查 store 就照样全绿。
+func TestEggSourcePersists(t *testing.T) {
+	s := newTestServer(t)
+	if err := s.eggSetSource(eggSrcXianyu); err != nil {
+		t.Fatalf("切源: %v", err)
+	}
+	// 内存镜像:切完立刻生效
+	if got := s.eggSource(); got != eggSrcXianyu {
+		t.Fatalf("切源后内存里的源 = %s, 期望 %s", got, eggSrcXianyu)
+	}
+	// 库里也必须有,否则重启即丢
+	if got := s.store.EggSource(); got != eggSrcXianyu {
+		t.Fatalf("库里读回 = %q, 期望 %q —— eggSetSource 没落库的话重启会丢", got, eggSrcXianyu)
+	}
+	s2 := newTestServerFrom(t, s.store)
+	if got := s2.eggSource(); got != eggSrcXianyu {
+		t.Errorf("重启后源 = %s, 期望 %s —— 未落库的话重启会悄悄回到默认源", got, eggSrcXianyu)
+	}
+}
+
+// TestEggSourceValid 标识合法性与默认回退。
+func TestEggSourceValid(t *testing.T) {
+	for _, ok := range []string{eggSrcLocal, eggSrcXianyu} {
+		if !eggSourceValid(ok) {
+			t.Errorf("eggSourceValid(%q) = false, 期望 true", ok)
+		}
+	}
+	for _, bad := range []string{"", "nope", "LOCAL", "local ", "api"} {
+		if eggSourceValid(bad) {
+			t.Errorf("eggSourceValid(%q) = true, 期望 false", bad)
+		}
+	}
+	// 库里的非法值(老数据/手改过)必须回退默认源,而不是原样生效
+	s := newTestServer(t)
+	if err := s.store.SetEggSource("garbage"); err != nil {
+		t.Fatalf("写入: %v", err)
+	}
+	s2 := newTestServerFrom(t, s.store)
+	if got := s2.eggSource(); got != eggSrcDefault {
+		t.Errorf("库里是非法值时源 = %s, 期望回退默认 %s", got, eggSrcDefault)
+	}
+	// 展示名:未知标识原样返回(面板显示原始值,便于排查)
+	if got := eggSourceName("garbage"); got != "garbage" {
+		t.Errorf("eggSourceName(未知) = %q, 期望原样返回", got)
+	}
+	// 需要令牌的只有咸鱼源 —— 本地源的优势恰恰是不要令牌
+	if eggSourceNeedKey(eggSrcLocal) {
+		t.Error("本地源不应需要令牌")
+	}
+	if !eggSourceNeedKey(eggSrcXianyu) {
+		t.Error("咸鱼源需要令牌")
 	}
 }
 
