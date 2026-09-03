@@ -89,6 +89,24 @@ def base_of_name(nm: str):
     return min(pref) if pref else min(hits)
 
 
+def event_base(eid: int, nm: str):
+    """官方事件(eid)的精灵名 -> 我方 petbase id(events 映射用)。
+
+    - 普通遭遇(100k/110k 段):官方 name 是精灵**基础名**,与 base_of_name 同口径
+      (取 id<10000 常规形态),与普通池/遇见图一致;
+    - 首领(200k 段):官方 name 是形态基础名,我方战斗形态全名 = name + 「草系徽章-
+      首领形态」(8101~8122,gen_trial_official.py 的 boss 解析同款),先拼后缀匹配,
+      命中不了才退回基础名(至少给得出名字与头像)。
+    """
+    if 200000 <= eid < 300000:
+        want = nm + "_草系徽章-首领形态"
+        hits = [pid for pid, v in petbase.items()
+                if v["n"] + (("_" + v["f"]) if v.get("f") else "") == want]
+        if hits:
+            return min(hits)
+    return base_of_name(nm)
+
+
 def chapter_of(mode_id: int, idx: int) -> int:
     """难度 id -> 第 idx 章(1 起)对应的官方 chapter 配置 id。"""
     return conf[str(mode_id)]["chapter"][idx - 1]
@@ -226,6 +244,29 @@ for pk in ("10000", "10001"):
     p = period.get(pk, {})
     if p:
         activity[pk] = period_text(p)
+
+# ---- 6. events:官方事件 -> 精灵(实时视图把事件号翻译成头像,免人工标注) ----
+# 协议只下放 event_conf_id;普通遭遇(100k/110k)与首领(200k)在 EVENT_CONF 里有
+# 精灵名,实时视图据此直接显示对手。NPC 阵容(300xxx+,整队)与祝福/商人(5~7x 段)
+# 不是单只精灵,不入表 —— 前端遇不到它们当"对手精灵"的场景。
+events: dict[str, int] = {}
+miss_events: list[str] = []
+for eid, r in evt.items():
+    nid = int(eid)
+    if not 100000 <= nid < 300000:
+        continue
+    nm = (r.get("name") or "").strip()
+    if not nm:
+        continue
+    b = event_base(nid, nm)
+    if b:
+        events[eid] = b
+    else:
+        miss_events.append(f"{eid} {nm}")
+print(f"  events: {len(events)} 个事件映射到精灵" +
+      (f";{len(miss_events)} 个名字对不上我方 petbase: {miss_events[:5]}…" if miss_events else ""))
+if miss_events:
+    warnings.append(f"events: {len(miss_events)} 个事件名未命中我方 petbase")
 diff_text = "  ".join(f"第{i}章官方 {len(v)}" for i, v in pools.items())
 out = {
     "_source": "客户端官方配置:BinDataCompressed/GRASS_TRIAL_{CONF,CHAPTER,EVENT,PERIOD,LOG}_CONF"
@@ -235,6 +276,8 @@ out = {
     + diff_text + "),旧 wiki 口径 188/295/177;bosses: 22 名首领;npc: 难度 -> 章 -> 候选阵容"
     "(玩家实测,id 与官方 node7 event 对齐);floors: 按 node_index 索引的层类型。"
     "chapters.image/intro/outro 来自 GRASS_TRIAL_LOG_CONF(封面图与见闻录文案)。"
+    "events: 官方 event_conf_id -> 精灵(普通遭遇 100k/110k + 首领 200k 段,实时视图"
+    "把事件号直接翻译成头像,免人工标注;NPC 阵容/祝福/商人非单只精灵不入表)。"
     "精灵一律用我方 petbase id。",
     "floors": FLOORS,
     "chapters": chapter_names,
@@ -242,6 +285,7 @@ out = {
     "bosses": boss_ids,
     "npc": npc,
     "activity": activity,
+    "events": events,
 }
 os.makedirs(os.path.dirname(OUT), exist_ok=True)
 with open(OUT, "w", encoding="utf-8") as f:
