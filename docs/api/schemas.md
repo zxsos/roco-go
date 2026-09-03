@@ -570,6 +570,36 @@
 | `GET /api/paint` | `{res, layer, w, h, cell, corridor, safe, cells}`；`cells` 是 w×h 位的 base64 位图（每字节 8 格、低位在前）；无底图时 `w=0` |
 | `GET /api/merchant` | `{now, day, status:"open\|closed\|idle", today:[{start,end,label,empty,merchant}], prev:[...]}`，`merchant` 是第三方原始 JSON |
 | `GET /api/merchant/sub` | `{configured, subscribed, email, keywords}` |
-| `GET /api/eggs/query` | 第三方原始 JSON：`{code,msg,data:{matches:[{pet_id,pet_name,...}],total,source}}` |
+| `GET /api/eggs/query` | `{source, total, apiAvailable, matches:[{name,img,hatchSecs,score,heightPct,weightPct,confId,note}]}`；**两条数据源共用此结构**，详见下节 |
 | `POST /api/account/verify` | `{ok, hasPin}` |
 | 各 admin 接口 | 见 `web/src/api.js` 的注释（前端侧已逐个注明响应形状） |
+
+### `GET /api/eggs/query` —— 两个数据源，一份契约
+
+随机蛋（神奇的蛋）`conf_id = 0`，猜它孵出谁。默认走**本地解包数据**反推，
+`src=api` 改走第三方图鉴复核。两条路径的响应结构一致，前端不分支：
+
+```json
+{ "source": "local", "total": 3, "apiAvailable": false,
+  "matches": [{ "name": "权杖-Ⅱ", "img": "/img/HeadIcon/3410.webp", "hatchSecs": 57600,
+                "score": 87.5, "heightPct": 25.0, "weightPct": 34.1,
+                "confId": 3410001, "note": "孵化 16 小时" }] }
+```
+
+| 字段 | 说明 |
+| --- | --- |
+| `source` | `"local"`（默认）或 `"api"`（`src=api`） |
+| `total` | 候选条数，恒等于 `len(matches)`（**不是**第三方响应里的 `total`） |
+| `apiAvailable` | 服务端是否已配 `-egg-api-key`；前端据此决定「用第三方复核」按钮要不要显示 |
+| `matches[].img` | **可直接赋给 `<img src>` 的完整值**：本地给 `/img/` 开头的站内路径、第三方给外链。**与其它接口的相对路径语义不同，不要再套 `imgURL()`** |
+| `matches[].score` | 匹配度 0-100，**仅用于排序，不是概率**（合成测试下真值进前 3 只有约一半） |
+| `matches[].heightPct` / `weightPct` | 蛋落在候选区间内的百分位，仅本地源提供；第三方无此两维 |
+| `matches[].confId` | 物种 conf_id。第三方的 `pet_id` 口径未必相同，**勿跨源比较** |
+| `matches[].note` | 本地给「孵化 N 小时」文案，第三方给对方的 `hatch_label` |
+
+请求参数：`height`（米）、`weight`（千克）、`maxSecs`（孵满秒数）、`src`。
+三者都取自前端 `EggView`；**`maxSecs` 是最强的一维约束**（见 docs/data.md
+「随机蛋的区间藏在哪」），能传一定要传 —— 缺了就退化成纯尺寸匹配，候选会宽得多。
+
+`src=api` 且未配令牌时返回 **503**，且**不落统计**（统计是给「烧了多少额度」看的，
+没发出去的请求不该计入）。本地路径永不因缺令牌失败。

@@ -200,12 +200,23 @@ export async function deleteFlowerSlot(key) {
 //           obtainedAt,hatching,parents,…}]}
 export const getEggs = (params) => getJSON('/api/eggs?' + buildQuery(params), { eggs: [] })
 
-// queryEggMatch 查随机蛋(神奇的蛋)可能孵出的物种:后端代理第三方图鉴 API(令牌在服务端,
-// 不落地到前端)。参数为蛋的身高(米)/体重(千克),均可省略。返回第三方原始 JSON:
-//   {code,msg,data:{matches:[{pet_id,pet_name,img_name,main_type,score,hatch_label,…}],total,source}}
-// 服务端未配置令牌时抛错(503)。
-export const queryEggMatch = async (height, weight) => {
-  const r = await fetch('/api/eggs/query?' + buildQuery({ height, weight }))
+// queryEggMatch 查随机蛋(神奇的蛋)可能孵出的物种。
+//
+// 默认走**本地解包数据**(后端按 PET_EGG_CONF 反推,零外部依赖、无限流、离线可用);
+// useAPI=true 时改用第三方图鉴复核(需服务端配 -egg-api-key,限流 10 次/分钟,
+// 比本地多给系别)。两条路径的响应结构一致,前端不分支:
+//   {source:"local"|"api", total, apiAvailable,
+//    matches:[{name,img,hatchSecs,score,heightPct,weightPct,confId,note}]}
+//
+// img 是**可直接赋给 <img src> 的完整值**:本地给 /img/ 开头的站内路径、第三方给外链,
+// 故这里不要再用 imgURL() 去拼(其它接口给的是相对路径,唯独这条不是)。
+//
+// maxSecs 是这颗蛋孵满所需的秒数,本地路径拿它当最强的一维约束(见 docs/data.md
+// 「随机蛋的区间藏在哪」),能传一定要传。
+export const queryEggMatch = async (height, weight, maxSecs, useAPI = false) => {
+  const params = { height, weight, maxSecs }
+  if (useAPI) params.src = 'api'
+  const r = await fetch('/api/eggs/query?' + buildQuery(params))
   if (!r.ok) throw await httpError(r, '查询失败')
   return r.json()
 }
