@@ -1,109 +1,166 @@
-// 宠物陈列卡的图片渲染尺寸验收(需要 playwright + chromium)。
+// 宠物陈列卡的图片尺寸验收(需要 playwright + chromium)。
 //
-//   node scripts/verify-pet-card-size.mjs      (或 npm run verify:browser 带上它)
+//   node scripts/verify-pet-card-size.mjs      (npm run verify:browser 已带上)
 //
-// 锁住的不变量:**256px 的全身像源(Pet256)不得被放大显示**。放大就会糊 ——
-// 有损 webp(gen_images.py 的 QUALITY=90)的边缘振铃会被放大效应一并凸显。
+// 锁住两条不变量:
 //
-// 为什么必须实测而不是看 CSS:列宽要经 auto-fill + minmax 两道换算,图片还要过
-// aspect-ratio + padding + object-fit:contain。这里连环看错是**静默**的 ——
-// 页面照常显示,只是图还是糊的。实测时踩到过两个坑,都记在这里:
+//   1. **图片不得被放大显示** —— 源是 256×256(Pet256,实测 734/737 张),放大就糊:
+//      有损 webp(gen_images.py 的 QUALITY=90)的边缘振铃会被放大效应一并凸显。
+//   2. **图片不得溢出图区** —— 溢出会顶破卡片、压到相邻行。
 //
-//   1. aspect-ratio 4/3 在图片加载后**不生效** —— img 的 height:100% 与父的
-//      aspect-ratio 循环依赖,浏览器回退到图片固有比例(Pet256 是正方形),
-//      图区被撑成 ≈1:1。曾据此按 4:3 推算显示边长,结论是错的。
-//   2. 测试图的固有尺寸会参与上面那条回退,故必须用 256×256 而非 1×1 占位图。
+// 为什么必须用**真实组件**测:初版这里用手造 DOM(只造 .pt-media),测出来
+// 完全不是真实卡片的数 —— 手造 DOM 下 img 是 256×256(溢出 104 的图区),
+// 真实组件下是 241×103。若照那份数据下结论,等于测了个不存在的页面。
 //
-// 断言只卡 DPR=1(改动前实测最高 1.80× 放大,改动后全程 0.94×)。
-// DPR=2 那一列**只报告不断言**:高倍屏下 256 的源必然要插值放大到 ~480 物理
-// 像素,那是源分辨率的天花板,只有换更大的源(Pet1024)才解决 —— 不是本脚本
-// 守得住的,算进断言会让它永远红。
+// 为什么必须实测而非看 CSS:图片尺寸链踩过三个**静默**的坑,看代码全看不出来:
+//   1. aspect-ratio 4/3 与 img 的 height:100% 循环依赖,浏览器回退到图片固有
+//      比例,声明的比例根本不生效;
+//   2. grid 的隐式行高按内容算,同样形成循环 → 图片解析成固有高度 256,
+//      **溢出固定高度 104 的图区**(改 flex 解决,见 .pt-media 注释);
+//   3. width/height:auto 会让盒子依赖图片**是否已加载** —— lazy 未加载时
+//      塌陷成 16×16,加载完才 103。同一份 CSS 两种结果,随缓存状况漂移。
 //
-// ⚠️ 已做变异测试:去掉 .pt-img 的 max-width/max-height: 256px → 失败(回到 1.80×,
-//    报错直接指出是哪个容器宽度被放大)。
+// 故本脚本对「已加载」与「未加载」两种情形都测,确保结果与加载时机无关。
+//
+// ⚠️ 已做变异测试(三处均会红,且报错点出具体容器宽度):
+//    - 去掉 .pt-img 的 max-*     → 放大 1.08×
+//    - max-* 放宽到 512          → 放大 1.08×
+//    - .pt-media 改回 grid       → 溢出
 import { chromium } from 'playwright'
 import { readFileSync } from 'node:fs'
+import { createServer } from 'vite'
+import { renderToStaticMarkup } from 'react-dom/server'
 
-// 256×256 纯色 PNG(内联,免依赖仓库资源):固有尺寸必须与被测源一致,见上。
-const PX = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQAAAAEACAIAAADTED8xAAAB/0lEQVR42u3TQREAMAjAsDH9iEEFunijgURC7xpd+eCqLwEGAAOAAcAAYAAwABgADAAGAAOAAcAAYAAwABgADAAGAAOAAcAAYAAwABgADAAGAAOAAcAAYAAwABgADAAGAAOAAcAAYAAwABgADAAGAAOAAcAAYAAwABgADAAGAAOAAcAAYAAwABgADAAGAAOAATAAGAAMAAYAA4ABwABgADAAGAAMAAYAA4ABwABgADAAGAAMAAYAA4ABwABgADAAGAAMAAYAA4ABwABgADAAGAAMAAYAA4ABwABgADAAGAAMAAYAA4ABwABgADAAGAAMAAYAA4ABwABgADAAGAAMAAYAA4ABwABgADAAGAAMAAbAAGAAMAAYAAwABgADgAHAAGAAMAAYAAwABgADgAHAAGAAMAAYAAwABgADgAHAAGAAMAAYAAwABgADgAHAAGAAMAAYAAwABgADgAHAAGAAMAAYAAwABgADgAHAAGAAMAAGAAOAAcAAYAAwABgADAAGAAOAAcAAYAAwABgADAAGAAOAAcAAYAAwABgADAAGAAOAAcAAYAAwABgADAAGAAOAAcAAYAAwABgADAAGAAOAAcAAYAAwABgADAAGAAOAAcAAGAAMAAYAA4ABwABgADAAGAAMAAYAA4ABwABgADAAGAAMAAYAA4ABwABgADAAGAAMAAYAA4ABwABgADAAGAAMAAYAA4ABwABgADAAbAOG6gQCnuJhgQAAAABJRU5ErkJggg=='
+const React = (await import('react')).default
 
-const base = readFileSync('src/styles/base.css', 'utf8')
-const list = readFileSync('src/styles/list.css', 'utf8')
+// 256×256 纯色 PNG(内联,免依赖仓库资源):固有尺寸必须与被测源一致,
+// 否则测的是另一张图(见上面坑 1)。
+const PX = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQAAAAEACAIAAADTED8xAAAB/0lEQVR42u3TQREAMAjAsDH9iEEFunijgURC7xpd+eCqLwEGAAOAAcAAYAAwABgADAAGAAOAAcAAYAAwABgADAAGAAOAAcAAYAAwABgADAAGAAOAAcAAYAAwABgADAAGAAOAAcAAYAAwABgADAAGAAOAAcAAYAAwABgADAAGAAOAAcAAYAAwABgADAAGAAOAAcAAYAAwABgADAAGAAOAATAAGAAMAAYAA4ABwABgADAAGAAMAAYAA4ABwABgADAAGAAMAAYAA4ABwABgADAAGAAMAAYAA4ABwABgADAAGAAMAAYAA4ABwABgADAAGAAMAAYAA4ABwABgADAAGAAMAAYAA4ABwABgADAAGAAMAAYAA4ABwABgADAAGAAMAAbAAGAAMAAYAAwABgADgAHAAGAAMAAYAAwABgADgAHAAGAAMAAYAAwABgADgAHAAGAAMAAYAAwABgADgAHAAGAAMAAYAAwABgADgAHAAGAAMAAGAAOAAcAAYAAwABgADAAGAAOAAcAAYAAwABgADAAGAAOAAcAAYAAwABgADAAGAAOAAcAAYAAwABgADAAGAAOAAcAAYAAwABgADAAGAAOAAcAAYAAwABgADAAGAAOAAcAAGAAMAAYAA4ABwABgADAAGAAMAAYAA4ABwABgADAAGAAMAAYAA4ABwABgADAAbAOG6gQCnuJhgQAAAABJRU5ErkJggg=='
 
-// stripMax=true → 去掉被测的 max-*(即改动前的样子),仅用于输出对比列。
-const build = (stripMax) => {
-  const css = stripMax ? list.replace(/max-width: 256px; max-height: 256px;/, '') : list
-  return `<!doctype html><html><head><meta charset="utf-8">
-<style>${base}\n${css}</style></head>
-<body style="margin:0;padding:0">
-<div id="host" style="width:1200px"><div class="pet-grid" id="g"></div></div>
-</body></html>`
+const SRC_PX = 256 // Pet256 的源边长,见 metrics.jsx 的 STAT_MAX 注释旁的同源说明
+const WIDTHS = [480, 600, 700, 800, 1000, 1200, 1500]
+
+// ---- 用真实 PetCard 组件渲染出静态 HTML ----
+const server = await createServer({
+  root: process.cwd(), logLevel: 'error',
+  server: { middlewareMode: true, hmr: false }, optimizeDeps: { noDiscovery: true },
+})
+const { IconsContext } = await server.ssrLoadModule('/src/context.js')
+const PetGallery = (await server.ssrLoadModule('/src/pages/pet-list/PetGallery.jsx')).default
+
+const st = (v, t = 0, n = 0) => ({ value: v, talentLv: t, nature: n })
+const pet = {
+  gid: 1, confId: 10, baseConfId: 10, species: '火花', book: 31, form: '', stage: 2,
+  name: '小火花', level: 42, natureId: 1, nature: '急躁', gender: '♂',
+  types: ['火', '龙'], typeIcons: [], bloodId: 3, blood: '火', bloodIcon: '',
+  eggGroups: [], heightM: 1.32, weightKg: 24.3, heightMin: 1.1, heightMax: 1.5, heightPct: 41.02,
+  weightMin: 20, weightMax: 26, weightPct: 99.2, voice: 96, talentRank: '了不起的天分',
+  medal: '飞跃', medalDesc: '', medalIcon: '', wearMedalConfId: 5, medalIds: [1],
+  partnerMark: '无', partnerMarkIcon: '', speciality: '拾荒', specialityId: 7,
+  catchTime: 1758700000, shiny: false, colorful: false, glassType: 0, glassValue: 0,
+  image: { head: 'a', bigHead: 'b', portraitSmall: 'c' },
+  box: { boxId: 2, boxName: '性格1', slot: 14 }, team: null,
+  hp: st(118, 3, 1), attack: st(92), defense: st(74, 0, -1),
+  spAttack: st(88, 1), spDefense: st(70), speed: st(101, 5, 1),
 }
+const pets = Array.from({ length: 12 }, (_, i) => ({ ...pet, gid: i + 1 }))
+const cardHTML = renderToStaticMarkup(
+  React.createElement(IconsContext.Provider, { value: {} },
+    React.createElement(PetGallery, { pets, selected: null, itemProps: () => ({}) })),
+)
+await server.close()
 
-const WIDTHS = [480, 492, 600, 700, 800, 1000, 1200, 1500]
+const css = ['base', 'pet', 'list'].map((f) => readFileSync(`src/styles/${f}.css`, 'utf8')).join('\n')
+
 const browser = await chromium.launch()
 
-async function measure(stripMax, dpr) {
-  const page = await browser.newPage({ viewport: { width: 1600, height: 900 }, deviceScaleFactor: dpr })
-  await page.setContent(build(stripMax))
-  await page.evaluate((px) => {
-    const g = document.getElementById('g')
-    for (let i = 0; i < 8; i++) {
-      const card = document.createElement('article')
-      card.className = 'pet-card'
-      card.innerHTML = '<div class="pt-media"><img class="pt-img" alt="">'
-      g.appendChild(card)
-    }
+// 测两种**明确构造**的状态,而不是靠 loading=lazy 的时序:
+//
+//   未加载:用 route 拦截全部图片请求并 abort。组件 src 指向不存在的路径,
+//   拦截后图片永远处于未加载态 —— 稳定、可复现。
+//   已加载:换成内联 data URI(不经过网络)并等 complete。
+//
+// 初版这里用「lazy vs 去掉 lazy」对比,结果是**不稳定的**:lazy 图片是否已加载
+// 取决于它是否在视口内与调度时机,同一份 CSS 连跑两次结论不同(还原后复跑
+// 都曾报「容器 1500 不一致」)。不稳定的断言比没有更糟 —— 它会让人习惯性忽略红灯。
+async function measure(w, dpr) {
+  const page = await browser.newPage({ viewport: { width: 1700, height: 900 }, deviceScaleFactor: dpr })
+  const html = `<!doctype html><html><head><meta charset="utf-8"><style>${css}</style></head>
+<body style="margin:0;padding:0"><div style="width:${w}px">${cardHTML}</div></body></html>`
+
+  // —— 状态 A:未加载(拦截图片请求)——
+  await page.route('**/*', (route) =>
+    (route.request().resourceType() === 'image' ? route.abort() : route.continue()))
+  await page.setContent(html)
+  await page.waitForSelector('.pt-img')
+  const unloaded = await box(page)
+
+  // —— 状态 B:已加载(内联图,不依赖网络)——
+  await page.unroute('**/*')
+  const loaded = await page.evaluate((px) => {
     for (const im of document.querySelectorAll('.pt-img')) im.src = px
-  }, PX)
-  const out = {}
-  for (const w of WIDTHS) {
-    await page.evaluate((w) => { document.getElementById('host').style.width = w + 'px' }, w)
-    // clientWidth/Height 含 padding(不含 border),减掉 8×2 即 object-fit 的内容区;
-    // contain 下实际绘制边长 = 内容区较短的一边。
-    out[w] = await page.evaluate(() => {
-      const im = document.querySelector('.pt-img')
-      return {
-        card: +document.querySelector('.pet-card').getBoundingClientRect().width.toFixed(0),
-        css: +Math.min(im.clientWidth - 16, im.clientHeight - 16).toFixed(0),
-      }
-    })
-  }
+    return Promise.all([...document.querySelectorAll('.pt-img')].map((im) =>
+      im.complete ? null : new Promise((r) => { im.onload = r; im.onerror = r })))
+  }, PX).then(() => box(page))
+
   await page.close()
-  return out
+  return { unloaded, loaded }
 }
 
-const before1 = await measure(true, 1)
-const after1 = await measure(false, 1)
-const after2 = await measure(false, 2)
+// box 量图区高度与图片盒子尺寸。object-fit:contain 下绘制边长 = 内容区较短的一边
+// (clientWidth/Height 含 padding,故减 16 = 上下/左右各 8)。
+const box = (page) => page.evaluate(() => {
+  const m = document.querySelector('.pt-media')
+  const im = document.querySelector('.pt-img')
+  return {
+    media: +m.getBoundingClientRect().height.toFixed(0),
+    box: `${im.clientWidth}×${im.clientHeight}`,
+    shown: +Math.min(im.clientWidth - 16, im.clientHeight - 16).toFixed(0),
+  }
+})
 
-console.log('\n源图 256×256(Pet256)。放大倍数 = 显示边长 ÷ 256,>1 即糊。\n')
-console.log('容器   卡片宽 │ 改前边长 放大 │ 改后边长 放大 │ DPR=2 物理边长 物理放大')
-let worstBefore = 0, worstAfter = 0, worstPhys = 0
-for (const w of WIDTHS) {
-  const b = before1[w], a = after1[w]
-  const rB = b.css / 256, rA = a.css / 256
-  const phys = after2[w].css * 2, rP = phys / 256
-  worstBefore = Math.max(worstBefore, rB)
-  worstAfter = Math.max(worstAfter, rA)
+// dpr=1 用于「放大/溢出/一致」三项断言;dpr=2 只算物理放大供参考。
+const rows = []
+for (const w of WIDTHS) rows.push({ w, d1: await measure(w, 1), d2: await measure(w, 2) })
+
+console.log(`\n源图 ${SRC_PX}×${SRC_PX}(Pet256)。放大 = 显示边长 ÷ ${SRC_PX},>1 即糊。\n`)
+console.log('容器   图区  img盒      显示  放大  │ 未加载/已加载一致 │ DPR=2 物理  物理放大')
+let worst = 0, worstPhys = 0
+const bad = { 放大: [], 溢出: [], 不一致: [] }
+for (const { w, d1, d2 } of rows) {
+  const a = d1.loaded
+  const ratio = a.shown / SRC_PX
+  const phys = d2.loaded.shown * 2, rP = phys / SRC_PX
+  worst = Math.max(worst, ratio)
   worstPhys = Math.max(worstPhys, rP)
-  const m = (x) => x.toFixed(2) + (x > 1.001 ? '✗' : ' ')
+  const same = d1.unloaded.box === d1.loaded.box
+  // 图片盒子高度不得超出图区(+1 容 border 舍入)
+  const overflow = a.media > 0 && parseInt(a.box.split('×')[1], 10) > a.media + 1
+  if (ratio > 1.001) bad.放大.push(w)
+  if (overflow) bad.溢出.push(w)
+  if (!same) bad.不一致.push(w)
   console.log(
-    String(w).padStart(4) + '  ' + String(a.card).padStart(6) + ' │ '
-    + String(b.css).padStart(7) + ' ' + m(rB) + ' │ '
-    + String(a.css).padStart(7) + ' ' + m(rA) + ' │ '
-    + String(phys).padStart(12) + ' ' + m(rP),
+    String(w).padStart(4) + '  ' + String(a.media).padStart(4) + '  ' + a.box.padStart(9) + '  '
+    + String(a.shown).padStart(4) + '  ' + ratio.toFixed(2) + (ratio > 1.001 ? '✗' : ' ') + ' │ '
+    + (same ? '        ✓       ' : `  ✗ 未加载=${d1.unloaded.box} `) + ' │ '
+    + String(phys).padStart(8) + '  ' + rP.toFixed(2) + (rP > 1.001 ? '✗' : ' '),
   )
 }
 
-console.log(`\n改前 DPR=1 最大放大 ${worstBefore.toFixed(2)}×`)
-console.log(`改后 DPR=1 最大放大 ${worstAfter.toFixed(2)}×  ${worstAfter > 1.001 ? '✗ 仍有放大' : '✓ 全程不放大'}`)
-console.log(`改后 DPR=2 最大放大 ${worstPhys.toFixed(2)}×  (仅报告:源分辨率天花板,需 Pet1024 才能解决)`)
+console.log(`\n最大放大 ${worst.toFixed(2)}×  ${worst > 1.001 ? '✗ 会放大' : '✓ 全程不放大'}`)
+console.log(`DPR=2 最大放大 ${worstPhys.toFixed(2)}×  ${worstPhys > 1.001 ? '(源分辨率天花板,需 Pet1024)' : '(连高倍屏也不放大 —— 显示尺寸已小于源)'}`)
+// max-* 的 256 那一档在图区高度(104)远小于 256 时**不会触发**,它是给
+// 「将来把图区调高」留的保险。明确说出来,免得误以为这条断言在守它。
+console.log(`注:显示边长 ${rows[0].d1.loaded.shown}px 已远小于源 ${SRC_PX}px,故 max-*:256px 当前不参与约束;它由 .pt-media 的固定高度兜住。`)
 
 await browser.close()
-if (worstAfter > 1.001) {
-  const bad = WIDTHS.filter((w) => after1[w].css / 256 > 1.001)
-  console.error(`\n✗ 图片被放大(容器宽度 ${bad.join('/')}px),源是 256×256 —— 检查 .pt-img 的 max-width/max-height`)
+
+const problems = []
+if (bad.放大.length) problems.push(`图片被放大(容器 ${bad.放大.join('/')}px)—— 检查 .pt-img 的 max-*`)
+if (bad.溢出.length) problems.push(`图片溢出图区(容器 ${bad.溢出.join('/')}px)—— 检查 .pt-media 是否还是 grid`)
+if (bad.不一致.length) problems.push(`加载时机影响布局(容器 ${bad.不一致.join('/')}px)—— 图片尺寸不能由内容撑`)
+if (problems.length) {
+  console.error('\n✗ ' + problems.join('\n✗ '))
   process.exit(1)
 }
-console.log('\n✓ 全部容器宽度下图片均未被放大')
+console.log('\n✓ 不放大 / 不溢出 / 与加载时机无关')

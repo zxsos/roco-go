@@ -67,8 +67,13 @@ export default function PetCard({ p, selected, itemProps }) {
           )}
         </div>
 
-        <Measure label="体重" value={p.weightKg} unit="kg" min={p.weightMin} max={p.weightMax} pct={p.weightPct} />
-        <Measure label="身高" value={p.heightM} unit="m" min={p.heightMin} max={p.heightMax} pct={p.heightPct} />
+        {/* 体重/身高并排一行:两项各占两行时单卡要多出 21px(含 gap),
+            而它们是同类信息、天然该并排读(「又高又重」还是「矮胖」)。
+            窄卡(200px)下每半 ~95px,标尺仍能给出位置感。 */}
+        <div className="pt-measures">
+          <Measure label="体重" value={p.weightKg} unit="kg" min={p.weightMin} max={p.weightMax} pct={p.weightPct} />
+          <Measure label="身高" value={p.heightM} unit="m" min={p.heightMin} max={p.heightMax} pct={p.heightPct} />
+        </div>
 
         <div className="pt-foot">
           <span className="pt-voice">声 <b className={voiceHot(p.voice)}>{p.voice}</b></span>
