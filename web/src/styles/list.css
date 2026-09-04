@@ -68,7 +68,12 @@
 
 /* ---- 陈列视图 ----
    卡片最小宽度 --pet-card-min 由 CSS 持有而非写死在 grid 里:移动端要把它连同
-   布局方向一起改(见文件末尾的媒体查询),抽成变量后只改一处。 */
+   布局方向一起改(见文件末尾的媒体查询),抽成变量后只改一处。
+
+   max 必须是 1fr(填满容器),**不能**改成固定值去限宽:实测过
+   `minmax(236px, 340px)`,那时列宽被钉死 340 不再自适应,宽屏右侧大片留白
+   (1500px 容器下 4 列只占 1396px)。限宽交给 .pt-img 的 max-* —— 它只压
+   图片、不动布局,卡多宽都照样填满,超出的部分由托盘渐变填充。 */
 .pet-grid {
   display: grid; gap: 12px;
   --pet-card-min: 236px;
@@ -96,9 +101,11 @@
    浅色下 --fg 是深色 → 中心压暗,两个主题都是"中心比四周更实"的同一观感,
    而 --hero-tint 那类固定色在一个主题下会变成一块脏斑。
 
-   比例取 4:3 而非 1:1:1:1 下图片本身就有 ~290px 高,加上数据区单卡近 440px,
-   一屏只能放下两张 —— 找宠物是扫视任务,同屏数量比单张气派更要紧。
-   4:3 让图仍是卡片的视觉主角,同时把单卡压到 ~330px。 */
+   aspect-ratio 4/3 在**图片已加载时会被顶开**,实际图区接近 1:1(实测卡片 291 宽
+   时图区 289×257,而非 4:3 的 217 高)。原因:img 设了 width/height:100%,
+   而父高又来自 aspect-ratio —— 循环依赖下浏览器回退到图片的固有比例,
+   Pet256 是正方形,于是高度被撑成 ≈ 图片边长。别按 4:3 去推算显示尺寸(我算错过)。
+   它仍然值得留着:图片未加载/缺失时,它给出稳定的占位高度,卡片不会坍缩跳位。 */
 .pt-media {
   position: relative; display: grid; place-items: center;
   aspect-ratio: 4 / 3; border-bottom: 1px solid var(--line-soft);
@@ -106,8 +113,18 @@
     radial-gradient(110% 80% at 50% 14%, color-mix(in srgb, var(--fg) 7%, transparent), transparent 62%),
     linear-gradient(180deg, var(--bg-2), var(--bg-3));
 }
-/* 全身像必须 contain:这些图是带透明背景的整只宠物,cover 会把头尾裁掉。 */
-.pt-img { width: 100%; height: 100%; padding: 8px; object-fit: contain; display: block; }
+/* 全身像必须 contain:这些图是带透明背景的整只宠物,cover 会把头尾裁掉。
+
+   max-* 兜住「不放大」:源是 256×256(Pet256,实测 734/737 张),放大显示就会糊 ——
+   有损 webp(gen_images.py 的 QUALITY=90)的边缘振铃会被放大效应一并凸显。
+   这里让图片自己声明上限,而不是去限卡片宽度:卡片仍按 1fr 填满容器,
+   只有图在超宽的卡上停在 256 居中,四周由托盘渐变填充。
+   实测各容器宽度(480~1500)下显示边长恒为 164~240,全程 ≤256。
+   .pt-media 是 grid + place-items:center,故封顶后图片居中而不是挤在左上角。 */
+.pt-img {
+  width: 100%; height: 100%; padding: 8px; object-fit: contain; display: block;
+  max-width: 256px; max-height: 256px;
+}
 .pt-fallback { font-size: 40px; opacity: .5; }
 /* 搭档标记(左上角)与异色/炫彩(右上角)分列两侧:前者是玩家自己打的标,
    后者是稀有度,混在一处会被当成同一种东西。 */
