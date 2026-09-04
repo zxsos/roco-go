@@ -264,3 +264,29 @@
   /* 成员条形图:名字列收窄,腾空间给进度条 */
   .admin-bar-name { width: 68px; }
 }
+
+/* —— 运行配置(ConfigCard)—— */
+/* 三组配置各有各的生效代价,分组是为了让人一眼看出「改这个会不会断东西」。 */
+.admin-config-group {
+  margin: 12px 0; padding: 10px 12px;
+  background: var(--bg-2, transparent);
+  border: 1px solid var(--line); border-radius: var(--radius, 6px);
+}
+.admin-config-group h4 {
+  margin: 0 0 8px; font-size: 13px; color: var(--accent, #4a9eff);
+}
+.admin-field {
+  display: flex; align-items: center; gap: 10px; margin: 6px 0;
+}
+.admin-field > span {
+  flex: none; width: 96px; font-size: 13px; color: var(--fg-dim, var(--muted));
+}
+.admin-field > input {
+  flex: 1; min-width: 0;
+  padding: 5px 8px; font-size: 13px;
+  background: var(--bg, transparent);
+  color: var(--fg, inherit);
+  border: 1px solid var(--line); border-radius: 4px;
+}
+.admin-field > input:focus { outline: none; border-color: var(--accent, #4a9eff); }
+.admin-config-actions { display: flex; gap: 8px; margin-top: 12px; }

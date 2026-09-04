@@ -14,6 +14,7 @@ import MerchantSubsCard from './MerchantSubsCard'
 import MerchantSourceCard from './MerchantSourceCard'
 import EggSourceCard from './EggSourceCard'
 import PinCard from './PinCard'
+import ConfigCard from './ConfigCard'
 
 // 管理员面板(隐式入口:导航不显示,需手动输入 #/admin 进入)。
 // 首次进入引导设置密码,之后凭密码登录。
@@ -141,6 +142,7 @@ export default function Admin() {
       <MerchantSourceCard onUnauthed={kickIfUnauthed} />
       <EggSourceCard onUnauthed={kickIfUnauthed} />
       <PinCard accounts={accounts} onAccountsChanged={loadAccounts} />
+      <ConfigCard onUnauthed={kickIfUnauthed} />
     </div>
   )
 }

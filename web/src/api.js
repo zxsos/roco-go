@@ -482,6 +482,23 @@ export const adminEggSource = () => adminFetch('/api/admin/egg-source').then(asy
 // 故切换立即生效,也不用清任何东西。
 export const adminEggSourceSet = (source) => postJSON('/api/admin/egg-source', { source })
 
+// adminConfig 运行期配置:{writable, path, smtpUser, smtpPassSet, eggKeySet, socks5:{...}}。
+//
+// **敏感项只给「是否已设置」**(smtpPassSet / eggKeySet / socks5.passSet),令牌与授权码
+// 原文从不下发 —— 它们能用来发信、能刷第三方图鉴配额,一旦经 API 下来就会出现在
+// 浏览器响应、前端内存与可能的截图里。保存时留空即「不修改」,前端据此渲染占位文案。
+export const adminConfig = () => adminFetch('/api/admin/config').then(async (r) => {
+  if (!r.ok) throw await adminError(r, '拉取配置失败')
+  return r.json()
+})
+
+// adminConfigSave 保存配置。入参里所有敏感字段留空表示「不修改」。
+//
+// 写入的两条语义(后端保证,前端据此提示):
+//   - 先落盘 /etc/rocom.env 再改内存 —— 故「重启后配置还在」是天然成立的
+//   - 代理(socks5)是热重启的,不影响抓包;邮箱与令牌纯热更
+export const adminConfigSave = (payload) => postJSON('/api/admin/config', payload)
+
 // adminTestMail 发送测试邮件验证 SMTP 配置(错误信息透传后端 SMTP 具体报错)。
 // subject/body 可自定义,为空则后端用默认标题/内容。
 export const adminTestMail = (email, subject, body) =>

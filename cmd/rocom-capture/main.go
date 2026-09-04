@@ -47,7 +47,11 @@ func main() {
 	if err != nil {
 		log.Fatalf("打开数据库失败: %v", err)
 	}
-	srv := server.New(st, server.NewHub(), db, *eggAPIKey, *smtpUser, *smtpPass)
+	// 代理交给 Manager 管理生命周期:面板改代理配置时能只重启它,不必重启整个进程
+	// (重启会打断正在解密的游戏连接)。原 serveSocks5 的校验与拆分逻辑已并入
+	// socks5.Config.Validate / Manager.Start。
+	socks5Mgr := socks5.NewManager()
+	srv := server.New(st, server.NewHub(), db, *eggAPIKey, *smtpUser, *smtpPass, socks5Mgr)
 	eng := capture.NewEngine(*port)
 	eng.Keys = st // 会话密钥持久化:抓包服务重启后继续解密仍存活的连接
 	for s := range strings.SplitSeq(*ignoreIPs, ",") {
@@ -68,7 +72,16 @@ func main() {
 		if *skipSelf && *iface != "" {
 			log.Printf("提示: -socks5-addr 已启用但未设 -skip-self-ip=false,代理进程以本机 IP 出站的游戏流量会被丢弃")
 		}
-		go serveSocks5(*socks5Addr, *socks5Allow, *socks5Block, *socks5Max, *socks5User, *socks5Pass)
+		if err := socks5Mgr.Start(socks5.Config{
+			Addr:     *socks5Addr,
+			Allow:    *socks5Allow,
+			Block:    *socks5Block,
+			MaxConns: *socks5Max,
+			User:     *socks5User,
+			Pass:     *socks5Pass,
+		}); err != nil {
+			log.Fatalf("SOCKS5 服务启动失败: %v", err)
+		}
 	}
 
 	switch {
@@ -143,23 +156,6 @@ func serveWeb(addr string, h http.Handler, useTLS bool, certPath, keyPath string
 	}
 }
 
-// serveSocks5 启动内置 SOCKS5 代理(仅 TCP CONNECT),供手机把游戏流量代理到本机,
-// 整网卡抓包即可看到代理进程以本机 IP 出站的连接(须配合 -skip-self-ip=false,见 main)。
-func serveSocks5(addr, allow, block string, maxConns int, user, pass string) {
-	prefs, err := socks5.ParseAllow(allow)
-	if err != nil {
-		log.Fatalf("解析 -socks5-allow 失败: %v", err)
-	}
-	if user != "" && pass == "" {
-		log.Fatal("-socks5-user 已设置但 -socks5-pass 为空")
-	}
-	blocked := []string{}
-	for part := range strings.SplitSeq(block, ",") {
-		if part = strings.TrimSpace(part); part != "" {
-			blocked = append(blocked, part)
-		}
-	}
-	if err := socks5.ListenAndServe(addr, prefs, blocked, maxConns, user, pass); err != nil {
-		log.Fatalf("SOCKS5 服务失败: %v", err)
-	}
-}
+// 内置 SOCKS5 代理(仅 TCP CONNECT)供手机把游戏流量代理到本机,整网卡抓包即可看到
+// 代理进程以本机 IP 出站的连接(须配合 -skip-self-ip=false)。
+// 启停与参数变更走 socks5.Manager(见 main 里的 socks5Mgr),管理面板可在运行期改。
