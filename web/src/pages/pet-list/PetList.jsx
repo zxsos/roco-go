@@ -255,23 +255,28 @@ export default function PetList() {
           <button className="btn" onClick={() => set({ order: filter.order === 'asc' ? 'desc' : 'asc' })}>{filter.order === 'asc' ? '升序' : '降序'}</button>
           <button className={'btn' + (sync ? ' primary' : '')} title="开启后,游戏内捕捉/移动宠物会自动跳转并选中该宠物;关闭可避免打断当前筛选" onClick={() => setSync((v) => !v)}>同步</button>
           <div className="spacer" />
-          {/* 默认视图排在最左:分段控件的首位会被读成"主推的那个",
-              与默认项错开时会让人以为当前视图是次要的那个。 */}
-          <div className="viewseg" role="group" aria-label="列表视图">
-            <button
-              type="button" className={'viewseg-b' + (view === 'table' ? ' on' : '')}
-              aria-pressed={view === 'table'}
-              title="表格:逐列对齐,适合把这一页的百分位/声音竖着比"
-              onClick={() => setView('table')}
-            >表格</button>
-            <button
-              type="button" className={'viewseg-b' + (view === 'gallery' ? ' on' : '')}
-              aria-pressed={view === 'gallery'}
-              title="陈列:宠物图为主,适合一屏扫多只、找变异与体型"
-              onClick={() => setView('gallery')}
-            >陈列</button>
+          {/* 视图开关与「共 N 只」打包成一个不换行整体:窄屏下 flex-wrap 会让它们
+              各掉一行,而「共 N 只」读起来本该紧跟视图开关(它们都属于"当前列表的
+              状态")。打包后这个整体只作为一项参与换行,内部永不分家。 */}
+          <div className="list-tail">
+            {/* 默认视图排在最左:分段控件的首位会被读成"主推的那个",
+                与默认项错开时会让人以为当前视图是次要的那个。 */}
+            <div className="viewseg" role="group" aria-label="列表视图">
+              <button
+                type="button" className={'viewseg-b' + (view === 'table' ? ' on' : '')}
+                aria-pressed={view === 'table'}
+                title="表格:逐列对齐,适合把这一页的百分位/声音竖着比"
+                onClick={() => setView('table')}
+              >表格</button>
+              <button
+                type="button" className={'viewseg-b' + (view === 'gallery' ? ' on' : '')}
+                aria-pressed={view === 'gallery'}
+                title="陈列:宠物图为主,适合一屏扫多只、找变异与体型"
+                onClick={() => setView('gallery')}
+              >陈列</button>
+            </div>
+            <span className="muted">共 {data.total} 只</span>
           </div>
-          <span className="muted">共 {data.total} 只</span>
         </div>
 
         {view === 'table'

@@ -52,6 +52,10 @@
    表格在窄屏也不隐藏了:它自带横向滚动 + 首列吸左,用户既然选了就给他。
    ================================================================== */
 
+/* 「视图开关 + 共 N 只」打包项:内部永不换行,整体不收缩,
+   免得窄屏下两者被 flex-wrap 拆到两行(见 PetList.jsx 注释)。 */
+.list-tail { display: inline-flex; align-items: center; gap: 8px; flex: none; }
+
 /* ---- 视图开关(工具栏里的二选一胶囊)----
    选中态用 accent-soft 而非「反色底」:深浅主题下 --bg-1/--bg-2 的相对明暗是反的
    (暗色主题下 --bg-1 更暗),用背景反色做选中态会在一个主题下变成「凹」、
@@ -169,6 +173,9 @@
 /* gap 7→4、padding 收紧:实测数据区 283px 里 gap+padding 就占 83.5px(约三成),
    而它们不承载任何信息。收紧是纯赚 —— 卡片矮 40px 且信息一毫不丢。 */
 .pt-body { display: flex; flex-direction: column; gap: 4px; padding: 8px 10px 10px; min-width: 0; }
+/* 名字 + 系别同一行(见 PetCard.jsx 注释):名字区可收缩、系别右对齐不收缩。 */
+.pt-head { display: flex; align-items: flex-start; gap: 6px; }
+.pt-head-text { flex: 1 1 auto; min-width: 0; }
 .pt-name {
   font-size: 14px; font-weight: 700;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
@@ -177,8 +184,9 @@
   font-size: 11px; color: var(--fg-dim); margin-top: -4px;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-.pt-types { display: flex; flex-wrap: wrap; gap: 3px; }
-/* .type 自带 margin(行内排版用),flex 下与 gap 叠加会间距不均,清掉。 */
+/* 系别:右对齐、可换行(双系别时竖排也不占宽),上限 45% 保证名字至少有 55% 可用。
+   .type 自带 margin(行内排版用),与 gap 叠加会间距不均,清掉。 */
+.pt-types { flex: none; display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 3px; max-width: 45%; }
 .pt-types > .type { margin: 0; }
 /* 无系别/无标签的宠物(老库、未上线形态)会渲染出空容器,它仍要吃父级 gap
    的一份间距,在数据稀疏的卡上表现为底部多出一截空白。空则折叠。 */
@@ -219,11 +227,11 @@
 .pt-tag .blood { margin-left: 0; gap: 1px; }
 .pt-tag .blood-ic { width: 15px; height: 15px; }
 
-/* ---- 量测(体重/身高):并排一行,每项 = 标签 + 值 + 百分位标尺 + 百分位 ----
-   并排而非上下两行:两项是同类信息,且并排省 21px(见 PetCard.jsx 注释)。 */
-.pt-measures { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-.measure { display: flex; align-items: center; gap: 4px; font-size: 11px; line-height: 1.5; min-width: 0; }
-.measure-lb { flex: none; width: 22px; color: var(--fg-dim); }
+/* ---- 量测(体重/身高):标签 + 值 + 百分位标尺 + 百分位 ----
+   各占一行而非并排:并排时每半 ~105px 放不下四项,实测溢出并让百分位与标尺
+   重合(见 PetCard.jsx 注释)。全宽下四项从容,标尺拉长后位置更易读。 */
+.measure { display: flex; align-items: center; gap: 6px; font-size: 11px; line-height: 1.5; min-width: 0; }
+.measure-lb { flex: none; width: 24px; color: var(--fg-dim); }
 .measure-v { font-weight: 700; color: var(--fg); white-space: nowrap; }
 .measure-v i { font-style: normal; font-weight: 400; font-size: 10px; color: var(--fg-dim); margin-left: 1px; }
 /* 标尺:轨道 + 游标。游标带一圈卡片底色的描边(box-shadow),
@@ -234,8 +242,8 @@
   border-radius: 50%; background: var(--accent); transform: translateY(-50%);
   box-shadow: 0 0 0 2px var(--bg-1);
 }
-/* 百分位数字在并排后空间紧张(每半 ~95px),故不再钉 40px 宽,让它按内容收缩。 */
-.measure-pct { flex: none; text-align: right; color: var(--fg-dim); }
+/* 百分位数字:tabular-nums 已全站开启(见 base.css),固定 44px 让两行的数字右对齐成列。 */
+.measure-pct { flex: none; width: 44px; text-align: right; color: var(--fg-dim); }
 .measure.val-hot-hi .measure-pct, .measure.val-hot-lo .measure-pct { font-weight: 700; }
 
 .pt-foot {
@@ -351,14 +359,16 @@ table.pets tr.selected .col-pet { background: var(--accent-soft); box-shadow: in
     border-bottom: none; border-right: 1px solid var(--line-soft);
   }
   .pt-img { padding: 6px; }
-  /* 横排后每半 ~150px,量测并排不再局促,恢复稍宽的标签列与间距 */
   .pt-body { flex: 1 1 auto; padding: 8px 10px 10px; gap: 5px; }
-  .measure-lb { width: 24px; }
-  .pt-measures { gap: 12px; }
   .pt-lv { right: 4px; bottom: 4px; font-size: 10px; }
-  /* 只补新增的 .viewseg 触控基线;工具条本身的窄屏收紧规则在 panel.css,
+  /* 只补新增项的触控基线;工具条本身的窄屏收紧规则在 panel.css,
      重复一份改天就会两边漂移。 */
   .viewseg-b { min-height: 36px; } /* 与 .btn 的移动端规则同高 */
+  /* 搜索框允许收缩:panel.css 给 .toolbar .input 钉了 max-width:280px,
+     窄屏下它一个就占掉 ~280px,把排序/升序/同步/视图开关全挤到下一行,
+     首行右侧还空着。放开上限让它按余量伸缩,一屏放得下更多控件。
+     min-width:0 是 flex 下收缩的前提(默认 min-width:auto 会撑住不缩)。 */
+  .list-toolbar .input { flex: 1 1 110px; max-width: none; min-width: 0; }
   /* 分页栏单行显示:收紧按钮/间距、缩窄档位下拉,不再换行 */
   .pager { flex-wrap: nowrap; justify-content: center; gap: 6px; margin-top: 14px; }
   .pager .btn { padding: 6px 8px; font-size: 13px; white-space: nowrap; }

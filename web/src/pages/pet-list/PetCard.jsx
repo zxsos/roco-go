@@ -45,9 +45,16 @@ export default function PetCard({ p, selected, itemProps }) {
       </div>
 
       <div className="pt-body">
-        <div className="pt-name">{p.name || p.species}<Gender g={p.gender} /><Form form={p.form} /></div>
-        <div className="pt-sub">{p.species}{p.book ? ` · #${p.book}` : ''}</div>
-        <div className="pt-types"><Types types={p.types} icons={p.typeIcons} /></div>
+        {/* 名字与系别同一行:名字实测只占 58px、右侧空 163px,而系别原独占一行
+            (19px)。合成一行既填上空白又省下那一行 —— 与下方量测改回两行(+21px)
+            大致抵消,卡片高度基本不变。系别右对齐、上限 45% 宽,长名时先省略名字。 */}
+        <div className="pt-head">
+          <div className="pt-head-text">
+            <div className="pt-name">{p.name || p.species}<Gender g={p.gender} /><Form form={p.form} /></div>
+            <div className="pt-sub">{p.species}{p.book ? ` · #${p.book}` : ''}</div>
+          </div>
+          <div className="pt-types"><Types types={p.types} icons={p.typeIcons} /></div>
+        </div>
 
         <SixGrid p={p} />
 
@@ -60,20 +67,23 @@ export default function PetCard({ p, selected, itemProps }) {
             </span>
           )}
           {p.blood && <span className="pt-tag" title={'血脉 ' + p.blood}><Blood p={p} iconOnly />{p.blood}</span>}
+          {/* 显示**组名**而非组数:个数(「蛋组 2」)不含任何可用信息 ——
+              玩家要的是「陆上/天空」这些组名,它们对应繁殖范围。 */}
           {p.eggGroups?.length > 0 && (
-            <span className="pt-tag" title={p.eggGroups.map((g) => g.name).join(' / ')}>
-              蛋组 {p.eggGroups.length}
+            <span className="pt-tag" title={'蛋组：' + p.eggGroups.map((g) => (g.desc ? `${g.name}(${g.desc})` : g.name)).join(' / ')}>
+              蛋组 {p.eggGroups.map((g) => g.name).join('/')}
             </span>
           )}
         </div>
 
-        {/* 体重/身高并排一行:两项各占两行时单卡要多出 21px(含 gap),
-            而它们是同类信息、天然该并排读(「又高又重」还是「矮胖」)。
-            窄卡(200px)下每半 ~95px,标尺仍能给出位置感。 */}
-        <div className="pt-measures">
-          <Measure label="体重" value={p.weightKg} unit="kg" min={p.weightMin} max={p.weightMax} pct={p.weightPct} />
-          <Measure label="身高" value={p.heightM} unit="m" min={p.heightMin} max={p.heightMax} pct={p.heightPct} />
-        </div>
+        {/* 体重/身高各占一行,**不并排**:并排时每半只有 ~105px(200px 卡宽),
+            而一行要放「标签 22 + 值 44 + 标尺 ≥20 + 百分位 33 + 间距 12」≈131px,
+            实测溢出(scrollWidth 129 > clientWidth 105),百分位数字被标尺压住重合。
+            四项里砍任何一项都会丢信息(百分位正是找大块头/小不点的判据),
+            故让出一行:全宽 190px 下四项从容排开,标尺还能拉长更易读位置。
+            代价 +21px(单卡的 6.8%),由上面名字与系别合并(-19px)大抵抵消。 */}
+        <Measure label="体重" value={p.weightKg} unit="kg" min={p.weightMin} max={p.weightMax} pct={p.weightPct} />
+        <Measure label="身高" value={p.heightM} unit="m" min={p.heightMin} max={p.heightMax} pct={p.heightPct} />
 
         <div className="pt-foot">
           <span className="pt-voice">声 <b className={voiceHot(p.voice)}>{p.voice}</b></span>

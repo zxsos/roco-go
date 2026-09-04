@@ -101,10 +101,31 @@ async function measure(w, dpr) {
     for (const im of document.querySelectorAll('.pt-img')) im.src = px
     return Promise.all([...document.querySelectorAll('.pt-img')].map((im) =>
       im.complete ? null : new Promise((r) => { im.onload = r; im.onerror = r })))
-  }, PX).then(() => box(page))
+  }, PX)
+  const lb = await box(page)
+
+  // —— 量测行(体重/身高)——
+  //
+  // 来自实际故障:体重/身高曾并排显示,每半只有 ~105px,而一行要放
+  // 「标签+值+标尺+百分位」四项 ≈131px —— 内容溢出、百分位数字被标尺压住
+  // 重合,而页面看上去只是"挤了一点"。现已改回各占一行。
+  // 只量已加载态:量测行不含图片,尺寸与图片加载无关,量两次是白跑。
+  const measures = await page.evaluate(() =>
+    [...document.querySelectorAll('.measure')].map((m) => {
+      const bar = m.querySelector('.pctbar')
+      const pct = m.querySelector('.measure-pct')
+      const bb = bar && bar.getBoundingClientRect()
+      const pb = pct && pct.getBoundingClientRect()
+      return {
+        label: m.querySelector('.measure-lb').textContent,
+        overflow: m.scrollWidth > m.clientWidth + 1,
+        // 标尺右边界与百分位左边界的间隙,负值即重合
+        gap: bb && pb ? +(pb.x - bb.right).toFixed(1) : null,
+      }
+    }))
 
   await page.close()
-  return { unloaded, loaded }
+  return { unloaded, loaded: lb, measures }
 }
 
 // box 量图区高度与图片盒子尺寸。object-fit:contain 下绘制边长 = 内容区较短的一边
@@ -159,8 +180,18 @@ const problems = []
 if (bad.放大.length) problems.push(`图片被放大(容器 ${bad.放大.join('/')}px)—— 检查 .pt-img 的 max-*`)
 if (bad.溢出.length) problems.push(`图片溢出图区(容器 ${bad.溢出.join('/')}px)—— 检查 .pt-media 是否还是 grid`)
 if (bad.不一致.length) problems.push(`加载时机影响布局(容器 ${bad.不一致.join('/')}px)—— 图片尺寸不能由内容撑`)
+
+// 量测行:溢出与重合。任一容器宽度下出现即失败(见 measure() 里的注释)。
+const badMes = []
+for (const { w, d1 } of rows) {
+  for (const m of d1.measures || []) {
+    if (m.overflow) badMes.push(`容器 ${w}: ${m.label} 内容溢出`)
+    if (m.gap !== null && m.gap < 0) badMes.push(`容器 ${w}: ${m.label} 标尺与百分位重合 ${m.gap}px`)
+  }
+}
+if (badMes.length) problems.push('量测行异常 —— ' + badMes.slice(0, 4).join('; '))
 if (problems.length) {
   console.error('\n✗ ' + problems.join('\n✗ '))
   process.exit(1)
 }
-console.log('\n✓ 不放大 / 不溢出 / 与加载时机无关')
+console.log('\n✓ 不放大 / 不溢出 / 与加载时机无关 / 量测行不溢出不重合')
