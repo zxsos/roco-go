@@ -91,10 +91,14 @@ console.log('\n[2] 区间判定')
 console.log('\n[3] 中间区间(旧版做不到的)')
 {
   const mid = { id: 'mid', dim: 'weightPct', min: 40, max: 60, label: '中等体型', color: '#fff', on: true }
-  ok('体重 40~60 能命中', matchRangeRule({ weightPct: 50 }, [mid]) || matchRangeRule({ weightPct: 50 }, mid))
-  // 旧版只有 big/small 两极,50% 谁都不命中 —— 这正是这次要补的能力
-  const legacyHit = 50 >= 98 || 50 <= 2
-  ok('旧版对 50% 确实无法命中(对照)', !legacyHit)
+  ok('体重 40~60 能命中', matchRangeRule({ weightPct: 50 }, mid))
+  // 旧版只有 big/small 两极(单值阈值 >=98 / <=2),50% 谁都不命中 —— 这正是要补的能力。
+  // 写成函数再代入样本,不能写 `50 >= 98 || 50 <= 2` 那种字面量:那是常量表达式,
+  // eslint 的 no-constant-binary-expression 会报,而且它压根没在验证规则 —— 改了
+  // DEFAULT_RANGE_RULES 的阈值它照样"通过",是条死断言。
+  const legacy = (pct) => pct >= 98 || pct <= 2
+  ok('旧版对 50% 确实无法命中(对照)', !legacy(50))
+  ok('旧版对极值仍能命中(回归:没把旧能力弄丢)', legacy(99) && legacy(1))
 }
 
 // —— 4. 事件页组合逻辑 ——
@@ -345,7 +349,6 @@ console.log('\n[9] 变焦刻度 rangeScale')
 {
   for (const dim of R.RANGE_DIMS) {
     const sc = R.rangeScale(dim)
-    const span = dim.max - dim.min
 
     // 铺满:轨道两端必须正好是取值域两端,否则滑块拖到底也到不了极值
     eq(`${dim.n}: 值域下界落在轨道 0`, sc.toPos(dim.min), 0)
