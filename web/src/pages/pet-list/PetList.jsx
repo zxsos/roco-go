@@ -260,20 +260,21 @@ export default function PetList() {
               状态")。打包后这个整体只作为一项参与换行,内部永不分家。 */}
           <div className="list-tail">
             {/* 默认视图排在最左:分段控件的首位会被读成"主推的那个",
-                与默认项错开时会让人以为当前视图是次要的那个。 */}
+                与默认项错开时会让人以为当前视图是次要的那个。
+                ⚠️ 改 DEFAULT_VIEW 时必须同步调换这里的顺序(见 filters.js)。 */}
             <div className="viewseg" role="group" aria-label="列表视图">
-              <button
-                type="button" className={'viewseg-b' + (view === 'table' ? ' on' : '')}
-                aria-pressed={view === 'table'}
-                title="表格:逐列对齐,适合把这一页的百分位/声音竖着比"
-                onClick={() => setView('table')}
-              >表格</button>
               <button
                 type="button" className={'viewseg-b' + (view === 'gallery' ? ' on' : '')}
                 aria-pressed={view === 'gallery'}
                 title="陈列:宠物图为主,适合一屏扫多只、找变异与体型"
                 onClick={() => setView('gallery')}
               >陈列</button>
+              <button
+                type="button" className={'viewseg-b' + (view === 'table' ? ' on' : '')}
+                aria-pressed={view === 'table'}
+                title="表格:逐列对齐,适合把这一页的百分位/声音竖着比"
+                onClick={() => setView('table')}
+              >表格</button>
             </div>
             <span className="muted">共 {data.total} 只</span>
           </div>

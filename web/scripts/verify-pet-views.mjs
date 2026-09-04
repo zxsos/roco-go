@@ -104,17 +104,24 @@ check('表格视图(空列表)', () =>
   React.createElement(PetTable, { pets: [], selected: null, sort: '', order: '', onSort: noop, itemProps }))
 
 // 视图默认值的规整:回落方向写反是静默故障(页面照常显示,只是每个用户的视图被
-// 强制翻到另一个),故单独断言四种输入,而不是只测"存过的值"。
+// 强制翻到另一个),故单独断言四类输入。
+//
+// ⚠️ 断言一律**语义驱动**、用 DEFAULT_VIEW 表达,不硬编码 'table'/'gallery':
+// 初版把期望值写死成 'table',于是这次默认值改成 gallery 时五条断言全红 ——
+// 而那次改动本身是**正确**的,红的是过时的断言。断言守的是契约(两个合法值
+// 都保留、非法值回落默认),不是"当前默认值恰好是哪个"。
 {
   const { DEFAULT_VIEW, sanitizeView } = await server.ssrLoadModule('/src/pages/pet-list/filters.js')
+  const VIEWS = ['table', 'gallery']
   const cases = [
-    ['默认值为表格', DEFAULT_VIEW === 'table'],
-    ['无记录/空串 → 默认', sanitizeView('') === 'table' && sanitizeView(undefined) === 'table'],
-    ['存过 table → 保留', sanitizeView('table') === 'table'],
-    ['存过 gallery → 保留(不强制翻回默认)', sanitizeView('gallery') === 'gallery'],
-    ['垃圾值 → 默认', sanitizeView('GALLERY') === 'table' && sanitizeView(42) === 'table'],
+    ['默认值是合法视图之一', VIEWS.includes(DEFAULT_VIEW)],
+    ['无记录/空串 → 默认', [undefined, null, ''].every((v) => sanitizeView(v) === DEFAULT_VIEW)],
+    // 最关键的一条:两个合法值都**原样保留**,不能被默认值"吸收"。
+    // 写成 `v === 'x' ? 'x' : DEFAULT_VIEW` 的那半个,改默认值就会静默翻掉另一半。
+    ['两个合法值都保留(不被默认值吸收)', VIEWS.every((v) => sanitizeView(v) === v)],
+    ['垃圾值 → 默认', ['GALLERY', 'Table', 42, {}, true].every((v) => sanitizeView(v) === DEFAULT_VIEW)],
   ]
-  console.log('')
+  console.log(`\n  (当前 DEFAULT_VIEW = ${DEFAULT_VIEW})`)
   for (const [label, ok] of cases) {
     console.log(`  ${ok ? 'OK  ' : 'FAIL'} 视图默认值: ${label}`)
     if (!ok) fail++
