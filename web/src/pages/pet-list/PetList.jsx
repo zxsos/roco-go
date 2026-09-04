@@ -9,7 +9,7 @@ import { SORTS, withCatch, FILTER_KEY, DEFAULT_FILTER, sanitizeFilter } from './
 import FilterPanel from './FilterPanel'
 import BoxMap from './BoxMap'
 import PetTable from './PetTable'
-import PetCards from './PetCards'
+import PetGallery from './PetGallery'
 import ContextMenu from './ContextMenu'
 import Dropdown from '../../components/Dropdown'
 
@@ -38,6 +38,14 @@ export default function PetList() {
     setFilter((f) => (f.box ? { ...f, box: '', page: 1 } : f))
   }
   const [collapsed, setCollapsed] = useStoredFlag(sessionStorage, 'petListCollapsed', true)
+  // 视图开关(陈列 / 表格)。存 localStorage 而非 sessionStorage:这是"我习惯怎么看"
+  // 而不是"这次会话的临时状态",与筛选条件(关掉页面就该忘)性质相反。
+  //
+  // 为什么让用户选而不是按视口宽度自动切:原先是 760px 断点一刀切 —— 平板竖屏
+  // (宽 800px)被迫用横向滚动的表格,而窄窗口的桌面用户被迫用卡片。两者都是
+  // 猜错了意图:陈列适合"找那一只",表格适合"逐列比一页",这与屏幕宽度无关。
+  const [view, setView] = useStoredJSON(localStorage, 'petView', 'gallery',
+    (v) => (v === 'table' ? 'table' : 'gallery'))
   const [sync, setSync] = useStoredFlag(localStorage, 'petSync', true) // 实时同步:游戏内操作自动跳转到对应宠物(默认开)
   const [detailGid, setDetailGid] = useState(null) // 详情弹窗的 gid(null=关闭)
   const [selected, setSelected] = useState(null) // 单击选中的 gid
@@ -245,17 +253,35 @@ export default function PetList() {
           <button className="btn" onClick={() => set({ order: filter.order === 'asc' ? 'desc' : 'asc' })}>{filter.order === 'asc' ? '升序' : '降序'}</button>
           <button className={'btn' + (sync ? ' primary' : '')} title="开启后,游戏内捕捉/移动宠物会自动跳转并选中该宠物;关闭可避免打断当前筛选" onClick={() => setSync((v) => !v)}>同步</button>
           <div className="spacer" />
+          <div className="viewseg" role="group" aria-label="列表视图">
+            <button
+              type="button" className={'viewseg-b' + (view === 'gallery' ? ' on' : '')}
+              aria-pressed={view === 'gallery'}
+              title="陈列:宠物图为主,适合一屏扫多只、找变异与体型"
+              onClick={() => setView('gallery')}
+            >陈列</button>
+            <button
+              type="button" className={'viewseg-b' + (view === 'table' ? ' on' : '')}
+              aria-pressed={view === 'table'}
+              title="表格:逐列对齐,适合把这一页的百分位/声音竖着比"
+              onClick={() => setView('table')}
+            >表格</button>
+          </div>
           <span className="muted">共 {data.total} 只</span>
         </div>
 
-        <PetTable pets={data.pets} selected={selected} sort={filter.sort} order={filter.order} onSort={sortBy} itemProps={itemProps} />
-        <PetCards pets={data.pets} selected={selected} itemProps={itemProps} />
+        {view === 'table'
+          ? <PetTable pets={data.pets} selected={selected} sort={filter.sort} order={filter.order} onSort={sortBy} itemProps={itemProps} />
+          : <PetGallery pets={data.pets} selected={selected} itemProps={itemProps} />}
 
         {/* 首次加载(还没有任何宠物数据)时铺骨架而不是「没有匹配的宠物」——
             后者是**结果**,加载中报结果会把空列表误读成「筛了个寂寞」。
             换筛选条件时 useAsyncData 保留旧数据,故只有真正从零开始那一次会见到骨架。 */}
         {data.pets.length === 0 && (loading
-          ? <SkeletonRows rows={6} h={44} gap={8} />
+          // 骨架形状跟着视图走:表格行是 44px 的扁条,陈列卡是 ~336px 的方块。
+          // 用同一份扁条骨架铺陈列视图会「先矮后高」地跳一下,而那不是加载变快了,
+          // 只是骨架没铺对形状 —— 观感上等同于假进度。
+          ? <SkeletonRows rows={6} h={view === 'table' ? 44 : 336} gap={8} />
           : <div className="empty">没有匹配的宠物</div>)}
 
         <div className="pager">
