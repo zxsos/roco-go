@@ -83,8 +83,9 @@ func (s *Server) SetWildsClearer(fn func(account string)) {
 
 // handleWildPetsClear 主动清空当前账号的野生宠标记(用户点「清空」时用)。
 //
-// 与「换场景/传送」是两回事:那是管线自动做的、且**只置灰不删**(见 pipeline.resetWilds),
-// 这是用户**明确要求**抹掉 —— 灰点也一并清掉。这是唯一会真正删除标记的入口。
+// 与管线自动做的那两种结算不同:同场景内传送只置灰、换场景整份作废,都是**按场景**
+// 决定标记还留不留(见 pipeline.resetWilds);这是用户**明确要求**在当前场景内抹平
+// —— 灰点也一并清掉。这是唯一由用户发起的删除。
 func (s *Server) handleWildPetsClear(w http.ResponseWriter, r *http.Request) {
 	acc := s.acct(r)
 	s.wildsMu.Lock()

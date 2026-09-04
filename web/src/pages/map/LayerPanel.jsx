@@ -81,8 +81,9 @@ export default function LayerPanel({ pois, wilds, gathers, paint, routes, collap
         <div className="filter-group">
           {/* 清空按钮放进 label 内:复用 .filter-group > label 的既有 flex 布局
               (左侧装饰竖条靠 ::before),不必另加包裹层与配套样式。
-              这是唯一会真正删除野生宠标记的入口 —— 换场景/传送都只置灰
-              (见 pipeline.resetWilds),系统不自动抹掉,清不清由用户决定。 */}
+              这是唯一由用户发起的删除 —— 系统侧只按场景结算:同场景内传送只置灰、
+              换场景整份作废(见 pipeline.resetWilds),留在当前场景内的标记连同
+              灰点一律不抹,抹不抹由用户决定。 */}
           <label>
             野生宠物
             <button className="map-collect-btn map-wild-clear" onClick={() => {
