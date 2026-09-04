@@ -1,6 +1,6 @@
 import React from 'react'
 import { imgURL, useImgFallback, useImgReady, InlineIcon } from '../../components/icons'
-import { Types, Marks, Gender, Form, Blood, PetMark } from '../../components/badges'
+import { Types, Marks, Gender, Blood, PetMark } from '../../components/badges'
 import { SixGrid, Measure } from './metrics'
 import { locTag, voiceHot, fmtShortTime } from '../../utils/format'
 
@@ -37,40 +37,73 @@ export default function PetCard({ p, selected, itemProps }) {
             />
           )
           : <span className="pt-fallback">{p.shiny ? '✨' : '🐾'}</span>}
-        {/* 搭档标记压在图上左上角(与列表头像一致的位置),异色/炫彩压右上角:
-            两者语义不同 —— 前者是玩家自己打的标,后者是稀有度,分开放才不会混。 */}
-        <span className="pt-partner"><PetMark p={p} /></span>
-        <span className="pt-flags"><Marks p={p} /></span>
-        <span className="pt-lv">Lv.{p.level}</span>
+
+        {/* —— 四角徽标:把「属性」压到图上,数据区只留数值 ——
+            原先它们挤在数据区一行胶囊里(nowrap + 截断),形态(「夏日的样子」)
+            与奖牌常被切掉。移到图上是游戏宠物卡的通行做法:图片四周本来就
+            是透明区,四角压标不挡主体,且属性与形象同处一眼扫完。
+
+            四角分工按「语义相近的挨在一起」:
+              左上 搭档标记 —— 玩家自己打的标,独占一角免得和稀有度混
+              右上 系别(≤2)/形态/血脉 —— 都是「它是什么」
+              左下 等级/性格/特长 —— 都是「它有多强」
+              右下 异色·炫彩 —— 稀有度,与左上的搭档对角呼应
+
+            **一律竖排**:图区高 104(桌面)/204(移动)、宽 204~241(桌面)/
+            96(移动),横排放三个必然溢出;竖排只占 ~40px 宽,且移动端靠
+            高 204px 也放得下,两端可用同一套结构。 */}
+        {/* 左右两栏而非四个独立角:右栏(系别/形态/血脉 + 异色炫彩)与左栏
+            (搭档 + 等级/性格/特长)各自 space-between 上下顶开。四个独立
+            absolute 角在 104px 图区里会垂直撞上(实测右上 70px + 右下 32px
+            + 边距 > 104),两栏布局则**结构上不可能重叠**。 */}
+        <div className="pt-side left">
+          <div className="pt-corner tl"><PetMark p={p} /></div>
+          <div className="pt-corner bl">
+            <span className="pt-chip pt-lv">Lv.{p.level}</span>
+            {p.nature && <span className="pt-chip" title="性格">{p.nature}</span>}
+            {p.speciality && p.speciality !== '无' && <span className="pt-chip" title="特长">{p.speciality}</span>}
+          </div>
+        </div>
+
+        <div className="pt-side right">
+          <div className="pt-corner tr">
+            <Types types={p.types} icons={p.typeIcons} />
+            {/* 形态名可能很长(「夏日的样子」),故给上限 + 省略号兜底;
+                title 保留全文,悬停可读(原先在数据区被硬截断且无从查看)。 */}
+            {p.form && <span className="pt-chip" title={'形态：' + p.form}>{p.form}</span>}
+            {p.blood && <Blood p={p} />}
+          </div>
+          {/* 异色/炫彩横排:竖排会把 3 个标记拉成 32px 高,在 104px 图区里
+              吃掉右栏下半 —— 横排只占 15px,且三者同属稀有度,平级并排更合理。 */}
+          <div className="pt-corner br row"><Marks p={p} /></div>
+        </div>
       </div>
 
       <div className="pt-body">
-        {/* 名字与系别同一行:名字实测只占 58px、右侧空 163px,而系别原独占一行
-            (19px)。合成一行既填上空白又省下那一行 —— 与下方量测改回两行(+21px)
-            大致抵消,卡片高度基本不变。系别右对齐、上限 45% 宽,长名时先省略名字。 */}
+        {/* 系别/形态/血脉已移到图上,名字行不再需要右侧栏 —— 名字占满整行,
+            长昵称可显示的字更多(原上限 55%)。 */}
         <div className="pt-head">
           <div className="pt-head-text">
-            <div className="pt-name">{p.name || p.species}<Gender g={p.gender} /><Form form={p.form} /></div>
+            <div className="pt-name">{p.name || p.species}<Gender g={p.gender} /></div>
             <div className="pt-sub">{p.species}{p.book ? ` · #${p.book}` : ''}</div>
           </div>
-          <div className="pt-types"><Types types={p.types} icons={p.typeIcons} /></div>
         </div>
 
         <SixGrid p={p} />
 
-        <div className="pt-tags">
-          {p.nature && <span className="pt-tag" title="性格">{p.nature}</span>}
-          {p.speciality && p.speciality !== '无' && <span className="pt-tag" title="特长">{p.speciality}</span>}
+        {/* 奖牌与蛋组留在数据区:它们名长(「大块头」/「陆上/天空」)、出现率低,
+            压在图上会挤掉高频属性。原先混在单行胶囊里被 nowrap 截断(奖牌显示
+            不全即由此),现在独占一行、各自可省略,不再互相挤掉。
+            显示**组名**而非组数:个数(「蛋组 2」)不含任何可用信息 ——
+            玩家要的是「陆上/天空」这些组名,它们对应繁殖范围。 */}
+        <div className="pt-meta">
           {p.medal && (
-            <span className="pt-tag" title={p.medalDesc || '佩戴奖牌'}>
+            <span className="pt-meta-i" title={p.medalDesc || '佩戴奖牌'}>
               <InlineIcon src={p.medalIcon} className="pt-medal-ic" alt="" />{p.medal}
             </span>
           )}
-          {p.blood && <span className="pt-tag" title={'血脉 ' + p.blood}><Blood p={p} iconOnly />{p.blood}</span>}
-          {/* 显示**组名**而非组数:个数(「蛋组 2」)不含任何可用信息 ——
-              玩家要的是「陆上/天空」这些组名,它们对应繁殖范围。 */}
           {p.eggGroups?.length > 0 && (
-            <span className="pt-tag" title={'蛋组：' + p.eggGroups.map((g) => (g.desc ? `${g.name}(${g.desc})` : g.name)).join(' / ')}>
+            <span className="pt-meta-i muted" title={'蛋组：' + p.eggGroups.map((g) => (g.desc ? `${g.name}(${g.desc})` : g.name)).join(' / ')}>
               蛋组 {p.eggGroups.map((g) => g.name).join('/')}
             </span>
           )}

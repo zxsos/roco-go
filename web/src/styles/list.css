@@ -159,21 +159,63 @@
   max-height: min(256px, 100%);
 }
 .pt-fallback { font-size: 40px; opacity: .5; }
-/* 搭档标记(左上角)与异色/炫彩(右上角)分列两侧:前者是玩家自己打的标,
-   后者是稀有度,混在一处会被当成同一种东西。 */
-.pt-partner { position: absolute; top: 6px; left: 6px; width: 20px; height: 20px; z-index: var(--z-raised); }
-.pt-flags { position: absolute; top: 6px; right: 6px; display: flex; align-items: center; gap: 3px; z-index: var(--z-raised); }
-.pt-lv {
-  position: absolute; right: 6px; bottom: 6px;
-  padding: 1px 7px; border-radius: 999px; font-size: 11px; font-weight: 700;
-  color: var(--fg); background: color-mix(in srgb, var(--bg-1) 76%, transparent);
+
+/* ---- 四角徽标(见 PetCard.jsx 的分工说明)----
+   位置贴边 5px、竖排、间距 2px —— 图区高只有 104px(桌面),右上最多 4 项
+   (系别×2 + 形态 + 血脉),紧凑排版才能全部放下且留出图片主体。 */
+/* 左右两栏:各占图区一侧,内部 space-between 把上下两组顶到两端。
+   pointer-events 分层:栏本身 none(不挡图片的点选),栏内角标 auto
+   (炫彩色卡要能点开放大 —— 见 badges.jsx 的 GlassChip)。 */
+.pt-side {
+  position: absolute; top: 5px; bottom: 5px; z-index: var(--z-raised);
+  display: flex; flex-direction: column; justify-content: space-between;
+  /* 固定上限而非百分比:图区宽在两端差异极大(桌面 204~241px、移动端 132px),
+     用百分比要么桌面压图、要么移动端挤爆。取 62px 是两端的最小可行解 ——
+     它刚好容纳最长的一项(形态「夏日的样子」5 字 × 10px + 内边距 ≈60px),
+     且两侧 62 + 62 = 124px < 移动端图区 132px,左右不会撞。 */
+  max-width: 62px;
+  pointer-events: none;
+}
+.pt-side.left { left: 5px; align-items: flex-start; }
+.pt-side.right { right: 5px; align-items: flex-end; }
+
+.pt-corner { display: flex; flex-direction: column; gap: 2px; max-width: 100%; pointer-events: auto; }
+/* 异色/炫彩:横排(见 PetCard.jsx 注释) */
+.pt-corner.row { flex-direction: row; align-items: center; gap: 3px; }
+
+/* 角标里的文字徽标(等级/性格/特长/形态)。
+   半透明背板是**必须**的:它们压在图区渐变上,而宠物图透明背景,
+   没有背板时浅色系宠物(如冰系白身)会把文字吃掉。
+   backdrop-filter 让背板"糊"住背后的图而不是硬盖一层,视觉更轻。 */
+.pt-chip {
+  display: inline-flex; align-items: center; gap: 3px;
+  max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  padding: 0 5px; border-radius: 6px;
+  font-size: 10px; line-height: 15px; font-weight: 600; color: var(--fg);
+  background: color-mix(in srgb, var(--bg-1) 82%, transparent);
   border: 1px solid var(--line-soft); backdrop-filter: blur(2px);
 }
+/* 等级:唯一带强调色的角标 —— 它是玩家最常读的一项,且要与下面两行
+   (性格/特长)区分开,否则三行小字糊成一片。 */
+.pt-lv { color: var(--accent); font-weight: 700; }
+
+/* 角标内的系别/血脉:沿用它们原有的彩色徽标样式(玩家靠颜色认系别),
+   只压缩到角标尺寸。.type 自带 margin(行内排版用),flex 下与 gap 叠加。 */
+.pt-corner .type { margin: 0; font-size: 10px; padding: 0 5px 0 3px; line-height: 15px; }
+.pt-corner .type-ic { width: 12px; height: 12px; }
+.pt-corner .blood { margin-left: 0; font-size: 10px; padding: 0 5px; border-radius: 6px;
+  background: color-mix(in srgb, var(--bg-1) 82%, transparent);
+  border: 1px solid var(--line-soft); line-height: 15px; }
+.pt-corner .blood-ic { width: 13px; height: 13px; }
+/* 炫彩色卡在角标里按角标高度缩放(原 18px 高在 104px 图区里偏大) */
+.pt-corner .glass-chip { height: 15px; width: 27px; margin-left: 0; }
+.pt-corner .mark-img { width: 15px; height: 15px; margin-left: 0; }
+.pt-corner .mark { font-size: 10px; line-height: 15px; margin-left: 0; }
 
 /* gap 7→4、padding 收紧:实测数据区 283px 里 gap+padding 就占 83.5px(约三成),
    而它们不承载任何信息。收紧是纯赚 —— 卡片矮 40px 且信息一毫不丢。 */
 .pt-body { display: flex; flex-direction: column; gap: 4px; padding: 8px 10px 10px; min-width: 0; }
-/* 名字 + 系别同一行(见 PetCard.jsx 注释):名字区可收缩、系别右对齐不收缩。 */
+/* 名字区:系别已移到图上,名字独占整行(不再有 55% 的宽上限)。 */
 .pt-head { display: flex; align-items: flex-start; gap: 6px; }
 .pt-head-text { flex: 1 1 auto; min-width: 0; }
 .pt-name {
@@ -184,13 +226,6 @@
   font-size: 11px; color: var(--fg-dim); margin-top: -4px;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-/* 系别:右对齐、可换行(双系别时竖排也不占宽),上限 45% 保证名字至少有 55% 可用。
-   .type 自带 margin(行内排版用),与 gap 叠加会间距不均,清掉。 */
-.pt-types { flex: none; display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 3px; max-width: 45%; }
-.pt-types > .type { margin: 0; }
-/* 无系别/无标签的宠物(老库、未上线形态)会渲染出空容器,它仍要吃父级 gap
-   的一份间距,在数据稀疏的卡上表现为底部多出一截空白。空则折叠。 */
-.pt-types:empty, .pt-tags:empty { display: none; }
 
 /* ---- 六维小格(陈列卡)---- */
 .sixgrid {
@@ -209,28 +244,25 @@
 .sixgrid-track { display: block; height: 3px; border-radius: 2px; background: var(--bg-3); overflow: hidden; }
 .sixgrid-track > i { display: block; height: 100%; border-radius: 2px; background: var(--gold); }
 
-/* ---- 性格/特长/奖牌/血脉胶囊 ----
-   单行截断(nowrap + overflow:hidden)而非换行:实测 5 个标签在 200px 卡宽下
-   会折成两行,单这一块就 47px,是数据区里最高的单项 —— 而它承载的是
-   「这只还有什么附加属性」这类**次要**信息(找宠物时先读六维与百分位)。
-   截断不丢信息:每个胶囊都带 title,悬停可读全文(见 PetCard.jsx)。 */
-.pt-tags { display: flex; flex-wrap: nowrap; gap: 4px; overflow: hidden; }
-.pt-tag {
+/* ---- 奖牌 + 蛋组(数据区)----
+   性格/特长/血脉/系别/形态都已移到图上,数据区只剩这两项低频信息。
+   原先它们混在单行胶囊里被 nowrap 截断(奖牌显示不全即由此)—— 现在独占
+   一行、各自可省略,不再互相挤掉。两者都可能为空,空容器折叠(免白占 gap)。 */
+.pt-meta { display: flex; align-items: center; gap: 8px; font-size: 11px; min-width: 0; }
+.pt-meta:empty { display: none; }
+.pt-meta-i {
   display: inline-flex; align-items: center; gap: 3px;
-  padding: 1px 7px; border-radius: 999px; font-size: 11px; line-height: 1.6;
-  background: var(--bg-3); border: 1px solid var(--line-soft); color: var(--fg-dim);
-  white-space: nowrap; max-width: 100%; overflow: hidden;
-  /* flex:none 让胶囊保持自身宽度、超出部分被容器裁掉,而不是被挤压变形。 */
-  flex: none;
+  min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
+/* 奖牌是全名、不省略(它才 2~4 字);蛋组可能两组连写较长,故让奖牌先占、蛋组收缩。 */
+.pt-meta-i:first-child { flex: none; max-width: 55%; }
+.pt-meta-i:last-child { flex: 1 1 auto; }
 .pt-medal-ic { width: 14px; height: 14px; object-fit: contain; flex: none; }
-.pt-tag .blood { margin-left: 0; gap: 1px; }
-.pt-tag .blood-ic { width: 15px; height: 15px; }
 
 /* ---- 量测(体重/身高):标签 + 值 + 百分位标尺 + 百分位 ----
    各占一行而非并排:并排时每半 ~105px 放不下四项,实测溢出并让百分位与标尺
    重合(见 PetCard.jsx 注释)。全宽下四项从容,标尺拉长后位置更易读。 */
-.measure { display: flex; align-items: center; gap: 6px; font-size: 11px; line-height: 1.5; min-width: 0; }
+.measure { display: flex; align-items: center; gap: 4px; font-size: 11px; line-height: 1.5; min-width: 0; }
 .measure-lb { flex: none; width: 24px; color: var(--fg-dim); }
 .measure-v { font-weight: 700; color: var(--fg); white-space: nowrap; }
 .measure-v i { font-style: normal; font-weight: 400; font-size: 10px; color: var(--fg-dim); margin-left: 1px; }
@@ -353,14 +385,22 @@ table.pets tr.selected .col-pet { background: var(--accent-soft); box-shadow: in
   .pet-grid { grid-template-columns: 1fr; gap: 8px; }
   .pet-card { flex-direction: row; align-items: stretch; contain-intrinsic-size: auto 120px; }
   /* 横向布局下 --pet-media-h 是高度、不再适用,改按固定宽度撑开:
-     height:100% 让它跟着卡片(由数据区决定高度)走,图始终居中。 */
+     height:100% 让它跟着卡片(由数据区决定高度)走,图始终居中。
+
+     宽度 96 → 132px:四角徽标改两栏后,两侧各需 62px(共 124px),
+     96px 会让左右栏在中间撞上。132px 是「两栏 + 中间图片」的最小可行宽,
+     数据区仍剩 ~250px(390 视口下),六维三列与量测行都放得开。
+     副作用是图片显示边长从 79 → ~118px,更大更清晰(仍远小于源 256px)。 */
   .pt-media {
-    flex: 0 0 96px; height: auto;
+    flex: 0 0 132px; height: auto;
     border-bottom: none; border-right: 1px solid var(--line-soft);
   }
   .pt-img { padding: 6px; }
   .pt-body { flex: 1 1 auto; padding: 8px 10px 10px; gap: 5px; }
-  .pt-lv { right: 4px; bottom: 4px; font-size: 10px; }
+  /* 侧栏贴边收紧:移动端图区窄,5px 边距在 132px 里占比偏大 */
+  .pt-side { top: 3px; bottom: 3px; }
+  .pt-side.left { left: 3px; }
+  .pt-side.right { right: 3px; }
   /* 只补新增项的触控基线;工具条本身的窄屏收紧规则在 panel.css,
      重复一份改天就会两边漂移。 */
   .viewseg-b { min-height: 36px; } /* 与 .btn 的移动端规则同高 */
