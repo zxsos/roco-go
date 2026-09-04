@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo, useContext } from 'react'
-import { getPets, getFilterOptions, getBoxes, getTeams, getPetPage, subscribe } from '../../api'
+import { getPets, getFilterOptions, getNameOptions, getBoxes, getTeams, getPetPage, subscribe } from '../../api'
 import { AccountContext } from '../../context'
 import { useStoredFlag, useStoredJSON } from '../../hooks/useStoredState'
 import { useAsyncData } from '../../hooks/useAsyncData'
@@ -16,6 +16,9 @@ import Dropdown from '../../components/Dropdown'
 // 空数据的兜底常量:引用稳定,免得每次渲染造新对象打穿下游 memo。
 const NO_PETS = { total: 0, pets: [] }
 const NO_OPTIONS = {}
+// 6×6 性格方阵的空兜底:数据未到时组件收到 undefined,铺出来是一张全空的格子,
+// 会被误读成「这一版游戏没性格」。给一份结构完整的空阵,未到位时只是每格无名。
+const NO_NAME_OPTIONS = { nature: Array.from({ length: 6 }, () => new Array(6).fill('')) }
 const NO_BOXES = []
 const NO_TEAMS = { slots: [] }
 
@@ -53,8 +56,13 @@ export default function PetList() {
     useCallback(() => getPets(withCatch(filter)), [filter]),
     { fallback: NO_PETS, reloadKey: account },
   )
+  // 筛选下拉项:五维合并成一条 SELECT 再在 Go 侧去重排序(见后端 handleFilterOptions)。
+  // 性格矩阵另走 /api/name-options —— 它是**全局固定数据**(不随账号变化),
+  // 与按账号聚合的 filter-options 混在一起会让那份响应带上无谓的账号语义。
   const { data: options } = useAsyncData(useCallback(() => getFilterOptions(), []),
     { fallback: NO_OPTIONS, reloadKey: account })
+  const { data: nameOpts } = useAsyncData(useCallback(() => getNameOptions(), []),
+    { fallback: NO_NAME_OPTIONS })
   // 盒子与队伍是两路独立拉取,但总是一起重取(SSE 收到宠物变动时都要刷新),故合成一个 loadBoxes。
   const { data: boxes, refresh: loadBoxesData } = useAsyncData(useCallback(() => getBoxes(), []),
     { fallback: NO_BOXES, reloadKey: account })
@@ -212,7 +220,7 @@ export default function PetList() {
   return (
     <div className="list-layout">
       <FilterPanel
-        filter={filter} options={options} total={data.total}
+        filter={filter} options={{ ...options, natureMatrix: nameOpts.nature }} total={data.total}
         collapsed={collapsed} onClose={() => setCollapsed(true)}
         set={set} toggleType={toggleType} reset={reset}
       >
