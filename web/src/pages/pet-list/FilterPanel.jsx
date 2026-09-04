@@ -45,23 +45,22 @@ export default function FilterPanel({ filter, options, total, collapsed, onClose
           </div>
           <div className="filter-group">
             <label>变异</label>
-            <div className="checks">
-              <label className="check">
-                <input type="checkbox" checked={filter.shiny === '1'} onChange={(e) => set({ shiny: e.target.checked ? '1' : '' })} />异色
-              </label>
-              <label className="check">
-                <input type="checkbox" checked={filter.colorful === '1'} onChange={(e) => set({ colorful: e.target.checked ? '1' : '' })} />炫彩
-              </label>
+            <div className="toggles">
+              <Toggle checked={filter.shiny === '1'} onChange={(v) => set({ shiny: v ? '1' : '' })}>异色</Toggle>
+              <Toggle checked={filter.colorful === '1'} onChange={(v) => set({ colorful: v ? '1' : '' })}>炫彩</Toggle>
             </div>
           </div>
           <div className="filter-group">
             <label>性别</label>
-            <div className="radios">
+            <div className="toggles">
               {['', '♂', '♀'].map((v) => (
-                <label key={v || 'all'} className="radio">
-                  <input type="radio" name="gender" checked={(filter.gender || '') === v} onChange={() => set({ gender: v })} />
+                <Radio
+                  key={v || 'all'} name="gender"
+                  checked={(filter.gender || '') === v}
+                  onChange={() => set({ gender: v })}
+                >
                   {v ? <Gender g={v} /> : '全部'}
-                </label>
+                </Radio>
               ))}
             </div>
           </div>
@@ -87,19 +86,11 @@ export default function FilterPanel({ filter, options, total, collapsed, onClose
           <Select label="奖牌" opts={options.medal} value={filter.medal} onChange={(v) => set({ medal: v })} />
           <div className="filter-group">
             <label>奖牌特征</label>
-            <div className="checks">
-              <label className="check">
-                <input type="checkbox" checked={filter.medalBig === '1'} onChange={(e) => set({ medalBig: e.target.checked ? '1' : '' })} />大块头
-              </label>
-              <label className="check">
-                <input type="checkbox" checked={filter.medalSmall === '1'} onChange={(e) => set({ medalSmall: e.target.checked ? '1' : '' })} />小不点
-              </label>
-              <label className="check">
-                <input type="checkbox" checked={filter.medalHigh === '1'} onChange={(e) => set({ medalHigh: e.target.checked ? '1' : '' })} />婉转声
-              </label>
-              <label className="check">
-                <input type="checkbox" checked={filter.medalLow === '1'} onChange={(e) => set({ medalLow: e.target.checked ? '1' : '' })} />粗嗓门
-              </label>
+            <div className="toggles">
+              <Toggle checked={filter.medalBig === '1'} onChange={(v) => set({ medalBig: v ? '1' : '' })}>大块头</Toggle>
+              <Toggle checked={filter.medalSmall === '1'} onChange={(v) => set({ medalSmall: v ? '1' : '' })}>小不点</Toggle>
+              <Toggle checked={filter.medalHigh === '1'} onChange={(v) => set({ medalHigh: v ? '1' : '' })}>婉转声</Toggle>
+              <Toggle checked={filter.medalLow === '1'} onChange={(v) => set({ medalLow: v ? '1' : '' })}>粗嗓门</Toggle>
             </div>
             <div className="muted small">按体重百分位/嗓音判定，与地图奖牌筛选同口径；可多选，多选=同时满足（如大块头+婉转声）</div>
           </div>
@@ -135,5 +126,37 @@ function Select({ label, opts, value, onChange }) {
       <label>{label}</label>
       <Dropdown value={value || ''} options={opts || []} onChange={onChange} />
     </div>
+  )
+}
+
+// —— 按键式筛选开关(替代原生 checkbox / radio)——
+//
+// 原先直接用 <input type="checkbox"> / <input type="radio">,与同一面板里系别的
+// .chip 按钮视觉割裂(一个是原生方框、一个是圆角按键),且原生控件在移动端只有
+// ~13px 的命中区,远低于项目的 36px 触控基线。
+//
+// 做法:**保留原生 input**(语义、键盘可达、读屏播报都靠它),只用 CSS 把它
+// 铺满整块并设为透明,视觉全部交给 label。于是:
+//   - 整块按键都是命中区(≥32px,移动端 36px);
+//   - 键盘 Tab / 空格切换与读屏的「已选中」播报都还是原生的,没有自制控件
+//     常见的可访问性缺失;
+//   - 选中态由 React 显式加 .on,不依赖 :has() —— 老浏览器上最多少个焦点环,
+//     不会把「选中了没」整个显示错(那是信息错误,比样式降级严重得多)。
+function Toggle({ checked, onChange, children, title }) {
+  return (
+    <label className={'toggle' + (checked ? ' on' : '')} title={title}>
+      <input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} />
+      <span>{children}</span>
+    </label>
+  )
+}
+
+// Radio 单选(与 Toggle 同视觉,name 相同的为一组)。
+function Radio({ name, checked, onChange, children, title }) {
+  return (
+    <label className={'toggle' + (checked ? ' on' : '')} title={title}>
+      <input type="radio" name={name} checked={checked} onChange={onChange} />
+      <span>{children}</span>
+    </label>
   )
 }
