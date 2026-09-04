@@ -4,7 +4,7 @@ import { confirmDialog } from '../../components/confirm'
 import { WILD_LAYERS } from './wildConfig'
 import RangeRules from '../../components/RangeRules'
 import ZonePanel from './ZonePanel'
-import { IconBell, IconCheck, IconChevronDown, IconClose, IconRefresh, IconSliders, IconSparkle, IconTrash } from '../../components/svg'
+import { IconBell, IconCheck, IconChevronDown, IconClose, IconRefresh, IconSliders, IconSparkle } from '../../components/svg'
 
 // LayerPanel 图层侧栏:POI 图层开关;可收集图层(眠枭之星/不咕钟零件)行右侧另有收集模式小开关
 // (开 = 隐藏该图层已收集的点,判定来源见 usePois.js)。另有「野生宠物」一组:不是固定点位,
@@ -79,22 +79,7 @@ export default function LayerPanel({ pois, wilds, gathers, paint, routes, collap
             放在图标图层下面,同属大地图静态收集物一类。 */}
         <ZonePanel stats={zoneStats} onFocus={onFocusZone} disabled={!onFocusZone} />
         <div className="filter-group">
-          {/* 清空按钮放进 label 内:复用 .filter-group > label 的既有 flex 布局
-              (左侧装饰竖条靠 ::before),不必另加包裹层与配套样式。
-              这是唯一由用户发起的删除 —— 系统侧只按场景结算:同场景内传送只置灰、
-              换场景整份作废(见 pipeline.resetWilds),留在当前场景内的标记连同
-              灰点一律不抹,抹不抹由用户决定。 */}
-          <label>
-            野生宠物
-            <button className="map-collect-btn map-wild-clear" onClick={() => {
-              confirmDialog({
-                message: '清空全部野生宠物标记?(含已置灰的「最后所见」)',
-                okText: '清空', danger: true,
-              }).then((ok) => ok && wilds.clear())
-            }} title="清空地图上的野生宠物标记(含灰点)" aria-label="清空野生宠标记">
-              <IconTrash size={12} />
-            </button>
-          </label>
+          <label>野生宠物</label>
           {/* 组内顺序按「显示 → 判定 → 提醒」的依赖链排:
               先选画哪几类标记,再定什么算稀有(规则/双牌),最后才是"稀有的要不要提醒"。
               倒过来排(提醒在最上)会让人在还没决定"什么叫稀有"时先被问"要不要提醒"。 */}

@@ -190,16 +190,6 @@ export const IconSliders = (p) => (
   </S>
 )
 
-// 垃圾桶(清空:与 ↺「重置」区分——它是唯一会真正删数据的入口)
-export const IconTrash = (p) => (
-  <S {...p}>
-    <path d="M3.5 6h17" />
-    <path d="M8.5 6V4.5A1.5 1.5 0 0 1 10 3h4a1.5 1.5 0 0 1 1.5 1.5V6" />
-    <path d="M5.5 6l.9 13.1A2 2 0 0 0 8.4 21h7.2a2 2 0 0 0 2-1.9L18.5 6" />
-    <path d="M10 10.5v6M14 10.5v6" />
-  </S>
-)
-
 // 回转重置(圆弧 + 箭头,顺时针):涂色重置、跟走进度重置
 export const IconRefresh = (p) => (
   <S {...p}>

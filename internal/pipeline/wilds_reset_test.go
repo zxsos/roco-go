@@ -135,29 +135,6 @@ func TestWildsSurviveTeleport(t *testing.T) {
 	_ = server.WildPayload{}
 }
 
-// TestWildsClearRemovesAll 用户主动清空:标记(含灰点)全部删除。
-func TestWildsClearRemovesAll(t *testing.T) {
-	p, _ := newTestPipeline(t)
-	login(t, p, 1)
-	p.handle(msg(gcp.S2C, scene.OpEnterSceneRsp, enterSceneBody(1001, testRes, 0)))
-	now := time.Now()
-	p.conn(testSess).wilds.pets[444] = &wildPet{actorID: 444, cfgID: int32(testNpcCfgID), seenAt: now}
-	p.conn(testSess).wilds.all[555] = &wildPet{actorID: 555, cfgID: int32(testNpcCfgID), seenAt: now}
-	// 先让它们都置灰(res 相同 = 同场景内传送),清空应连灰点一起删。
-	// 注:这里必须传 testRes —— 传别的 res 会走「换场景整份作废」那条路,
-	// 标记当场就没了,这个测试就退化成在验 resetWilds 而不是 clearWilds。
-	p.resetWilds(testSess, testAcc, testRes, time.Now())
-	if n, _ := wildCount(p); n != 2 {
-		t.Fatalf("前置:应有 2 只,实际 %d", n)
-	}
-
-	p.clearWildsForAccount(testAcc)
-
-	if n, _ := wildCount(p); n != 0 {
-		t.Errorf("主动清空后应一只不剩(含灰点),实际 %d", n)
-	}
-}
-
 // TestWildsResetKeepsSeenAt 置灰不重置 seenAt:4h TTL 仍从最后一次确认算起。
 func TestWildsResetKeepsSeenAt(t *testing.T) {
 	p, _ := newTestPipeline(t)

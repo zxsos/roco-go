@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
-import { getWildPets, clearWildPets, subscribe } from '../../api'
+import { getWildPets, subscribe } from '../../api'
 import { useAsyncData } from '../../hooks/useAsyncData'
 import { useRangeRules } from '../../hooks/useRangeRules'
 import { matchRangeRule } from '../../utils/rules'
@@ -232,22 +232,9 @@ export function useWildPets(account) {
     return [num, numStale, ruleNum]
   }, [pets, allPets, rangeRules])
 
-  // clear 主动清空野生宠标记(侧栏「清空」按钮),灰点也一并清掉。
-  //
-  // 与系统侧那两种结算不同:同场景内传送只置灰、换场景整份作废,都是**按场景**
-  // 决定标记还留不留(见 pipeline.resetWilds)—— 留在当前场景内的标记会一直
-  // 挂在图上、久了可能攒一堆灰点,是否抹平由用户决定,这里就是那个决定。
-  // 清空后不会被服务器补回(标记只随 AOI 实体下发重建),等走近了才重新出现。
-  //
-  // 本地先清(响应快),后端随后广播一条空列表兜住同账号的其它页面。
-  const clear = useCallback(() => {
-    setData({ pets: [], allPets: [] })
-    return clearWildPets().catch(() => {}) // 失败无所谓:下次实体下发会重建
-  }, [setData])
-
   return {
     marks, num, numStale, ruleNum,
-    on, toggle, clear,
+    on, toggle,
     open, toggleOpen,
     rangeRules, setRangeRules,
     dual, toggleDual,
