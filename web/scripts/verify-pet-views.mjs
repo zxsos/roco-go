@@ -103,6 +103,24 @@ check('陈列视图(空列表)', () =>
 check('表格视图(空列表)', () =>
   React.createElement(PetTable, { pets: [], selected: null, sort: '', order: '', onSort: noop, itemProps }))
 
+// 视图默认值的规整:回落方向写反是静默故障(页面照常显示,只是每个用户的视图被
+// 强制翻到另一个),故单独断言四种输入,而不是只测"存过的值"。
+{
+  const { DEFAULT_VIEW, sanitizeView } = await server.ssrLoadModule('/src/pages/pet-list/filters.js')
+  const cases = [
+    ['默认值为表格', DEFAULT_VIEW === 'table'],
+    ['无记录/空串 → 默认', sanitizeView('') === 'table' && sanitizeView(undefined) === 'table'],
+    ['存过 table → 保留', sanitizeView('table') === 'table'],
+    ['存过 gallery → 保留(不强制翻回默认)', sanitizeView('gallery') === 'gallery'],
+    ['垃圾值 → 默认', sanitizeView('GALLERY') === 'table' && sanitizeView(42) === 'table'],
+  ]
+  console.log('')
+  for (const [label, ok] of cases) {
+    console.log(`  ${ok ? 'OK  ' : 'FAIL'} 视图默认值: ${label}`)
+    if (!ok) fail++
+  }
+}
+
 // 内容校验:渲染成功不等于渲染对了 —— 关键数据必须出现在 HTML 里
 const must = [
   ['陈列:昵称', g1.includes('小火花')],

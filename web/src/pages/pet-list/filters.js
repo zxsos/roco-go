@@ -37,6 +37,18 @@ export function withCatch(f) {
   return ts > 0 ? { ...rest, catchAfter: ts } : rest
 }
 
+// 列表视图(表格 / 陈列)。
+//
+// 默认表格:宠物列表页的主线是「筛完之后逐列比」(百分位/声音/六维),那正是表格
+// 唯一做得到的事;陈列是补充视图,给扫图找变异/体型时切过去用。
+export const DEFAULT_VIEW = 'table'
+
+// sanitizeView 规整持久化的视图值:只放行 table/gallery,其余(含空串)回落默认。
+//
+// 单独成函数而非内联箭头:回落方向写反是**静默**的 —— 页面照常显示,只是每个
+// 用户的视图被强制翻到另一个,看日志查不出来。抽出来才能给它写断言。
+export const sanitizeView = (v) => (v === 'gallery' ? 'gallery' : DEFAULT_VIEW)
+
 // 列表状态(筛选/排序/分页)持久化到 sessionStorage 的这个键,从详情返回时还原。
 export const FILTER_KEY = 'petListFilter'
 export const DEFAULT_FILTER = { page: 1, pageSize: 20, sort: 'boxpos', order: 'asc' }

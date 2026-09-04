@@ -5,7 +5,7 @@ import { useStoredFlag, useStoredJSON } from '../../hooks/useStoredState'
 import { useAsyncData } from '../../hooks/useAsyncData'
 import { PetDetailModal } from '../../components/PetDetailModal'
 import { SkeletonRows } from '../../components/Skeleton'
-import { SORTS, withCatch, FILTER_KEY, DEFAULT_FILTER, sanitizeFilter } from './filters'
+import { SORTS, withCatch, FILTER_KEY, DEFAULT_FILTER, sanitizeFilter, DEFAULT_VIEW, sanitizeView } from './filters'
 import FilterPanel from './FilterPanel'
 import BoxMap from './BoxMap'
 import PetTable from './PetTable'
@@ -38,14 +38,16 @@ export default function PetList() {
     setFilter((f) => (f.box ? { ...f, box: '', page: 1 } : f))
   }
   const [collapsed, setCollapsed] = useStoredFlag(sessionStorage, 'petListCollapsed', true)
-  // 视图开关(陈列 / 表格)。存 localStorage 而非 sessionStorage:这是"我习惯怎么看"
+  // 视图开关(表格 / 陈列)。存 localStorage 而非 sessionStorage:这是"我习惯怎么看"
   // 而不是"这次会话的临时状态",与筛选条件(关掉页面就该忘)性质相反。
   //
   // 为什么让用户选而不是按视口宽度自动切:原先是 760px 断点一刀切 —— 平板竖屏
   // (宽 800px)被迫用横向滚动的表格,而窄窗口的桌面用户被迫用卡片。两者都是
-  // 猜错了意图:陈列适合"找那一只",表格适合"逐列比一页",这与屏幕宽度无关。
-  const [view, setView] = useStoredJSON(localStorage, 'petView', 'gallery',
-    (v) => (v === 'table' ? 'table' : 'gallery'))
+  // 猜错了意图:表格适合"逐列比一页",陈列适合"找那一只",这与屏幕宽度无关。
+  //
+  // 默认 DEFAULT_VIEW(表格)。注意默认值只对**没有存储记录**的浏览器生效 ——
+  // 已选过视图的用户保持其选择,新装/清过缓存的从默认值开始。
+  const [view, setView] = useStoredJSON(localStorage, 'petView', DEFAULT_VIEW, sanitizeView)
   const [sync, setSync] = useStoredFlag(localStorage, 'petSync', true) // 实时同步:游戏内操作自动跳转到对应宠物(默认开)
   const [detailGid, setDetailGid] = useState(null) // 详情弹窗的 gid(null=关闭)
   const [selected, setSelected] = useState(null) // 单击选中的 gid
@@ -253,19 +255,21 @@ export default function PetList() {
           <button className="btn" onClick={() => set({ order: filter.order === 'asc' ? 'desc' : 'asc' })}>{filter.order === 'asc' ? '升序' : '降序'}</button>
           <button className={'btn' + (sync ? ' primary' : '')} title="开启后,游戏内捕捉/移动宠物会自动跳转并选中该宠物;关闭可避免打断当前筛选" onClick={() => setSync((v) => !v)}>同步</button>
           <div className="spacer" />
+          {/* 默认视图排在最左:分段控件的首位会被读成"主推的那个",
+              与默认项错开时会让人以为当前视图是次要的那个。 */}
           <div className="viewseg" role="group" aria-label="列表视图">
-            <button
-              type="button" className={'viewseg-b' + (view === 'gallery' ? ' on' : '')}
-              aria-pressed={view === 'gallery'}
-              title="陈列:宠物图为主,适合一屏扫多只、找变异与体型"
-              onClick={() => setView('gallery')}
-            >陈列</button>
             <button
               type="button" className={'viewseg-b' + (view === 'table' ? ' on' : '')}
               aria-pressed={view === 'table'}
               title="表格:逐列对齐,适合把这一页的百分位/声音竖着比"
               onClick={() => setView('table')}
             >表格</button>
+            <button
+              type="button" className={'viewseg-b' + (view === 'gallery' ? ' on' : '')}
+              aria-pressed={view === 'gallery'}
+              title="陈列:宠物图为主,适合一屏扫多只、找变异与体型"
+              onClick={() => setView('gallery')}
+            >陈列</button>
           </div>
           <span className="muted">共 {data.total} 只</span>
         </div>
