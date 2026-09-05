@@ -254,4 +254,45 @@ const E4486 = [
     `倍率应被钳到 1 → 外推 100s 得 ${want2}s,实际 ${q.secs}s(未钳制会是 1011)`)
 }
 
+// [8] 持久化:测出倍率的采样写进 localStorage,刷新(重新加载模块)后恢复,不退回 1 倍
+//
+// 这是「刷新前后两种时间」的修复:页面开着时 seen 里有采样、差分测出 5 倍、ETA 快而准;
+// 一刷新 seen 清空,若不持久化就全退回 1 倍、ETA 报成真实时间的 5 倍远。且加速日期间玩家
+// 离线服务器照样按 5 倍推进(见 docs/data.md 3.6),离线回来刷新用 1 倍外推 offline 那段就全错。
+// 故把测出倍率(known)的采样存进 localStorage,重新加载模块时恢复。
+{
+  const store = {}
+  globalThis.localStorage = {
+    getItem: (k) => (k in store ? store[k] : null),
+    setItem: (k, v) => { store[k] = String(v) },
+    removeItem: (k) => { delete store[k] },
+  }
+  try {
+    // 用 cache-busting 动态 import 拿到一份独立的模块实例(其 seen 不受本文件静态 import 那份影响),
+    // 且模块顶层 loadSeen 会读到上面 mock 的 localStorage。
+    const m1 = await import('./hatch.js?persist=save')
+    const egg = { gid: 9701, hatching: true, maxSecs: 28800 }
+    m1.hatchProgress({ ...egg, hatchedSecs: 50, hatchUpdate: 7000 }, 7000 * 1000)
+    const p = m1.hatchProgress({ ...egg, hatchedSecs: 100, hatchUpdate: 7010 }, 7010 * 1000)
+    assert.equal(p.rate, 5, '两次采样应先测出 5 倍')
+    assert.ok(store['eggHatchSeen.v1']?.includes('9701'),
+      '测出倍率的采样应写进 localStorage(否则刷新后丢 rate)')
+
+    // 重新加载模块(模拟刷新页面):恢复后应仍是 5 倍,而不是退回 1 倍
+    const m2 = await import('./hatch.js?persist=load')
+    const q = m2.hatchProgress({ ...egg, hatchedSecs: 100, hatchUpdate: 7010 }, 7010 * 1000)
+    assert.equal(q.rate, 5, '刷新后应恢复持久化的 5 倍,而非退回 1 倍')
+    assert.equal(q.rateKnown, true, '恢复的倍率仍应是「已知」')
+    assert.ok(Math.abs(m2.remainRealSecs({ ...egg, maxSecs: 28800 }, q) - (28800 - 100) / 5) < 1e-6,
+      '恢复的 5 倍照样能折算真实剩余(否则 ETA 又报成 5 倍远)')
+
+    // 没测出倍率的采样(只有一次采样、known 缺失)不该持久化:它刷新后也用不上
+    m2.hatchProgress({ gid: 9702, hatching: true, maxSecs: 28800, hatchedSecs: 500, hatchUpdate: 8000 }, 8000 * 1000)
+    assert.ok(!store['eggHatchSeen.v1']?.includes('9702'),
+      '只有一次采样(无倍率)不该写进 localStorage')
+  } finally {
+    delete globalThis.localStorage
+  }
+}
+
 console.log('hatch.test.mjs: 全部通过')
