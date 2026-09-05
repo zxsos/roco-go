@@ -54,12 +54,32 @@ function etaTitle(egg, p) {
   const h = Math.floor(s / 3600)
   const m = Math.floor((s % 3600) / 60)
   const dur = h > 0 ? `${h} 小时 ${m} 分` : `${m} 分钟`
-  // 倍率还没测出来时(刚刷新页面、或这颗蛋刚入孵)只能按 1 倍占位,加速日会偏慢
-  // 好几倍。与其给个看似精确其实离谱的数,不如把「还没校准」和校准办法说清楚 ——
-  // 玩家在游戏内打开一次孵蛋器,后端收到新的 hatchedSecs,倍率随即算出。
+  // 倍率还没测出来时(后端也没估出、这颗蛋又只有一次采样)只能按 1 倍占位,加速日会
+  // 偏慢好几倍。与其给个看似精确其实离谱的数,不如把「还没校准」和校准办法说清楚。
+  // 测出来了就把倍数带上 —— 与标题栏的「加速中 ×N」徽章呼应,数值对得上。
   return p.rateKnown
-    ? `按当前孵化倍率估算,约剩 ${dur}`
+    ? `按当前孵化倍率 ×${rateText(p.rate)} 估算,约剩 ${dur}`
     : `按 1 倍速估算,约剩 ${dur}(倍率尚未测出,游戏内打开一次孵蛋器即校准)`
+}
+
+// rateText 把倍率格式化成给人看的样子:整数不带小数(5 倍就是「5」),否则留一位(4.8)。
+// 倍率是估出来的,不会那么整,故不做四舍五入到整数 —— 显示 4.8 比谎称 5 诚实。
+const rateText = (r) => (Number.isInteger(r) ? String(r) : r.toFixed(1))
+
+// Boost 孵化加速徽章。倍率是**全局**的(实测三颗不同 maxSecs 的蛋同秒各 +10s,
+// 见 docs/data.md 3.6),故整个孵蛋器标一处即可,不必逐蛋重复。
+//
+// rate <= 1 或倍率未知时**什么都不画**:没加速就别凭空挂个牌子,而「倍率尚未测出」
+// 时 rate 只是保守的 1 倍占位,标「加速中」是假的。
+function Boost({ rate }) {
+  if (!(rate > 1)) return null
+  return (
+    <span className="incu-boost" title={
+      `孵化加速中:每过 1 真实秒推进约 ${rateText(rate)} 个孵化秒。` +
+      '倍率由后端从历次进度下发的差分估出(活动倍率不随协议下发,只能实测),详见预计时间的说明'}>
+      加速中 ×{rateText(rate)}
+    </span>
+  )
 }
 
 // 随机蛋「猜猜孵出谁」查询缓存:同一组身高/体重结果相同,按 `height|weight` 为 key 存
@@ -166,7 +186,7 @@ export default function EggList() {
   return (
     <div className="eggs-page">
       <div className="eggs-cols">
-        <IncuTitle n={incubating.length} slots={slots} />
+        <IncuTitle n={incubating.length} slots={slots} rate={sharedRate} />
         {/* 空格子只在宽屏画出来,手机上由 CSS 收起(见 eggs.css) */}
         <aside className="eggs-incu">
           {Array.from({ length: slots }, (_, i) => incubating[i]).map((e, i) => (
@@ -217,7 +237,7 @@ export default function EggList() {
 
 // IncuTitle 孵蛋器标题:「孵蛋器 n/3」+ 提示图标。图标比数字小;
 // 点击弹出半透明气泡,说明在孵口径(后端权威快照)与进度是本地外推的估算。点气泡外关闭。
-function IncuTitle({ n, slots }) {
+function IncuTitle({ n, slots, rate }) {
   const ref = useRef(null)
   const [tip, setTip] = useState(false)
   useEffect(() => {
@@ -229,6 +249,7 @@ function IncuTitle({ n, slots }) {
   return (
     <div className="eggs-col-t">
       孵蛋器 <span className="muted">{n}/{slots}</span>
+      <Boost rate={rate} />
       <span ref={ref} className="incu-tip">
         <img className="incu-tip-ic" src="/ps.svg" alt="?" title="在孵按权威快照判定,进度是本地外推的估算"
           onClick={() => setTip((t) => !t)} draggable={false} />
