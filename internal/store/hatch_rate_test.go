@@ -21,25 +21,77 @@ func TestHatchRateFromSamples(t *testing.T) {
 	sc := st.For(testAcc)
 	const base = int64(1700000000)
 
-	// 第一次下发:进度 100 秒,时刻 base
+	// 逐次喂入(每次 +10 秒、进度 +50 → 差分恒为 5),并在攒够最小样本前断言「未知」。
+	// 攒不够就返回 0 是**刻意的**:样本太少时中位数会被单发跳变主导,宁可让前端退回
+	// 保守的 1 倍(理由见 hatchMinSamples 与 TestHatchRateNeedsMinSamples)。
+	for i := int64(0); i < hatchMinSamples+1; i++ {
+		if err := sc.UpsertEggs([]*pet.EggView{
+			{Gid: 80001, ItemID: 107028, Hatching: true,
+				HatchedSecs: int32(100 + 50*i), MaxSecs: 28800},
+		}, base+10*i, nil); err != nil {
+			t.Fatalf("UpsertEggs#%d: %v", i, err)
+		}
+		// i=0 是首次采样(手里只有新值,没有旧值可比)→ 0 个样本
+		if n := int64(i); n < hatchMinSamples-1 {
+			if got := sc.HatchRate(); got != 0 {
+				t.Errorf("只攒了 %d 个样本时应返回 0(未知),实得 %v", n, got)
+			}
+		}
+	}
+	if got := sc.HatchRate(); math.Abs(got-5) > 1e-9 {
+		t.Errorf("攒够样本后应估出 5 倍,实得 %v(后端估不出,前端就只能退回 1 倍)", got)
+	}
+}
+
+// TestHatchRateNeedsMinSamples 守「攒不够样本不许给倍率」。
+//
+// 2026-09-05 那份 pcap 的差分里混着 16.9 / 25.8 / 130.0 三个跳变。若赶在攒够样本
+// 前就把某一次跳变当真,预计完成时间会虚报成 20 倍(钳制后)那么离谱 —— 玩家会看到
+// 「马上可破壳」而实际还早。攒不够时返回 0,前端退回保守的 1 倍。
+func TestHatchRateNeedsMinSamples(t *testing.T) {
+	st := newTestStore(t)
+	if err := st.UpsertAccount(testAcc, "测试账号"); err != nil {
+		t.Fatalf("建账号: %v", err)
+	}
+	sc := st.For(testAcc)
+	const base = int64(1700000000)
+
+	// 首次采样(建立旧值)+ 一次 130 倍的跳变 = 只攒到 1 个样本
 	if err := sc.UpsertEggs([]*pet.EggView{
-		{Gid: 80001, ItemID: 107028, Hatching: true, HatchedSecs: 100, MaxSecs: 28800},
+		{Gid: 80041, ItemID: 107028, Hatching: true, HatchedSecs: 100, MaxSecs: 28800},
 	}, base, nil); err != nil {
 		t.Fatalf("UpsertEggs#1: %v", err)
 	}
-	// 只有一次采样 → 估不出来(不能凭空给个 1 充当已知值)
-	if got := sc.HatchRate(); got != 0 {
-		t.Errorf("只有一次采样时应返回 0(未知),实得 %v", got)
-	}
-
-	// 第二次下发:10 秒后进度涨到 150 → 差分 50/10 = 5 倍
 	if err := sc.UpsertEggs([]*pet.EggView{
-		{Gid: 80001, ItemID: 107028, Hatching: true, HatchedSecs: 150, MaxSecs: 28800},
-	}, base+10, nil); err != nil {
+		{Gid: 80041, ItemID: 107028, Hatching: true, HatchedSecs: 230, MaxSecs: 28800},
+	}, base+1, nil); err != nil { // 130/1 = 130 倍 → 钳到 20
 		t.Fatalf("UpsertEggs#2: %v", err)
 	}
+	// 只有 1 个样本时若照给,就是 20 倍 —— 会把 ETA 虚报成 20 倍快
+	if got := sc.HatchRate(); got != 0 {
+		t.Errorf("样本不足时应返回 0 而不是拿跳变当真,实得 %v(会虚报成 20 倍)", got)
+	}
+
+	// 补 1 个正常样本 → 共 2 个:[20, 5] 的中位数是 12.5,**仍被那次跳变主导**。
+	// 这一档必须继续返回 0 —— 它正是「最少要 3 个」的全部理由:2 个样本不足以
+	// 滤掉单发异常,照给就会把 ETA 虚报成 2.5 倍快。
+	if err := sc.UpsertEggs([]*pet.EggView{
+		{Gid: 80041, ItemID: 107028, Hatching: true, HatchedSecs: 280, MaxSecs: 28800},
+	}, base+11, nil); err != nil { // (280-230)/10 = 5 倍
+		t.Fatalf("UpsertEggs#3: %v", err)
+	}
+	if got := sc.HatchRate(); got != 0 {
+		t.Errorf("2 个样本时中位数仍被跳变主导([20,5]→12.5),应继续返回 0,实得 %v", got)
+	}
+
+	// 再补 1 个 → 共 3 个:[20, 5, 5] 的中位数是 5,跳变被滤掉
+	if err := sc.UpsertEggs([]*pet.EggView{
+		{Gid: 80041, ItemID: 107028, Hatching: true, HatchedSecs: 330, MaxSecs: 28800},
+	}, base+21, nil); err != nil {
+		t.Fatalf("UpsertEggs#4: %v", err)
+	}
 	if got := sc.HatchRate(); math.Abs(got-5) > 1e-9 {
-		t.Errorf("两次采样应估出 5 倍,实得 %v(后端估不出,前端就只能退回 1 倍)", got)
+		t.Errorf("凑够 3 个后中位数应回到 5(滤掉 20 的跳变),实得 %v", got)
 	}
 }
 
@@ -54,16 +106,14 @@ func TestHatchRateIgnoresNonAdvancing(t *testing.T) {
 	sc := st.For(testAcc)
 	const base = int64(1700000000)
 
-	// 先建立一次采样:5 倍
-	if err := sc.UpsertEggs([]*pet.EggView{
-		{Gid: 80011, ItemID: 107028, Hatching: true, HatchedSecs: 100, MaxSecs: 28800},
-	}, base, nil); err != nil {
-		t.Fatalf("UpsertEggs#1: %v", err)
-	}
-	if err := sc.UpsertEggs([]*pet.EggView{
-		{Gid: 80011, ItemID: 107028, Hatching: true, HatchedSecs: 150, MaxSecs: 28800},
-	}, base+10, nil); err != nil {
-		t.Fatalf("UpsertEggs#2: %v", err)
+	// 先攒够最小样本数(每次 +10 秒、进度 +50 → 差分恒为 5)
+	for i := int64(0); i <= hatchMinSamples; i++ {
+		if err := sc.UpsertEggs([]*pet.EggView{
+			{Gid: 80011, ItemID: 107028, Hatching: true,
+				HatchedSecs: int32(100 + 50*i), MaxSecs: 28800},
+		}, base+10*i, nil); err != nil {
+			t.Fatalf("UpsertEggs#%d: %v", i, err)
+		}
 	}
 	want := sc.HatchRate()
 	if math.Abs(want-5) > 1e-9 {
@@ -109,18 +159,16 @@ func TestHatchRateClamped(t *testing.T) {
 	sc := st.For(testAcc)
 	const base = int64(1700000000)
 
-	// 慢得离谱:1 秒只推进 0 秒以上一点点 → 不钳就会把进度条拖到几乎不动
-	if err := sc.UpsertEggs([]*pet.EggView{
-		{Gid: 80031, ItemID: 107028, Hatching: true, HatchedSecs: 100, MaxSecs: 28800},
-	}, base, nil); err != nil {
-		t.Fatalf("UpsertEggs#1: %v", err)
+	// 慢得离谱:每次 100000 秒只推进 900 秒 → 0.009 倍,不钳就会把进度条拖到几乎不动
+	for i := int64(0); i <= hatchMinSamples; i++ {
+		if err := sc.UpsertEggs([]*pet.EggView{
+			{Gid: 80031, ItemID: 107028, Hatching: true,
+				HatchedSecs: int32(100 + 900*i), MaxSecs: 28800},
+		}, base+100000*i, nil); err != nil {
+			t.Fatalf("UpsertEggs 慢#%d: %v", i, err)
+		}
 	}
-	if err := sc.UpsertEggs([]*pet.EggView{
-		{Gid: 80031, ItemID: 107028, Hatching: true, HatchedSecs: 1000, MaxSecs: 28800},
-	}, base+100000, nil); err != nil { // 900/100000 = 0.009 倍
-		t.Fatalf("UpsertEggs#2: %v", err)
-	}
-	if got := sc.HatchRate(); got < hatchRateMin {
+	if got := sc.HatchRate(); got != hatchRateMin {
 		t.Errorf("倍率应被钳到下限 %v,实得 %v", hatchRateMin, got)
 	}
 
@@ -130,17 +178,17 @@ func TestHatchRateClamped(t *testing.T) {
 		t.Fatalf("建账号: %v", err)
 	}
 	sc2 := st2.For(testAcc)
-	if err := sc2.UpsertEggs([]*pet.EggView{
-		{Gid: 80032, ItemID: 107028, Hatching: true, HatchedSecs: 100, MaxSecs: 28800},
-	}, base, nil); err != nil {
-		t.Fatalf("UpsertEggs#3: %v", err)
+	// 步长取 1000 而非更大:进度得留在 maxSecs 以内,否则会被「已孵满」规则排除、
+	// 攒不够样本(那正是 TestHatchRateIgnoresNonAdvancing 守的那条)。
+	for i := int64(0); i <= hatchMinSamples; i++ {
+		if err := sc2.UpsertEggs([]*pet.EggView{
+			{Gid: 80032, ItemID: 107028, Hatching: true,
+				HatchedSecs: int32(100 + 1000*i), MaxSecs: 28800},
+		}, base+i, nil); err != nil {
+			t.Fatalf("UpsertEggs 快#%d: %v", i, err)
+		}
 	}
-	if err := sc2.UpsertEggs([]*pet.EggView{
-		{Gid: 80032, ItemID: 107028, Hatching: true, HatchedSecs: 10100, MaxSecs: 28800},
-	}, base+1, nil); err != nil { // 10000/1 = 10000 倍
-		t.Fatalf("UpsertEggs#4: %v", err)
-	}
-	if got := sc2.HatchRate(); got > hatchRateMax {
+	if got := sc2.HatchRate(); got != hatchRateMax {
 		t.Errorf("倍率应被钳到上限 %v,实得 %v", hatchRateMax, got)
 	}
 }

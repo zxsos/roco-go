@@ -32,6 +32,15 @@ import (
 // 9 个里混进 1~2 个也不改中位数),又不至于让倍率切换(活动开始/结束)后迟迟收敛。
 const hatchSamples = 9
 
+// hatchMinSamples 是最少要攒够几个样本才肯给出倍率。
+//
+// 3 是能滤掉**单发**异常的最小值:[130, 5, 5] 的中位数是 5,而只有 1~2 个时中位
+// 数仍被那一个异常主导(2 个时取平均,[130, 5] 得 67.5)。这件事有实测必要 ——
+// 2026-09-05 那份 pcap 的差分里确实混着 16.9 / 25.8 / 130.0 三个跳变,若赶在攒够
+// 样本前就把某一次跳变当真,预计完成时间会虚报成 20 倍(钳制后)那么离谱。
+// 攒不够时返回 0(未知),前端退回保守的 1 倍:宁可慢,也不要虚报「可破壳」。
+const hatchMinSamples = 3
+
 // hatchRateMin/Max 倍率的合理取值域,与前端 clampRate 同一把尺子。
 //
 // 下限 1:除「加速」没见过别的方向(宝典/跑动都是加),<1 只可能是异常采样。
@@ -42,14 +51,16 @@ const (
 	hatchRateMax = 20.0
 )
 
-// HatchRate 返回当前倍率估计;样本不足(还不到两次采样)时返回 0,由调用方按「未知」处理。
+// HatchRate 返回当前倍率估计;样本不足(攒不够 hatchMinSamples 个)时返回 0,
+// 由调用方按「未知」处理 —— 宁可让前端退回保守的 1 倍,也不要拿一两次可能失真的
+// 采样当真(理由见 hatchMinSamples)。
 func (sc *Scoped) HatchRate() float64 {
 	var blob string
 	if err := sc.rdb.QueryRow(`SELECT samples FROM hatch_rate WHERE account=?`, sc.account).Scan(&blob); err != nil {
 		return 0
 	}
 	var xs []float64
-	if json.Unmarshal([]byte(blob), &xs) != nil || len(xs) == 0 {
+	if json.Unmarshal([]byte(blob), &xs) != nil || len(xs) < hatchMinSamples {
 		return 0
 	}
 	return median(xs)
