@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useContext, useRef, useCallback } from 'react'
+import React, { useState, useEffect, useContext, useRef, useCallback, useMemo } from 'react'
 import { getEggs, subscribe, queryEggMatch } from '../../api'
 import { AccountContext } from '../../context'
 import { imgURL } from '../../components/icons'
@@ -6,7 +6,7 @@ import { PetDetailModal } from '../../components/PetDetailModal'
 import { fmtTime, pad2, pctHot, voiceHot } from '../../utils/format'
 import { useInterval } from '../../hooks/useAsyncData'
 import { Marks } from '../../components/badges'
-import { hatchProgress, remainRealSecs } from './hatch'
+import { hatchProgress, remainRealSecs, gatherRates } from './hatch'
 import { toast } from '../../components/toast'
 
 // 精灵蛋页面:两段垂直 —— 孵蛋器(在孵且进度未满的蛋)、仓库(其余蛋)。不分标签页——在孵的蛋
@@ -53,7 +53,13 @@ function etaTitle(egg, p) {
   const s = remainRealSecs(egg, p)
   const h = Math.floor(s / 3600)
   const m = Math.floor((s % 3600) / 60)
-  return `按当前孵化倍率估算,约剩 ${h > 0 ? `${h} 小时 ${m} 分` : `${m} 分钟`}`
+  const dur = h > 0 ? `${h} 小时 ${m} 分` : `${m} 分钟`
+  // 倍率还没测出来时(刚刷新页面、或这颗蛋刚入孵)只能按 1 倍占位,加速日会偏慢
+  // 好几倍。与其给个看似精确其实离谱的数,不如把「还没校准」和校准办法说清楚 ——
+  // 玩家在游戏内打开一次孵蛋器,后端收到新的 hatchedSecs,倍率随即算出。
+  return p.rateKnown
+    ? `按当前孵化倍率估算,约剩 ${dur}`
+    : `按 1 倍速估算,约剩 ${dur}(倍率尚未测出,游戏内打开一次孵蛋器即校准)`
 }
 
 // 随机蛋「猜猜孵出谁」查询缓存:同一组身高/体重结果相同,按 `height|weight` 为 key 存
@@ -138,6 +144,14 @@ export default function EggList() {
   // 「这颗蛋该不该出现」就是把估算误差放大成数据丢失。它只该影响进度条怎么画。
   const incubating = data.eggs.filter((e) => e.hatching)
   const bag = data.eggs.filter((e) => !e.hatching)
+
+  // 跨蛋倍率中位数:倍率是全局的,故它比盯着单颗蛋稳(见 gatherRates)。
+  // 给「自己只有一次采样」的蛋兜底 —— 刚刷新页面或刚入孵的那种,单看它只能退回
+  // 1 倍,而在加速日那会把预计时间报成几倍远。
+  //
+  // ⚠️ 必须在渲染卡片**之前**算:gatherRates 读的是上一次采样留下的状态,
+  // 而 hatchProgress 一调用就把它推进到本次了,顺序反了就一个差分都凑不出来。
+  const sharedRate = useMemo(() => gatherRates(data.eggs), [data.eggs])
   const slots = HATCH_SLOTS
 
   return (
@@ -147,7 +161,7 @@ export default function EggList() {
         {/* 空格子只在宽屏画出来,手机上由 CSS 收起(见 eggs.css) */}
         <aside className="eggs-incu">
           {Array.from({ length: slots }, (_, i) => incubating[i]).map((e, i) => (
-            e ? <EggCard key={e.gid} egg={e} now={now} onPet={setDetailGid} />
+            e ? <EggCard key={e.gid} egg={e} now={now} sharedRate={sharedRate} onPet={setDetailGid} />
               : <div key={'s' + i} className="egg-slot-empty">空格子</div>
           ))}
           {/* 全空时给一句解释:光秃秃 3 个空格子,用户分不清是「真没在孵」还是
@@ -182,7 +196,7 @@ export default function EggList() {
             ? <div className="empty">仓库里没有精灵蛋(需后端抓到背包全量:游戏内打开一次背包即可)</div>
             : (
               <div className="egg-grid">
-                {bag.map((e) => <EggCard key={e.gid} egg={e} now={now} onPet={setDetailGid} />)}
+                {bag.map((e) => <EggCard key={e.gid} egg={e} now={now} sharedRate={sharedRate} onPet={setDetailGid} />)}
               </div>
             )}
         </section>
@@ -220,8 +234,8 @@ function IncuTitle({ n, slots }) {
 //   重量 / 声音 / 高度 / 时间
 //   (在孵才有的进度条)
 //   双亲两行(非家园蛋留占位)
-function EggCard({ egg, now, onPet }) {
-  const p = hatchProgress(egg, now)
+function EggCard({ egg, now, sharedRate, onPet }) {
+  const p = hatchProgress(egg, now, sharedRate)
   const src = egg.srcName ? `来源:${egg.srcName}` : ''
   const name = tidyEggName(egg.name)
   // 随机蛋(神奇的蛋)的「猜猜孵出谁」。

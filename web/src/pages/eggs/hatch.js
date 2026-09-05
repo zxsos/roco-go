@@ -55,15 +55,22 @@ export function clampRate(r) {
 // 全部 +10s,即统一 5.00),故可跨蛋聚合:单颗蛋的采样抖动(秒级取整、恰在
 // 服务器刷新边界上取到)会在中位数里被消掉,比盯着一颗蛋稳。
 // 只有 1~2 颗蛋时中位数退化为均值/较小值,同样可用。
+//
+// ⚠️ 必须在渲染各张卡片**之前**调:它读的是上一次采样留下的 seen,而
+// hatchProgress 一调用就把 seen 推进到本次了,顺序反了凑不出任何差分。
 export function gatherRates(eggs) {
   const rates = []
   for (const e of eggs || []) {
     if (!e || !e.hatching || !e.hatchUpdate || !e.maxSecs) continue
     const prev = seen.get(e.gid)
     const cur = { t: e.hatchUpdate, v: e.hatchedSecs }
-    if (prev && cur.t > prev.t && cur.v >= prev.v) {
-      rates.push((cur.v - prev.v) / (cur.t - prev.t))
-    }
+    // 必须**严格**递增才算一次有效采样,理由同 hatchRate:进度没变时照算会得 0,
+    // 混进中位数会把整体拉到下限(服务器没重算进度是常态,不是异常)。
+    if (!prev || cur.t <= prev.t || cur.v <= prev.v) continue
+    // 已孵满的蛋进度被 maxSecs 截断,差分必然偏小 —— 混进来会把中位数整体拉低,
+    // 而这颗蛋恰恰是最不需要估倍率的:它已经孵完了。
+    if (prev.v >= e.maxSecs || cur.v >= e.maxSecs) continue
+    rates.push(clampRate((cur.v - prev.v) / (cur.t - prev.t)))
   }
   if (rates.length === 0) return null
   rates.sort((a, b) => a - b)
@@ -71,7 +78,8 @@ export function gatherRates(eggs) {
   return rates.length % 2 ? rates[mid] : (rates[mid - 1] + rates[mid]) / 2
 }
 
-// hatchRate 收下一次采样并返回估出的倍率(秒/秒)。
+// hatchRate 收下一次采样,返回 {rate, known}:rate 是估出的倍率(秒/秒),
+// known 表示它是**实测出来的**还是退回来的一倍(后者不能拿去预测未来)。
 //
 // 主口径是**相邻两次采样的差分**;只有一次采样时(刚刷新页面、或这颗蛋刚入孵)
 // 退回 1 倍 —— 不用「累计 ÷ 已孵时长」兜底:实测它会因玩家跑动高估到 9 倍,
@@ -79,23 +87,32 @@ export function gatherRates(eggs) {
 function hatchRate(egg) {
   const prev = seen.get(egg.gid)
   const cur = { t: egg.hatchUpdate, v: egg.hatchedSecs }
-  if (!prev || prev.t !== cur.t) {
-    if (prev && cur.t > prev.t && cur.v >= prev.v) {
-      // 原实现 `r > 0 ? r : prev.rate` 会放行任意小的正数,且无上限。
-      // 这里钳进 [1, 20]:异常采样(进度回退/时钟跳变)不至于把进度条拖死或吹飞。
-      cur.rate = clampRate((cur.v - prev.v) / (cur.t - prev.t))
-    } else if (prev) {
-      // 采样没推进(同一 hatchUpdate、或进度倒退):沿用上次估的,不重新算。
-      cur.rate = prev.rate
-    }
-    seen.set(egg.gid, cur)
-    return cur.rate || 1
+  if (prev && prev.t === cur.t) return prev
+  // 必须**严格**递增才是一次有效采样。原判定是 `cur.v >= prev.v`,于是「服务器
+  // 还没重算进度」会被算成 Δv=0 → 0 倍 → 钳到下限 1:把 5 倍加速生生打成 1 倍。
+  // 而这是常态不是异常 —— 进度只在开孵蛋器/开背包时下发,连着刷两次页面很常见,
+  // 后端的 HatchUpdate 又统一成了观测时刻,每次刷新都是新的 t 配同一个 v。
+  if (prev && cur.t > prev.t && cur.v > prev.v) {
+    // 原实现 `r > 0 ? r : prev.rate` 会放行任意小的正数,且无上限。
+    // 这里钳进 [1, 20]:异常采样(进度回退/时钟跳变)不至于把进度条拖死或吹飞。
+    cur.rate = clampRate((cur.v - prev.v) / (cur.t - prev.t))
+    cur.known = true
+  } else if (prev) {
+    // 采样没推进(进度倒退,或进度没变):沿用上次估的,不重新算。
+    cur.rate = prev.rate
+    cur.known = prev.known
   }
-  return prev.rate || 1
+  seen.set(egg.gid, cur)
+  return cur
 }
 
-// hatchProgress 返回 {pct, secs, rate} —— 外推到 now(毫秒)的孵化进度;
+// hatchProgress 返回 {pct, secs, rate, rateKnown} —— 外推到 now(毫秒)的孵化进度;
 // 不在孵蛋器里返回 null。
+//
+// sharedRate 是跨蛋中位数(见 gatherRates),给「自己还没测出倍率」的蛋兜底:
+// 刚刷新页面、或这颗蛋刚入孵时,单看它只有一次采样,退回 1 倍会把加速日的预计
+// 时间报成几倍远。它只兜底、**不覆盖**这颗蛋自己测出的值 —— 自己的差分是对这颗
+// 蛋最直接的证据,而宝典之类是否逐蛋生效尚未证实(见 docs/data.md 3.6)。
 //
 // ⚠️ **secs 是「孵化秒」,不是真实秒**:它是进度条用的量纲(与 maxSecs 同一把尺子),
 // 加速期间 1 真实秒推进 rate 个孵化秒。要算「还要多久」的**真实**时间,必须除以 rate
@@ -107,14 +124,18 @@ function hatchRate(egg) {
 // 背包 0x1344)。此时若按 elapsed = now - 0 外推,得到的是十几亿秒,进度直接顶满 ——
 // 而 EggList 把「在孵且进度满」的蛋两栏都不显示,蛋就这样凭空消失了。
 // 返回 null 时页面按「在孵、进度未知」处理(见 EggList 的分栏与 EggCard 的展示)。
-export function hatchProgress(egg, now) {
+export function hatchProgress(egg, now, sharedRate) {
   if (!egg || !egg.hatching || !egg.maxSecs) return null
   if (!egg.hatchUpdate) return null // 无采样:不外推,免得算成 100% 把蛋弄丢
-  const rate = hatchRate(egg)
+  const own = hatchRate(egg)
+  // rateKnown 决定页面能不能把预计时间当真:没测出倍率时的 1 倍只是占位,
+  // 加速日会偏慢好几倍,与其给个看似精确的数,不如让人知道还没校准。
+  const rateKnown = own.known || !!sharedRate
+  const rate = own.known ? own.rate : (sharedRate || 1)
   const elapsed = Math.max(0, Math.floor(now / 1000) - egg.hatchUpdate)
   const secs = Math.min(egg.maxSecs, (egg.hatchedSecs || 0) + elapsed * rate)
   const pct = Math.floor(Math.min(100, (secs / egg.maxSecs) * 100))
-  return { pct, secs, rate }
+  return { pct, secs, rate, rateKnown }
 }
 
 // remainRealSecs 把「还剩多少孵化秒」折算成**真实**秒数。

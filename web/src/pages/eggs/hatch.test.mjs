@@ -158,6 +158,62 @@ const E4486 = [
   assert.equal(gatherRates(null), null, '入参为 null 时应返回 null')
 }
 
+// [6b] 进度未推进时不得重算倍率
+//
+// 后端把 HatchUpdate 统一成了「观测时刻」,于是**每次刷新都是新的 t**。若服务器
+// 还没重算进度(进度只在开孵蛋器/开背包时下发),就是「新 t 配旧 v」——
+// 老判定 `cur.v >= prev.v` 会照算成 Δv=0 → 0 倍 → 钳到下限 1,
+// 把 5 倍加速生生打成 1 倍,预计时间随即报成 5 倍远。
+{
+  const gid = 9301
+  const at = (v, t) => hatchProgress(
+    { gid, hatching: true, maxSecs: 28800, hatchedSecs: v, hatchUpdate: t }, t * 1000)
+  at(100, 4000)             // 第一次采样:建立 prev
+  const p = at(150, 4010)   // Δ=50/10 → 5 倍
+  assert.equal(p.rate, 5, '两次采样应先测出 5 倍')
+  assert.equal(p.rateKnown, true, '测出来的倍率应标记为已知')
+  const q = at(150, 4020)   // v 没动、t 前进了:服务器还没重算
+  assert.equal(q.rate, 5, '进度没推进时不得把倍率打成 1(应沿用上次估的)')
+  assert.equal(q.rateKnown, true, '沿用上次的估计仍然是「已知」')
+}
+
+// [6c] 跨蛋中位数给「自己只有一次采样」的蛋兜底
+//
+// 刷新页面后内存里的采样全丢,每颗蛋都只剩一次采样 → 全退回 1 倍 → 加速日的
+// 预计时间集体报成 5 倍远。倍率是全局的,故此时该拿别的蛋测出来的值先用上。
+{
+  const fresh = { gid: 9401, hatching: true, maxSecs: 28800, hatchedSecs: 1000, hatchUpdate: 5000 }
+  const alone = hatchProgress(fresh, 5000 * 1000)
+  assert.equal(alone.rate, 1, '自己只有一次采样时退回 1 倍')
+  assert.equal(alone.rateKnown, false, '没测出来就不能当真')
+  // 同 t 同 v,seen 不会被推进,故这次是纯粹的「换个兜底值再看」
+  const shared = hatchProgress(fresh, 5000 * 1000, 5)
+  assert.equal(shared.rate, 5, '自己测不出时应借用跨蛋中位数')
+  assert.equal(shared.rateKnown, true, '借来的也是实测值,可以作数')
+  assert.ok(Math.abs(remainRealSecs(fresh, shared) - (28800 - 1000) / 5) < 1e-6,
+    `借来的 5 倍照样要能折算真实剩余,实际 ${remainRealSecs(fresh, shared)}`)
+}
+
+// [6d] gatherRates 要把会污染中位数的采样排除掉
+{
+  const base = { hatching: true, maxSecs: 28800 }
+  const feed = (gid, v, t) => hatchProgress({ ...base, gid, hatchedSecs: v, hatchUpdate: t }, t * 1000)
+
+  // 已孵满的蛋:进度被 maxSecs 截断,差分必然偏小,混进来会把中位数拉低
+  feed(9501, 100, 6000)
+  feed(9502, 28795, 6000)
+  assert.equal(gatherRates([
+    { ...base, gid: 9501, hatchedSecs: 150, hatchUpdate: 6010 },   // Δ=50/10 → 5
+    { ...base, gid: 9502, hatchedSecs: 28800, hatchUpdate: 6010 }, // 真实 Δ 是 50,只剩 5
+  ]), 5, '已孵满的蛋不得进中位数(它的 Δ 被截断,混进去会把中位数拉到 3)')
+
+  // 进度没推进的采样:照算会得 0 倍再被钳到下限,同样污染中位数
+  feed(9601, 100, 7000)
+  assert.equal(gatherRates([
+    { ...base, gid: 9601, hatchedSecs: 100, hatchUpdate: 7010 },
+  ]), null, '进度没推进的采样不得进中位数')
+}
+
 // [7] clampRate 边界
 {
   assert.equal(clampRate(0.5), 1, '低于 1 应钳到 1')

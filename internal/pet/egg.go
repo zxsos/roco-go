@@ -42,7 +42,7 @@ type Egg struct {
 	Weight      int32  // ÷1000 千克
 	HatchedSec  int32  // 已孵秒数(服务器在 HatchUpdate 时刻算出)
 	MaxSec      int32  // 孵满所需秒数(随机蛋只能靠它,见 3.6)
-	HatchUpdate int32  // last_hatch_update_sec:HatchedSec 的计算时刻
+	HatchUpdate int32  // last_hatch_update_sec:HatchedSec 的计算时刻(落库时被改写,见 ToEggView)
 	StartHatch  int32  // start_hatch_time:放进孵蛋器的时刻;0=不在孵蛋器里
 	Src         int32  // EggAcquireWayType:6=牧场(家园小窝),5=好友赐福,0=其他
 	RandomConf  uint32 // random_egg_conf:随机蛋的外观配置(非 0 即随机蛋)
@@ -328,10 +328,14 @@ type EggView struct {
 	Random     bool   `json:"random,omitempty"`  // 神奇的蛋(物种未知)
 	ObtainedAt int64  `json:"obtainedAt"`        // 获得时间(unix 秒)
 
+	// 跨语言约束(改动前先看 docs/data.md 3.6「差分」一节):
+	// HatchUpdate 不是协议里的 last_hatch_update_sec,而是**抓包主机的观测时刻** ——
+	// store 落库时改写过。前端拿相邻两次采样做差分估孵化倍率,两个时刻必须同源,
+	// 故钟只能有一个。进度为 0 时它也是 0(不留旧时刻,免得外推退化成单点法)。
 	Hatching    bool  `json:"hatching"`              // 在孵蛋器里
 	HatchedSecs int32 `json:"hatchedSecs,omitempty"` // 已孵秒数(HatchUpdate 时刻的快照)
 	MaxSecs     int32 `json:"maxSecs,omitempty"`     // 孵满所需秒数
-	HatchUpdate int64 `json:"hatchUpdate,omitempty"` // 上面那个数的计算时刻(前端据此外推)
+	HatchUpdate int64 `json:"hatchUpdate,omitempty"` // 上面那个数的采样时刻(前端据此外推)
 	StartHatch  int64 `json:"startHatch,omitempty"`  // 放进孵蛋器的时刻
 
 	Parents *EggParents `json:"parents,omitempty"`
@@ -343,6 +347,12 @@ var eggSrcNames = map[int32]string{
 }
 
 // ToEggView 把一颗解析出的蛋结合名称库转成展示模型(不含双亲,双亲由 pipeline 另行推断)。
+//
+// ⚠️ Egg.HatchUpdate 是**服务器**算出 HatchedSec 的时刻,前端拿到的却不是它:
+// store 落库时会把它改写成**抓包主机的观测时刻**(见 store/egg.go 的 UpsertEggs)。
+// 原因是前端估孵化倍率靠「相邻两次采样做差分」Δv/Δt(详见 docs/data.md 3.6),
+// 两次采样的 t 一旦不同源,钟差就直接落进分母 —— 网关与游戏服务器差 60 秒时,
+// 5 倍速会被算成 0.7 再被钳到下限 1。这里保留协议原值只为解析层自洽。
 func ToEggView(e Egg, db *gamedata.DB) *EggView {
 	v := &EggView{
 		Gid: e.Gid, ItemID: e.ItemID, ConfID: e.ConfID,
