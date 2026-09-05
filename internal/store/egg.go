@@ -3,6 +3,7 @@ package store
 import (
 	"database/sql"
 	"encoding/json"
+	"strings"
 
 	"github.com/whoisnian/rocom-capture/internal/pet"
 )
@@ -36,6 +37,10 @@ func (sc *Scoped) UpsertEggs(eggs []*pet.EggView, now int64, knownHatch map[uint
 	if len(eggs) == 0 {
 		return nil
 	}
+	// 倍率只能从相邻两次采样反推:新值在入参里,旧值得在覆盖之前从库里取出来。
+	// 这一步必须在下面改写 HatchUpdate 之前做(见本函数内「HatchUpdate 改记作观测时刻」)。
+	prev := sc.prevHatchPoints(eggs)
+	var samples []float64
 	rows := make([][]any, 0, len(eggs))
 	for _, e := range eggs {
 		// 权威列表要连 data 里的推断值一起改:读取时以 hatching 列为准覆盖 data,
@@ -56,6 +61,15 @@ func (sc *Scoped) UpsertEggs(eggs []*pet.EggView, now int64, knownHatch map[uint
 		// 只在确有进度时盖:不在孵蛋器里的蛋 hatched_secs 恒为 0,若也给盖上 now,
 		// 它入孵后第一次采样的差分就退化成「从 0 到现在」—— 那正是被实测否掉的
 		// 单点法(玩家跑动过后会虚报成 8~9 倍)。留 0,前端按「进度未知」处理。
+		// 记一次倍率样本:此刻新值(e.HatchedSecs, now)与库里的旧值(p.v, p.t)都在手上,
+		// 差分就是倍率本身(详见 hatch_rate.go)。要求 v 严格递增 —— 「新 t 配旧 v」
+		// 是常态(背包快照 0x1344 常下发没重算的旧进度),照算会得到 0 倍再被钳到下限。
+		// 已孵满的蛋进度被 maxSecs 截断、差分必然偏小,一并排除。
+		if p, ok := prev[e.Gid]; ok && p.t > 0 && p.v > 0 && e.HatchedSecs > p.v && now > p.t {
+			if p.max <= 0 || (p.v < p.max && e.HatchedSecs < p.max) {
+				samples = append(samples, float64(e.HatchedSecs-p.v)/float64(now-p.t))
+			}
+		}
 		if e.HatchedSecs > 0 {
 			e.HatchUpdate = now
 		} else {
@@ -88,6 +102,13 @@ func (sc *Scoped) UpsertEggs(eggs []*pet.EggView, now int64, knownHatch map[uint
 	if knownHatch != nil {
 		hatchClause = ", hatching=excluded.hatching"
 	}
+	// 一批下发的几颗蛋共享同一次服务器结算(实测三颗蛋同秒各 +10s),若这次是批量
+	// 补齐的跳变,几颗会一起跳 —— 逐个记进去等于把同一次跳变放大成好几票,故先取
+	// 中位数,整批只贡献一个样本。记失败不影响主流程:倍率只是外推的输入,估不出来
+	// 时前端仍有保守的 1 倍可用。
+	if len(samples) > 0 {
+		_ = sc.AddHatchSample(median(samples))
+	}
 	return execBatch(sc.db, `
 INSERT INTO eggs(account, gid, item_id, conf_id, name, species,
                  height, weight, height_pct, weight_pct, src, hatching, obtained_at,
@@ -99,6 +120,48 @@ ON CONFLICT(account, gid) DO UPDATE SET
   height_pct=excluded.height_pct, weight_pct=excluded.weight_pct,
   src=excluded.src, obtained_at=excluded.obtained_at`+hatchClause+`,
   updated_at=excluded.updated_at, data=excluded.data`, rows)
+}
+
+// hatchPoint 是一颗蛋在某个时刻的孵化进度采样(算差分用的旧值)。
+type hatchPoint struct {
+	t   int64 // HatchUpdate:上次采样的观测时刻
+	v   int32 // HatchedSecs:那时的已孵秒数
+	max int32 // MaxSecs:孵满所需秒数(判是否已孵满,截断的差分不能用)
+}
+
+// prevHatchPoints 批量取这些蛋**当前库里**的孵化进度,key 是 gid。
+// 只查要算差分的那几颗(一条消息最多几颗),拿不到(新蛋)就不出现在结果里。
+func (sc *Scoped) prevHatchPoints(eggs []*pet.EggView) map[uint32]hatchPoint {
+	out := make(map[uint32]hatchPoint, len(eggs))
+	if len(eggs) == 0 {
+		return out
+	}
+	qs := make([]string, len(eggs))
+	args := make([]any, 0, len(eggs)+1)
+	args = append(args, sc.account)
+	for i, e := range eggs {
+		qs[i] = "?"
+		args = append(args, e.Gid)
+	}
+	rows, err := sc.rdb.Query(`SELECT gid, data FROM eggs WHERE account=? AND gid IN (`+
+		strings.Join(qs, ",")+`)`, args...)
+	if err != nil {
+		return out
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var gid uint32
+		var data string
+		if err := rows.Scan(&gid, &data); err != nil {
+			continue
+		}
+		var v pet.EggView
+		if json.Unmarshal([]byte(data), &v) != nil {
+			continue
+		}
+		out[gid] = hatchPoint{t: v.HatchUpdate, v: v.HatchedSecs, max: v.MaxSecs}
+	}
+	return out
 }
 
 // SetEggParents 记下某颗蛋的双亲快照(收蛋那一刻推断出来的);已有记录不覆盖,
@@ -179,6 +242,10 @@ func (sc *Scoped) ReconcileHatching(gids []uint32, secs []int32, skip map[uint32
 		return false, err
 	}
 	var updates [][]any
+	// samples 是本次对账里各颗蛋的瞬时倍率。一次下发的几颗蛋**共享同一次服务器结算**
+	// (实测三颗蛋同秒各 +10s),若某次是批量补齐的跳变,几颗蛋会一起跳 —— 逐个记进去
+	// 等于把同一次跳变放大成好几票。故这批先取中位数,整批只贡献一个样本。
+	var samples []float64
 	for rows.Next() {
 		var gid uint32
 		var hatching int
@@ -203,6 +270,18 @@ func (sc *Scoped) ReconcileHatching(gids []uint32, secs []int32, skip map[uint32
 				v.Hatching = true
 			}
 			if sec, ok := secBy[gid]; ok {
+				// 顺手记一次倍率样本:这里同时握着**旧的** (HatchUpdate, HatchedSecs)
+				// 和即将写入的新 (now, sec),差分正是倍率本身。后端能做到的原因是它
+				// 看得见每一次下发,而前端通常只有最后一次快照(详见 hatch_rate.go)。
+				//
+				// v 必须严格递增(「新 t 配旧 v」是常态:进度只在开孵蛋器/开背包时
+				// 才由服务器重算),且两端都要有值 —— 否则算出来的是 0 倍或分母为 0。
+				if prev := v.HatchedSecs; v.HatchUpdate > 0 && prev > 0 && sec > prev && now > v.HatchUpdate {
+					// 已孵满的蛋进度被 maxSecs 截断,差分必然偏小,混进来会把中位数拉低
+					if v.MaxSecs <= 0 || (prev < v.MaxSecs && sec < v.MaxSecs) {
+						samples = append(samples, float64(sec-prev)/float64(now-v.HatchUpdate))
+					}
+				}
 				v.HatchedSecs, v.HatchUpdate = sec, now
 				if sec == 0 {
 					// 进度为 0 时连时刻一起清零(与 UpsertEggs 同一条规矩):留着旧时刻
@@ -226,6 +305,12 @@ func (sc *Scoped) ReconcileHatching(gids []uint32, secs []int32, skip map[uint32
 	rows.Close()
 	if err := rows.Err(); err != nil {
 		return false, err
+	}
+	// 倍率样本与进度更新解耦:哪怕本次一颗蛋都没改动(进度未变),差分样本也要记 ——
+	// 否则「服务器重算了进度但库里数值恰好相同」这类情况会漏采。记失败不影响主流程,
+	// 倍率只是外推的输入,回到「未知」前端仍有保守的 1 倍可用。
+	if len(samples) > 0 {
+		_ = sc.AddHatchSample(median(samples))
 	}
 	if len(updates) == 0 {
 		return false, nil

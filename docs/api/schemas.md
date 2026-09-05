@@ -546,9 +546,19 @@
              "icon": "egg/5001.webp", "heightM": 0.3, "weightKg": 1.2,
              "obtainedAt": 1700000000, "src": 1, "srcName": "牧场",
              "hatching": true, "hatchedSecs": 600, "maxSecs": 3600,
-             "hatchUpdate": 1700000000, "random": false, "typeOrder": 0 }] }
+             "hatchUpdate": 1700000000, "random": false, "typeOrder": 0 }],
+  "hatchRate": 5 }
 ```
 `hatchUpdate` 是上面三个数的计算时刻，前端据此外推孵化进度。
+
+`hatchRate` 是**后端估出的孵化倍率**（每过 1 真实秒推进多少孵化秒），整个响应一份
+而非逐蛋——倍率是全局的，不逐蛋（实测三颗不同 `maxSecs` 的蛋同秒各 +10s，统一 5.00）。
+`0` = 还不到两次采样、估不出来，前端退回它自己那套（保守 1 倍 + 内存差分）。
+
+⚠️ 它**必须**由后端给而不是前端自己算：前端打开页面时通常只有**最后一次**快照
+（进度只在开孵蛋器 0x0312 / 开背包 0x1344 时下发，没有被动推送），只有一次采样就
+凑不出差分，只能退回 1 倍——加速日（实测 5 倍）会把预计完成时间报成 5 倍远。后端
+回放或实时抓包时全程看得见每一次下发，差分随手可得。详见 `docs/data.md` 3.6。
 
 ### `GET /api/handbook-glasses` ✅
 ```json

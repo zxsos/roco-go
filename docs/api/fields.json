@@ -39,7 +39,8 @@
           "typeOrder": "int",
           "weightKg": "float"
         }
-      ]
+      ],
+      "hatchRate": "int"
     }
   },
   "events": {
@@ -425,6 +426,9 @@
     "endpoint": "GET /api/name-options",
     "sample": "internal/server/testdata/contract/name-options.json",
     "shape": {
+      "nature": [
+        {}
+      ],
       "speciality": [
         {}
       ]

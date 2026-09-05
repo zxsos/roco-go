@@ -145,14 +145,22 @@ export default function EggList() {
   const incubating = data.eggs.filter((e) => e.hatching)
   const bag = data.eggs.filter((e) => !e.hatching)
 
-  // 跨蛋倍率中位数:倍率是全局的,故它比盯着单颗蛋稳(见 gatherRates)。
-  // 给「自己只有一次采样」的蛋兜底 —— 刚入孵、从没测过倍率的那种,单看它只能退回
-  // 1 倍,而在加速日那会把预计时间报成几倍远。刷新页面不再丢倍率(已测出的会从
-  // localStorage 恢复,见 hatch.js 的 loadSeen),故这里兜的是「第一次遇到」的蛋。
+  // 给「自己只有一次采样」的蛋兜底的倍率,优先用**后端**那份。
+  //
+  // 后端(hatchRate)排第一:它看得到每一次服务器下发 —— 实时抓包时逐包累积、离线回放时
+  // 整份 pcap 一次跑完 —— 差分随手可得。而前端页面往往只拿到最后一次快照、只有一次采样,
+  // 压根凑不出差分,只能退回保守的 1 倍,于是加速日(实测 5 倍)把预计时间报成 5 倍远。
+  // 这正是「时间不对」的根,不是算错而是样本不够。0 = 后端也没估出来,才退回下面两条。
+  //
+  // 其次是跨蛋中位数(gatherRates):倍率是全局的,故它比盯着单颗蛋稳。给刚入孵、
+  // 从没测过倍率的那种兜底(刷新页面不再丢倍率 —— 已测出的会从 localStorage 恢复,
+  // 见 hatch.js 的 loadSeen,故这里兜的是「第一次遇到」的蛋)。
   //
   // ⚠️ 必须在渲染卡片**之前**算:gatherRates 读的是上一次采样留下的状态,
   // 而 hatchProgress 一调用就把它推进到本次了,顺序反了就一个差分都凑不出来。
-  const sharedRate = useMemo(() => gatherRates(data.eggs), [data.eggs])
+  const sharedRate = useMemo(
+    () => data.hatchRate || gatherRates(data.eggs),
+    [data.eggs, data.hatchRate])
   const slots = HATCH_SLOTS
 
   return (

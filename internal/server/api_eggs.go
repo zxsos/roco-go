@@ -22,7 +22,8 @@ import (
 // 见 web/src/pages/eggs/EggList.jsx)——进度是前端外推的,后端无法判断,故这里只给 hatching 标志。
 func (s *Server) handleEggs(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
-	eggs, err := s.store.For(s.acct(r)).ListEggs(store.EggFilter{Search: q.Get("search")})
+	sc := s.store.For(s.acct(r))
+	eggs, err := sc.ListEggs(store.EggFilter{Search: q.Get("search")})
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -45,5 +46,9 @@ func (s *Server) handleEggs(w http.ResponseWriter, r *http.Request) {
 	pet.SortHatchingEggs(hatching)
 	pet.SortEggs(bag, q.Get("sort"), q.Get("order") == "asc")
 	eggs = append(hatching, bag...)
-	writeJSON(w, map[string]any{"eggs": eggs})
+	// hatchRate 是后端从历次下发的差分里估出的孵化倍率(见 store/hatch_rate.go);
+	// 0 = 还不到两次采样、估不出来,前端退回它自己那套(保守 1 倍 + 内存差分)。
+	// 它**不在每颗蛋上**而是整个响应一份:倍率是全局的,不逐蛋(实测三颗不同 maxSecs
+	// 的蛋同秒各 +10s,统一 5.00)。
+	writeJSON(w, map[string]any{"eggs": eggs, "hatchRate": sc.HatchRate()})
 }
