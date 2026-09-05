@@ -94,7 +94,13 @@ function hatchRate(egg) {
   return prev.rate || 1
 }
 
-// hatchProgress 返回 {pct, secs} —— 外推到 now(毫秒)的孵化进度;不在孵蛋器里返回 null。
+// hatchProgress 返回 {pct, secs, rate} —— 外推到 now(毫秒)的孵化进度;
+// 不在孵蛋器里返回 null。
+//
+// ⚠️ **secs 是「孵化秒」,不是真实秒**:它是进度条用的量纲(与 maxSecs 同一把尺子),
+// 加速期间 1 真实秒推进 rate 个孵化秒。要算「还要多久」的**真实**时间,必须除以 rate
+// (见 EggList 的 etaText)—— 直接拿 maxSecs − secs 当秒数,5 倍加速下就会把
+// 完成时刻报成 5 倍远,而 1 倍时两者恰好相等、看不出来。
 //
 // **没有采样就返回 null,绝不外推**:hatchUpdate 为 0 表示这颗蛋从未有过进度采样
 // (登录包 0x0102 只给「哪些蛋在孵」、不带逐蛋进度,进度要等开孵蛋器 0x0312 或开
@@ -108,5 +114,14 @@ export function hatchProgress(egg, now) {
   const elapsed = Math.max(0, Math.floor(now / 1000) - egg.hatchUpdate)
   const secs = Math.min(egg.maxSecs, (egg.hatchedSecs || 0) + elapsed * rate)
   const pct = Math.floor(Math.min(100, (secs / egg.maxSecs) * 100))
-  return { pct, secs }
+  return { pct, secs, rate }
+}
+
+// remainRealSecs 把「还剩多少孵化秒」折算成**真实**秒数。
+//
+// 它是 etaText/etaTitle 唯一该用的换算:进度条看孵化秒,倒计时看真实秒,两者
+// 差一个 rate。抽出来是为了让这个换算只有一处 —— 分写两遍必有一处漏掉。
+export function remainRealSecs(egg, p) {
+  if (!egg || !p) return 0
+  return Math.max(0, (egg.maxSecs - p.secs) / (p.rate || 1))
 }

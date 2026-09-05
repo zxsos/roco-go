@@ -6,7 +6,7 @@ import { PetDetailModal } from '../../components/PetDetailModal'
 import { fmtTime, pad2, pctHot, voiceHot } from '../../utils/format'
 import { useInterval } from '../../hooks/useAsyncData'
 import { Marks } from '../../components/badges'
-import { hatchProgress } from './hatch'
+import { hatchProgress, remainRealSecs } from './hatch'
 import { toast } from '../../components/toast'
 
 // 精灵蛋页面:两段垂直 —— 孵蛋器(在孵且进度未满的蛋)、仓库(其余蛋)。不分标签页——在孵的蛋
@@ -35,19 +35,22 @@ const HATCH_SLOTS = 3
 // 这里只规整结尾的重复(中间的「的蛋」是名字本身,不动)。
 const tidyEggName = (name) => (name || '').replace(/的蛋的蛋$/, '的蛋')
 
-// 预计完成时间:按当前估算孵化倍率(见 hatch.js)外推剩余秒数,换算成时间点。
+// 预计完成时间:按当前估算孵化倍率(见 hatch.js)外推剩余时间,换算成时间点。
+//
+// ⚠️ 剩的是**孵化秒**,不是真实秒 —— 必须过 remainRealSecs 除以倍率。
+// 直接拿 maxSecs − p.secs 当秒数,平时(1 倍)恰好对得上,一旦撞上孵蛋加速
+// (实测 5 倍)就会把完成时刻报成 5 倍远:真实还剩 24 分钟的说成 2 小时后。
 // 同一天只显时分(手机双列卡片宽度紧张),跨天补「月-日 时:分」;title 里给剩余时长,
 // 并注明是估算(倍率本身是估的)。
 function etaText(egg, p, now) {
-  const remainSecs = Math.max(0, egg.maxSecs - p.secs)
-  const eta = new Date(now + remainSecs * 1000)
+  const eta = new Date(now + remainRealSecs(egg, p) * 1000)
   const hm = `${pad2(eta.getHours())}:${pad2(eta.getMinutes())}`
   return new Date(now).toDateString() === eta.toDateString()
     ? hm
     : `${eta.getMonth() + 1}-${eta.getDate()} ${hm}`
 }
 function etaTitle(egg, p) {
-  const s = Math.max(0, egg.maxSecs - p.secs)
+  const s = remainRealSecs(egg, p)
   const h = Math.floor(s / 3600)
   const m = Math.floor((s % 3600) / 60)
   return `按当前孵化倍率估算,约剩 ${h > 0 ? `${h} 小时 ${m} 分` : `${m} 分钟`}`

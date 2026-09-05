@@ -6,7 +6,7 @@
 // 「已过十几亿秒」→ 进度顶满 → EggList 把「在孵且进度满」的蛋两栏都不显示,
 // 蛋凭空消失 —— 玩家看到的就是「登录后孵蛋器空的 / 没刷新」。
 import assert from 'node:assert/strict'
-import { hatchProgress, clampRate, gatherRates } from './hatch.js'
+import { hatchProgress, remainRealSecs, clampRate, gatherRates } from './hatch.js'
 
 const NOW = 1788000000 * 1000 // 固定"当前时刻",避免依赖真实时钟
 
@@ -112,6 +112,32 @@ const E4486 = [
   const p3 = hatchProgress(seq[1], 1788542717 * 1000 + 10 * 1000)
   assert.ok(Math.abs(p3.secs - 150) < 1e-6,
     `按 5 倍外推 10 秒应到 150s(100+50),实际 ${p3.secs}`)
+  assert.equal(p3.rate, 5, '外推用的倍率要一并返回,否则 ETA 无从折算')
+
+  // —— 加速下的「还要多久」:这是用户报的那个 bug ——
+  //
+  // secs 是**孵化秒**(与 maxSecs 同尺子),真实时间要除以倍率。
+  // 8h 蛋已孵 21600 孵化秒 → 剩 7200 孵化秒;5 倍时真实只需 1440 秒(24 分),
+  // 漏了这一步就会说成 7200 秒(2 小时)。
+  const far = { gid: 9001, hatching: true, maxSecs: 28800, hatchedSecs: 100, hatchUpdate: 1788542717 }
+  const pf = hatchProgress(far, 1788542717 * 1000)
+  const wantRemain = (28800 - 100) / 5 // 真实剩余秒
+  assert.ok(Math.abs(remainRealSecs(far, pf) - wantRemain) < 1e-6,
+    `5 倍下剩 ${wantRemain} 真实秒,实际 ${remainRealSecs(far, pf)}`
+    + '(不除倍率会得 28700,即把 ETA 报成 5 倍远)')
+  // 1 倍时两者相等 —— 这正是这个 bug 平时看不出来的原因
+  const slow = { gid: 9101, hatching: true, maxSecs: 28800, hatchedSecs: 100, hatchUpdate: 3000 }
+  const ps = hatchProgress(slow, 3000 * 1000)
+  assert.equal(ps.rate, 1, '首次采样退回 1 倍')
+  assert.equal(remainRealSecs(slow, ps), 28700, '1 倍时孵化秒 == 真实秒')
+}
+
+// remainRealSecs:已孵满 / 参数缺失时都得是 0,不能是 NaN 或负数
+{
+  const done = { gid: 9201, hatching: true, maxSecs: 3600, hatchedSecs: 3600, hatchUpdate: 200 }
+  const pd = hatchProgress(done, 200 * 1000)
+  assert.equal(remainRealSecs(done, pd), 0, '已孵满应剩 0')
+  assert.equal(remainRealSecs(null, null), 0, '无进度(null)应剩 0,不崩')
 }
 
 // [6] gatherRates:跨蛋聚合(倍率全局统一,故可用中位数抗单蛋抖动)
