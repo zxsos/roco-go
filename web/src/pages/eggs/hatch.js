@@ -4,165 +4,46 @@
 // (进度只在开孵蛋器/开背包时才下发,没有被动推送)。要让页面上的进度条动起来,只能本地按
 // 「当前值 + 倍率 × 已过秒数」外推。
 //
-// **倍率不是常数**:平时 1 倍,「孵蛋加速日」活动期间是 2 或 5 倍,另外玩家跑动、
-// 用孵化宝典都会再加。配置里没有可读的倍率字段(活动倍率只存在于文案里,且不随
-// 协议下发),所以只能靠采样反推。详见 docs/data.md 3.6。
+// —— 倍率从哪来:后端给,前端不估 ——
 //
-// —— 为什么用「差分」而不是「累计 ÷ 已孵时长」——
+// 倍率由两部分构成,**性质不同、来源不同**:
 //
-// 2026-09 三份 pcap、15 个采样点实测:
-//   - 相邻两次采样的差分 Δv/Δt:**6 个采样点对全部精确 5.00**;
-//   - 单点累计 v/(hatchUpdate−start_hatch_time):刚放入时是 5.00,但玩家中途跑动过
-//     之后变成 **8.10 ~ 9.03**(同一时刻的差分仍是 5.00)。
+//	活动倍率  = 每周「孵蛋加速日」(北京时间周五 04:00 ~ 周一 04:00)→ 5 倍,否则 1 倍
+//	在线加成  = 玩家移动 / 挂风场 / 孵化宝典,只在**在线**时叠加
 //
-// 原因:单点算的是**入孵以来的历史平均**,跑动那段的加速被平摊进去了;
-// 差分算的是**采样当时的瞬时速率**。预测未来该用后者 —— 玩家此刻站着,
-// 未来大概率还是站着,拿历史平均外推会虚报「可破壳」。
+// 活动倍率**不靠测量**:它是固定的每周时间表,服务器在窗口内照此推进,**玩家离线时
+// 也一样**。故后端按时刻直接算出来下发(见 internal/pet.HatchActivityRate),离线
+// 外推因此天然准确 —— 不需要攒样本,也没有「刚打开页面还没校准」的冷启动。
 //
-// 故:差分是唯一的主口径,单点**只作兜底且要保守**(见 hatchRate 内注释)。
+// 在线加成**不进 ETA**:它随速度与移动方式而变(实测同一份 pcap:静止时差分精确
+// 5.00,移动时 16.9~25.8),样本不足以定出可信的数,拿它外推会虚报「可破壳」。故后端
+// 只下发一个布尔(玩家此刻是否在移动),页面作**定性提示**:进度会比标注的更快。
+//
+// 这条划分是踩过坑才明确的。早先把两者混成一个数去「测」(对相邻两次进度下发做差分、
+// 取中位数),结果是:样本被移动时段的加速污染(16.9/130 混在里面)、需要攒够 3 个
+// 样本才敢给值(冷启动慢)、离线那段完全算不了 —— 都不是噪声问题,是把两个不同性质
+// 的量当成了一个。详见 docs/data.md 3.6。
 
-// (页面上不再写这段说明:进度条本身就是估的,一句话说不清,写在这里给读代码的人。
-//  游戏内打开一次孵蛋器,后端就能收到新的 hatchedSecs,这里随即对齐。)
-
-// RATE_MIN/MAX 倍率的合理取值域,差分结果一律钳进这个区间。
-//
-// 下限 1:除了「加速」没见过别的方向(宝典/跑动都是加),倍率 <1 只可能是异常采样
-// (如 hatchedSecs 被服务器回退、或两次采样跨了取出再放入)。原实现允许任意小的正数,
-// 会把进度条拖到几乎不动。
-// 上限 20:实测见过的最大等效是跑动期间 14.5(文档 3.6);给到 20 留余量,
-// 再高就是异常(时钟跳变、采样错配),钳住免得外推出离谱的完成时间。
+// RATE_MIN 是倍率的下限,只用于防御后端数据异常(如字段缺失被解成 0)。
+// 除了「加速」没见过别的方向,倍率 <1 只可能是数据出错。
 const RATE_MIN = 1
-const RATE_MAX = 20
 
-// 每颗蛋记住上一次见到的 (hatchUpdate, hatchedSecs, rate),据此估倍率。
-//
-// 这份采样**持久化到 localStorage**,刷新页面后恢复,而不是退回保守的 1 倍 ——
-// 早先「刷新即回到 1 倍、刻意不持久化」是错的,它正是「刷新前后两种时间」的根:
-// 页面持续开着时 seen 里有采样、差分测出 5 倍、ETA 快而准;一刷新 seen 清空,
-// 每颗蛋只剩一次采样、全退回 1 倍,ETA 报成真实时间的 5 倍远。而且加速日期间
-// 玩家**离线**服务器照样按 5 倍推进(见 docs/data.md 3.6),离线回来刷新,用 1 倍
-// 外推 offline 那段进度就全错了。
-//
-// 只持久化**测出了倍率**(known)的采样:新采样到达(服务器重算进度)就会重算校正,
-// 加速日结束、倍率回落到 1 也会被差分抓回来,持久化值只是「下次刷新前的兜底」。
-// gid 是服务器全局唯一的背包物品 id,跨账号不冲突,故按 gid 建键、无需 account。
-//
-// 权衡:若玩家刷新网页却**不打开游戏**(服务器不重算进度),恢复的仍是加速日那时的旧倍率,
-// 加速日结束后会短暂高估(ETA 报得偏快)。这比原来的「加速日里刷新就退回 1 倍、ETA 报成
-// 5 倍远」更可取 —— 后者的错误是**必然且普遍**的(用户实测报障),前者只在「跨加速日窗口
-// 且不重新采样」这个窄场景出现,且玩家一在游戏里打开孵蛋器/背包即被新差分校正。
-const SEEN_KEY = 'eggHatchSeen.v1'
-const seen = new Map()
-
-// loadSeen 在模块加载时从 localStorage 恢复采样;Node(测试)无 localStorage 时静默跳过。
-function loadSeen() {
-  try {
-    if (typeof localStorage === 'undefined') return
-    const raw = localStorage.getItem(SEEN_KEY)
-    if (!raw) return
-    for (const [k, v] of Object.entries(JSON.parse(raw))) {
-      if (v && Number.isFinite(v.t) && Number.isFinite(v.v)) seen.set(Number(k), v)
-    }
-  } catch { /* 损坏/禁用隐私模式等忽略 */ }
-}
-
-// saveSeen 把带倍率的采样写回 localStorage;只存有 rate 的(没测出的采样刷新后也用不上)。
-function saveSeen() {
-  try {
-    if (typeof localStorage === 'undefined') return
-    const obj = {}
-    for (const [k, v] of seen) {
-      if (v && typeof v.rate === 'number') obj[k] = v
-    }
-    localStorage.setItem(SEEN_KEY, JSON.stringify(obj))
-  } catch { /* 配额等异常忽略 */ }
-}
-
-loadSeen()
-
-// clampRate 把估出的倍率收进合理区间。
+// clampRate 把倍率收进合理区间(仅作防御,正常路径下后端给的就是 1 或 5)。
 export function clampRate(r) {
   // 先处理 NaN(它不参与任何大小比较,单独挡掉);±Infinity 走下面的大小比较
-  // 自然落到两端(+∞ → 上限,−∞ → 下限),不必单列 —— 用 Number.isFinite 一并
-  // 判非法会把它俩都塞到下限,而 +∞ 明明该是上限(测试因此抓到过一次)。
+  // 自然落到下限或保持不变,不必单列 —— 用 Number.isFinite 一并判非法会把 +∞
+  // 也塞到下限,而它明明不该是 1(测试因此抓到过一次)。
   if (Number.isNaN(r)) return RATE_MIN
   if (r < RATE_MIN) return RATE_MIN
-  if (r > RATE_MAX) return RATE_MAX
   return r
 }
 
-// gatherRates 收集本次刷新里**所有**蛋的瞬时倍率,返回其**中位数**。
-//
-// 倍率是全局的(实测:同一时刻三颗蛋——含一颗 16h 的、两颗 8h 的——在 2 秒内
-// 全部 +10s,即统一 5.00),故可跨蛋聚合:单颗蛋的采样抖动(秒级取整、恰在
-// 服务器刷新边界上取到)会在中位数里被消掉,比盯着一颗蛋稳。
-// 只有 1~2 颗蛋时中位数退化为均值/较小值,同样可用。
-//
-// ⚠️ 必须在渲染各张卡片**之前**调:它读的是上一次采样留下的 seen,而
-// hatchProgress 一调用就把 seen 推进到本次了,顺序反了凑不出任何差分。
-export function gatherRates(eggs) {
-  const rates = []
-  for (const e of eggs || []) {
-    if (!e || !e.hatching || !e.hatchUpdate || !e.maxSecs) continue
-    const prev = seen.get(e.gid)
-    const cur = { t: e.hatchUpdate, v: e.hatchedSecs }
-    // 必须**严格**递增才算一次有效采样,理由同 hatchRate:进度没变时照算会得 0,
-    // 混进中位数会把整体拉到下限(服务器没重算进度是常态,不是异常)。
-    if (!prev || cur.t <= prev.t || cur.v <= prev.v) continue
-    // 已孵满的蛋进度被 maxSecs 截断,差分必然偏小 —— 混进来会把中位数整体拉低,
-    // 而这颗蛋恰恰是最不需要估倍率的:它已经孵完了。
-    if (prev.v >= e.maxSecs || cur.v >= e.maxSecs) continue
-    rates.push(clampRate((cur.v - prev.v) / (cur.t - prev.t)))
-  }
-  if (rates.length === 0) return null
-  rates.sort((a, b) => a - b)
-  const mid = rates.length >> 1
-  return rates.length % 2 ? rates[mid] : (rates[mid - 1] + rates[mid]) / 2
-}
-
-// hatchRate 收下一次采样,返回 {rate, known}:rate 是估出的倍率(秒/秒),
-// known 表示它是**实测出来的**还是退回来的一倍(后者不能拿去预测未来)。
-//
-// 主口径是**相邻两次采样的差分**;只有一次采样、且 localStorage 里也没有这颗蛋的
-// 旧采样时(第一次遇到这颗蛋、或刚入孵)退回 1 倍 —— 刷新页面不再丢采样(见 loadSeen),
-// 已测出的倍率会从 localStorage 恢复。不用「累计 ÷ 已孵时长」兜底:实测它会因玩家
-// 跑动高估到 9 倍,宁可显示得慢些,也不要虚报可破壳(这一条与改动前一致,现由实测支撑)。
-function hatchRate(egg) {
-  const prev = seen.get(egg.gid)
-  const cur = { t: egg.hatchUpdate, v: egg.hatchedSecs }
-  if (prev && prev.t === cur.t) return prev
-  // 必须**严格**递增才是一次有效采样。原判定是 `cur.v >= prev.v`,于是「服务器
-  // 还没重算进度」会被算成 Δv=0 → 0 倍 → 钳到下限 1:把 5 倍加速生生打成 1 倍。
-  // 而这是常态不是异常 —— 进度只在开孵蛋器/开背包时下发,连着刷两次页面很常见,
-  // 后端的 HatchUpdate 又统一成了观测时刻,每次刷新都是新的 t 配同一个 v。
-  if (prev && cur.t > prev.t && cur.v > prev.v) {
-    // 原实现 `r > 0 ? r : prev.rate` 会放行任意小的正数,且无上限。
-    // 这里钳进 [1, 20]:异常采样(进度回退/时钟跳变)不至于把进度条拖死或吹飞。
-    cur.rate = clampRate((cur.v - prev.v) / (cur.t - prev.t))
-    cur.known = true
-  } else if (prev) {
-    // 采样没推进(进度倒退,或进度没变):沿用上次估的,不重新算。
-    cur.rate = prev.rate
-    cur.known = prev.known
-  }
-  seen.set(egg.gid, cur)
-  saveSeen()
-  return cur
-}
-
-// hatchProgress 返回 {pct, secs, rate, rateKnown} —— 外推到 now(毫秒)的孵化进度;
+// hatchProgress 返回 {pct, secs, rate} —— 外推到 now(毫秒)的孵化进度;
 // 不在孵蛋器里返回 null。
 //
-// sharedRate 是**后端**给的倍率(优先)或跨蛋中位数(见 gatherRates),给「自己还没测出
-// 倍率」的蛋兜底:这颗蛋刚入孵、单看它只有一次采样时,退回 1 倍会把加速日的预计时间
-// 报成几倍远。(刷新页面不再丢倍率 —— 已测出的会从 localStorage 恢复,见 loadSeen;
-// 这里兜的是「第一次遇到、从没测过」的蛋。)
-//
-// 优先级:**自己的差分 > 后端倍率 > 跨蛋中位数 > 1 倍**。
-// 后端那份通常最有用 —— 它看得到每一次服务器下发(回放时整份 pcap 一次跑完),而前端
-// 页面往往只拿到最后一次快照、只有一次采样,压根凑不出差分。这正是「加速日里预计时间
-// 报成 5 倍远」的根:不是算错,是**样本不够**(实测回放页 title 长期挂着「倍率尚未测出」)。
-// 自己的差分仍排第一:它是对这颗蛋最直接的证据,而宝典之类是否逐蛋生效尚未证实。
+// rate 是**后端**给的孵化倍率(每过 1 真实秒推进多少孵化秒)。它按加速日时间表算出,
+// 离线也准;玩家此刻若在移动,实际会更快(见文件头),但那部分不进本函数的外推 ——
+// 宁可慢一点,也不要虚报「可破壳」。
 //
 // ⚠️ **secs 是「孵化秒」,不是真实秒**:它是进度条用的量纲(与 maxSecs 同一把尺子),
 // 加速期间 1 真实秒推进 rate 个孵化秒。要算「还要多久」的**真实**时间,必须除以 rate
@@ -174,18 +55,14 @@ function hatchRate(egg) {
 // 背包 0x1344)。此时若按 elapsed = now - 0 外推,得到的是十几亿秒,进度直接顶满 ——
 // 而 EggList 把「在孵且进度满」的蛋两栏都不显示,蛋就这样凭空消失了。
 // 返回 null 时页面按「在孵、进度未知」处理(见 EggList 的分栏与 EggCard 的展示)。
-export function hatchProgress(egg, now, sharedRate) {
+export function hatchProgress(egg, now, rate) {
   if (!egg || !egg.hatching || !egg.maxSecs) return null
   if (!egg.hatchUpdate) return null // 无采样:不外推,免得算成 100% 把蛋弄丢
-  const own = hatchRate(egg)
-  // rateKnown 决定页面能不能把预计时间当真:没测出倍率时的 1 倍只是占位,
-  // 加速日会偏慢好几倍,与其给个看似精确的数,不如让人知道还没校准。
-  const rateKnown = own.known || !!sharedRate
-  const rate = own.known ? own.rate : (sharedRate || 1)
+  const r = clampRate(rate || 1)
   const elapsed = Math.max(0, Math.floor(now / 1000) - egg.hatchUpdate)
-  const secs = Math.min(egg.maxSecs, (egg.hatchedSecs || 0) + elapsed * rate)
+  const secs = Math.min(egg.maxSecs, (egg.hatchedSecs || 0) + elapsed * r)
   const pct = Math.floor(Math.min(100, (secs / egg.maxSecs) * 100))
-  return { pct, secs, rate, rateKnown }
+  return { pct, secs, rate: r }
 }
 
 // remainRealSecs 把「还剩多少孵化秒」折算成**真实**秒数。

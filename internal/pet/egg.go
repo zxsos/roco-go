@@ -11,6 +11,7 @@ package pet
 
 import (
 	"math"
+	"time"
 
 	"google.golang.org/protobuf/encoding/protowire"
 
@@ -30,6 +31,68 @@ const (
 
 // EggItemType 是精灵蛋在 BAG_ITEM_CONF/BagItem 里的 type 值。
 const EggItemType = 8
+
+// ---- 孵化倍率:活动部分(时间表)----
+//
+// 倍率由两部分构成,**性质不同、来源不同,必须分开算**:
+//
+//	总倍率 = 活动倍率(本节的固定时间表) + 在线行为加成(移动 / 挂风场 / 孵化宝典)
+//
+// 活动倍率:每周「孵蛋加速日」,**北京时间周五 04:00 ~ 周一 04:00**,期间后台按 500%
+// 推进(即 5 倍),其余时间 1 倍。这是**固定时间表**,与时区无关地直接按时刻算出来即可,
+// 不需要也不应该靠采样反推 —— 玩家离线期间服务器照此推进,离线外推因此天然准确。
+//
+// 在线行为加成:玩家跑动、挂风场、用孵化宝典会在活动倍率之上**再**加,只在他在线时
+// 发生,由后端按移动包等实时观测(见 pipeline/position.go 的 onMove 与孵化倍率下发)。
+//
+// ⚠️ 不要把两者混成一个数去「测」:2026-09-05 那份 pcap 里静止时差分精确 5.00、
+// 移动时是 16.9~25.8 —— 那不是噪声,是玩家真的在跑。若把移动样本也并进中位数,
+// 得到的数既不是静止倍率也不是移动倍率,离线外推必然错。
+
+// hatchActivityRate 是加速日期间的活动倍率(其余时间为 1)。
+// 500% 来自活动文案「背包孵化精灵速度提升至500%」;早期几期是 100%(即 2 倍),
+// 若游戏改动只需改这里 —— 但**窗口时间表**才是要跟着维护的东西(见 docs/data.md 3.6)。
+const hatchActivityRate = 5.0
+
+// hatchWindowStart / End 是加速日窗口的起止时刻(一天内的秒数):04:00 ~ 04:00。
+const (
+	hatchWindowStart = 4 * 3600
+	hatchWindowEnd   = 4 * 3600
+)
+
+// cstZone 是游戏服务器用的时区(北京时间 UTC+8)。活动窗口按它判定,与抓包主机所在
+// 时区无关 —— 后者可能是 UTC,若按本地时区算会整体偏 8 小时,正好跨过 04:00 边界。
+var cstZone = time.FixedZone("CST", 8*60*60)
+
+// HatchActivityRate 返回 ts(unix 秒)时刻的活动倍率:加速日窗口内 5 倍,否则 1 倍。
+//
+// 窗口 = 北京时间**周五 04:00 ~ 周一 04:00**(周一 04:00 整点结束,即 03:59:59 仍在窗口内)。
+// 判据与 `ACTIVITY_CONF` 里 `activity_type==18` 那几期吻合:2026-08-14(周五)04:00:00
+// ~ 2026-08-17(周一)03:59:59。
+//
+// 时间表**硬编码**而非解包读取:活动 id 每期都变(1800001 → 1800022 → 1800025),
+// 且解包目录并非总是可得;而窗口是稳定的周期规律,两期实测(pcap 都在周六、都测出
+// 5 倍)与用户确认一致。将来若官方改窗口,改本函数的三个常量即可。
+func HatchActivityRate(ts int64) float64 {
+	if ts <= 0 {
+		return 1
+	}
+	t := time.Unix(ts, 0).In(cstZone)
+	sec := t.Hour()*3600 + t.Minute()*60 + t.Second()
+	switch t.Weekday() {
+	case time.Friday:
+		if sec >= hatchWindowStart {
+			return hatchActivityRate // 周五 04:00 起
+		}
+	case time.Saturday, time.Sunday:
+		return hatchActivityRate // 整个周末
+	case time.Monday:
+		if sec < hatchWindowEnd {
+			return hatchActivityRate // 到周一 04:00 为止
+		}
+	}
+	return 1
+}
 
 // Egg 是一颗背包里的精灵蛋(BagItem + egg_data)。
 type Egg struct {
