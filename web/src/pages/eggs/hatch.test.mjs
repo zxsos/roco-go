@@ -41,6 +41,31 @@ assert.equal(hatchProgress(done, NOW, 5).pct, 100)
 const skew = { gid: 4408, hatching: true, maxSecs: 3600, hatchedSecs: 600, hatchUpdate: NOW / 1000 + 999 }
 assert.ok(hatchProgress(skew, NOW, 5).secs >= 600, '时钟回拨不该把进度往回推')
 
+// —— 刚放进孵蛋器的蛋:必须有进度条 ——
+//
+// 后端对「进度为 0」的蛋会把 hatchUpdate 一起清零(见 store/egg.go 的 UpsertEggs),
+// 而刚放进去的蛋 hatchedSecs 就是 0。若这里照 hatchUpdate=0 返回 null,页面上这颗蛋
+// 就**连进度条都没有** —— 玩家刚放上蛋看不到 0%、也看不到预计时间,要手动重开一次
+// 孵蛋器/背包(服务器重算进度)才出现。
+//
+// 但此刻进度是**确定的 0**,入孵时刻(startHatch)也是准确的,故从 startHatch 外推即可。
+// 这与被实测否掉的「单点法」不是一回事:单点法是拿 v/elapsed **反推倍率**(跑动那段
+// 被平摊进去,虚报成 8~9 倍);这里倍率是后端给的,只是从一个确定的零点起算。
+{
+  const T = NOW / 1000 - 120 // 两分钟前放进去的
+  const fresh = { gid: 4409, hatching: true, maxSecs: 28800, hatchedSecs: 0, hatchUpdate: 0, startHatch: T }
+  const p = hatchProgress(fresh, NOW, 5)
+  assert.ok(p, '刚放入的蛋(进度 0、无采样时刻)也该有进度,不能返回 null')
+  // 5 倍 × 120 秒 = 600 孵化秒
+  assert.ok(Math.abs(p.secs - 600) < 2, `应从入孵时刻外推到约 600 秒,实际 ${p.secs}`)
+  assert.equal(p.pct, 2, '8h 蛋孵了 600/28800 应约 2%')
+
+  // 已取出的蛋 startHatch 是残留值,但 hatching 会被权威列表清成 false,
+  // 故走不到这个分支(函数开头已返回 null)。这里守住它别被误用。
+  const takenOut = { gid: 4410, hatching: false, maxSecs: 28800, hatchedSecs: 0, hatchUpdate: 0, startHatch: T }
+  assert.equal(hatchProgress(takenOut, NOW, 5), null, '不在孵的蛋不得拿残留 startHatch 外推')
+}
+
 // —— 孵化秒 ≠ 真实秒:这是「加速日 ETA 报成 5 倍远」的病根 ——
 //
 // secs 是进度条的量纲(与 maxSecs 同尺子),要算「还要多久」必须除以倍率。

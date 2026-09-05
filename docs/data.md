@@ -972,6 +972,13 @@ hatched_secs = 倍率 × (last_hatch_update_sec − start_hatch_time)   # 截距
   外推,退化成被实测否掉的单点法(跑动过后会虚报成 8~9 倍)。留 0,前端按
   「进度未知」处理、不外推。
 
+  ⚠️ 配套:前端外推的起点是 `hatchUpdate || startHatch`(见 `hatch.js`)。刚放进
+  孵蛋器的蛋 `hatched_secs` 恰为 0,照上面这条规矩 `HatchUpdate` 也是 0 —— 若没有
+  这个兜底,这颗蛋就**连进度条都没有**(要等玩家重开一次孵蛋器、服务器重算进度才
+  出现)。此刻进度是确定的 0、入孵时刻也是准确的,故从 `startHatch` 起算。
+  取出后 `startHatch` 是残留值,但那颗蛋的 `hatching` 已被权威列表清成 false,
+  走不到这个分支。
+
 **加速日窗口是每周固定的**:北京时间**周五 04:00 ~ 周一 04:00**,期间 5 倍(500%)。
 
 `ACTIVITY_CONF` 里 `activity_type == 18` 就是它(`title_icon_text` = 周末事件),

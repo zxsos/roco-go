@@ -57,9 +57,24 @@ export function clampRate(r) {
 // 返回 null 时页面按「在孵、进度未知」处理(见 EggList 的分栏与 EggCard 的展示)。
 export function hatchProgress(egg, now, rate) {
   if (!egg || !egg.hatching || !egg.maxSecs) return null
-  if (!egg.hatchUpdate) return null // 无采样:不外推,免得算成 100% 把蛋弄丢
+  // 外推起点:优先用采样时刻;没有采样时退回**入孵时刻**。
+  //
+  // 后端对「进度为 0」的蛋会把 HatchUpdate 一起清零(见 store/egg.go 的 UpsertEggs),
+  // 而刚放进去的蛋 hatchedSecs 恰好是 0 —— 若这里照 hatchUpdate=0 返回 null,这颗蛋就
+  // **连进度条都没有**:玩家刚放上蛋看不到 0% 也看不到预计,得手动重开一次孵蛋器
+  // (服务器重算进度)才出现。而此刻进度是**确定的 0**、入孵时刻也是准确的,
+  // 从 startHatch 起算即可 —— 那正是「放入的那一刻」。
+  //
+  // 这与被实测否掉的「单点法」不是一回事:单点法是拿 v/elapsed **反推倍率**(跑动那段
+  // 被平摊进去,虚报成 8~9 倍);这里倍率由后端给,只是从一个确定的零点起算。
+  //
+  // 安全性:本分支只在 hatching 为真时才会走到(上面已过滤),而 hatchHatching 列只由
+  // 权威的 egg_gid 列表对账维护 —— 取出后 startHatch 是残留值,但那颗蛋的 hatching
+  // 已被清成 false,故不会拿残留时刻外推(测试守着)。
+  const from = egg.hatchUpdate || egg.startHatch
+  if (!from) return null // 既无采样也无入孵时刻:真的无从算起,不外推免得顶满
   const r = clampRate(rate || 1)
-  const elapsed = Math.max(0, Math.floor(now / 1000) - egg.hatchUpdate)
+  const elapsed = Math.max(0, Math.floor(now / 1000) - from)
   const secs = Math.min(egg.maxSecs, (egg.hatchedSecs || 0) + elapsed * r)
   const pct = Math.floor(Math.min(100, (secs / egg.maxSecs) * 100))
   return { pct, secs, rate: r }
