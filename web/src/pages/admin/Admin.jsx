@@ -1,9 +1,9 @@
-import React, { useCallback, useEffect, useState } from 'react'
+import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import {
   getAdminStatus, adminSetup, adminLogin, adminLogout,
   getAdminToken, setAdminToken, adminWildPetOptions, adminListInjects,
-  getAccounts, adminConfig, adminConfigSave,
+  getAccounts, adminConfig, adminConfigSave, adminWebAddrConfirm,
 } from '../../api'
 import AdminLoginCard from './AdminLoginCard'
 import CatchStatsCard from './CatchStatsCard'
@@ -16,6 +16,7 @@ import MerchantSourceCard from './MerchantSourceCard'
 import EggSourceCard from './EggSourceCard'
 import PinCard from './PinCard'
 import { MailConfigCard, AdvConfigCard } from './ConfigCards'
+import WebAddrCard from './WebAddrCard'
 
 // 三个分页按**动作代价**递增排,不是按功能类别分 —— 管理员最容易犯的错是
 // 「以为自己只是看看,结果改了全局」,顺序本身就是提示:
@@ -116,6 +117,40 @@ export default function Admin() {
     loadInjects()
     loadConfig()
   }, [authed, loadAccounts, loadWildOptions, loadInjects, loadConfig])
+
+  // —— 换端口后的交接 ——
+  //
+  // 管理员从旧地址点「打开新地址」过来时,URL 上带一个一次性交接码(handoff)。
+  // 它同时是两件事:
+  //   1. 证据 —— 这个页面是从**新地址**加载的,故新地址确实可达,可以落盘了
+  //   2. 凭据 —— 新源上没有管理员会话(令牌按协议+主机+端口隔离,换端口即换源),
+  //      凭它领回一个令牌,否则管理员刚确认完就被踢回登录页
+  //
+  // 必须放在 Admin 而非 WebAddrCard:未登录时渲染的是登录卡片,WebAddrCard 根本
+  // 不会挂载 —— 而交接恰恰要发生在拿到令牌之前。
+  const [webNotice, setWebNotice] = useState('')
+  const handoff = params.get('handoff')
+  // 同一个码只提交一次。开发模式下 StrictMode 会把 effect 跑两遍,而交接码是
+  // 一次性的:第二遍必然 409,于是「交接失败」盖掉刚成功的提示 —— 那句假警报
+  // 比没提示更糟,它会让人以为要回旧地址重来(其实配置已经写好了)。
+  const handoffTried = useRef('')
+  useEffect(() => {
+    if (!handoff || handoffTried.current === handoff) return
+    handoffTried.current = handoff
+    // 先把码从 URL 摘掉:它是一次性的,不该留在地址栏里被截图或刷新重用
+    const next = new URLSearchParams(params)
+    next.delete('handoff')
+    setParams(next, { replace: true })
+    adminWebAddrConfirm(handoff).then((res) => {
+      if (res?.token) setAdminToken(res.token)
+      setAuthed(true)
+      setWebNotice(`已切换到 ${res.realAddr} 并写入配置文件,旧地址已停止服务。`)
+      loadConfig()
+    }).catch((e) => {
+      // 码失效(试运行已过期/已用过)不算错误:管理员回到旧地址重来一遍即可
+      setWebNotice(e?.message ? `交接失败: ${e.message}` : '交接失败,请回原地址重试。')
+    })
+  }, [handoff]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const submit = async (e) => {
     e.preventDefault()
@@ -219,6 +254,12 @@ export default function Admin() {
           <InjectFlowerCard
             accounts={accounts} wildOptions={wildOptions}
             onInjectsChanged={loadInjects}
+          />
+
+          <div className="admin-section-title">Web 服务</div>
+          <WebAddrCard
+            config={config} error={configError}
+            onChanged={loadConfig} notice={webNotice}
           />
 
           <div className="admin-section-title">运行配置</div>

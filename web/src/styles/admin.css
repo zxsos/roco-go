@@ -317,3 +317,12 @@
 .admin-config-actions { display: flex; gap: 8px; margin-top: 12px; }
 /* 保存成功的提示:与 .admin-hint 同排版,只换色(原先是各处内联 style 写死) */
 .admin-ok { color: var(--green); font-size: 13px; margin: 0; }
+/* 试运行提示块:与 .admin-config-group 同形,但用**虚线主色边框** —— 它强调的正是
+   「配置还没落盘」:实线框在视觉上等于「已保存」,虚线才是「暂态、随时会撤」。 */
+.admin-trial {
+  margin: 12px 0; padding: 10px 12px;
+  background: var(--bg-2, transparent);
+  border: 1px dashed var(--accent, #4a9eff); border-radius: var(--radius, 6px);
+}
+.admin-trial .admin-hint { margin: 0 0 8px; }
+.admin-trial .admin-config-actions { margin-top: 8px; }

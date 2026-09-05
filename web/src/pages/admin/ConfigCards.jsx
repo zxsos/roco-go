@@ -1,4 +1,5 @@
 import React, { useState } from 'react'
+import { splitAddr, joinAddr, validatePort } from '../../utils/netaddr'
 
 // 运行配置的两半:**发件邮箱**(普通设置)与**令牌 + SOCKS5 代理**(高级设置)。
 //
@@ -12,8 +13,8 @@ import React, { useState } from 'react'
 // 生效代价也各不相同,界面上分别写清,不笼统一句「保存后重启」:
 //   - 邮箱 / 令牌   改完**立即生效**(纯内存热更)
 //   - SOCKS5 代理   改完**立即热重启**(它是独立 goroutine,不影响抓包与 Web 服务)
-//   - 监听地址/TLS  **本轮不在此处提供** —— 改它等于让正在处理你请求的服务器当场消失,
-//                   一旦失败(端口被占)就是远端失联,须另配防变砖保护再做
+//   - Web 监听地址  **不在此处** —— 改它等于让正在处理你请求的服务器当场消失,
+//                   故走 WebAddrCard 那套「试运行 → 确认」,不落进这张卡
 //
 // 落盘位置是 /etc/rocom.env(systemd 的 EnvironmentFile),由后端写入;前端不关心,
 // 只在配置不可写时把后端的说明原样显示出来。
@@ -130,36 +131,9 @@ export function MailConfigCard({ config, error, onSave }) {
   )
 }
 
-// 监听地址在后端是一个 Go 的 listen 地址("host:port"),但那个冒号对使用者毫无意义,
-// 还常被误读成「要连过去的地址」。故界面上拆成两格,**端口只填数字**:
-//   IP    留空 = 监听所有网卡;填 127.0.0.1 则只有本机连得上。
-//   端口  纯数字(0 = 由内核随机分配,实际端口看下面的「当前运行中」);留空 = 不启用。
-//
-// 反解要认 IPv6 的方括号("[::1]:1080" 里的冒号不止一个,取最后一个会切错)。
-function splitAddr(addr) {
-  const s = String(addr ?? '').trim()
-  if (s === '') return { host: '', port: '' }
-  if (s.startsWith('[')) {
-    const end = s.indexOf(']')
-    if (end >= 0) return { host: s.slice(0, end + 1), port: s.slice(end + 2) }
-  }
-  const i = s.lastIndexOf(':')
-  if (i < 0) return { host: s, port: '' }
-  return { host: s.slice(0, i), port: s.slice(i + 1) }
-}
-
-// joinAddr 拼回后端要的形态。没填端口即「不启用」(空串),此时填了 IP 也一并丢掉 ——
-// 只有 IP 没有端口不是个合法监听地址(界面上已拦下,这里是第二道)。
-function joinAddr(host, port) {
-  const p = String(port ?? '').trim()
-  if (p === '') return ''
-  const h = String(host ?? '').trim()
-  if (h === '') return ':' + p
-  // 裸 IPv6(如 ::1)必须加方括号,否则与端口的冒号混在一起无法解析
-  return (h.includes(':') && !h.startsWith('[') ? '[' + h + ']' : h) + ':' + p
-}
-
 // AdvConfigCard 第三方图鉴令牌 + 内置 SOCKS5 代理(「高级设置」分页)。
+// 注意**不含** Web 监听地址 —— 那个改动会把管理员自己断开,走的是另一条
+// 「试运行 → 确认」的链路,见 WebAddrCard。
 export function AdvConfigCard({ config, error, onSave }) {
   const s5 = config?.socks5 ?? {}
   const addr = splitAddr(s5.addr)
@@ -180,12 +154,9 @@ export function AdvConfigCard({ config, error, onSave }) {
   const save = async () => {
     const host = String(f.host).trim()
     const port = String(f.port).trim()
-    if (port !== '') {
-      const n = Number(port)
-      if (!/^\d+$/.test(port) || !Number.isInteger(n) || n > 65535) {
-        return fail('端口须填 0~65535 的数字(0 = 由内核随机分配)')
-      }
-    } else if (host !== '') {
+    const bad = validatePort(port)
+    if (bad) return fail(bad + '(0 = 由内核随机分配)')
+    if (port === '' && host !== '') {
       return fail('已填监听 IP,端口不能留空(不启用请两个都留空)')
     }
     return submit({
@@ -215,8 +186,8 @@ export function AdvConfigCard({ config, error, onSave }) {
       <h3>令牌与代理</h3>
       <p className="admin-hint">
         改动会写入 <code>{config.path}</code> 并立即生效:令牌纯热更,代理热重启(不影响抓包)。
-        监听地址、HTTPS、抓包网卡属启动项,改它们需要编辑该文件后执行
-        {' '}<code>systemctl restart rocom</code>。
+        HTTPS 与抓包网卡属启动项,改它们需要编辑该文件后执行
+        {' '}<code>systemctl restart rocom</code>;Web 监听地址可在下方「Web 服务」卡片里改。
       </p>
 
       {!config.writable ? <Readonly path={config.path} /> : (

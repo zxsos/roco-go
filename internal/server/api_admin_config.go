@@ -78,6 +78,14 @@ type configJSON struct {
 	EggKeySet   bool   `json:"eggKeySet"`   // 图鉴令牌:只给是否已设置
 
 	Socks5 socks5JSON `json:"socks5"`
+	Web    webJSON    `json:"web"`
+}
+
+// webJSON 是 Web 监听地址的回显。地址本身不敏感,照实给。
+type webJSON struct {
+	Addr     string          `json:"addr"`              // 当前监听地址(请求时的原文)
+	RealAddr string          `json:"realAddr"`          // 内核解析后的实际地址
+	Pending  *webPendingJSON `json:"pending,omitempty"` // 待确认的试运行;无则省略
 }
 
 // socks5JSON 是代理配置的回显。密码只给是否已设置。
@@ -144,6 +152,13 @@ func (s *Server) configGet(w http.ResponseWriter) {
 			out.Socks5.Running = true
 			out.Socks5.RealAddr = addr
 		}
+	}
+	// Web 地址以**正在监听的**为准(它永远是确定的),不读 env:
+	// 与 SMTP/令牌不同,这里没有「内存空而 env 有值」的情形 —— 进程一旦起来就必定在
+	// 某个地址上监听,而那个地址才是管理员真正连着的东西。env 若被人手改过但没重启,
+	// 显示它只会误导(面板说 5000,实际连着 4939)。
+	if s.web != nil {
+		out.Web.Addr, out.Web.RealAddr, out.Web.Pending = s.web.Status()
 	}
 	writeJSON(w, out)
 }

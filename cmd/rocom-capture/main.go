@@ -4,7 +4,6 @@ import (
 	"crypto/tls"
 	"flag"
 	"log"
-	"net/http"
 	"net/netip"
 	"strings"
 	"time"
@@ -65,9 +64,26 @@ func main() {
 		eng.AddSkipIP(ip)
 	}
 
+	// Web 服务交给 server 的监听器托管(而非这里直接 ListenAndServe):
+	// 管理面板要在运行期改监听地址,必须能「先起新的、成功后再停旧的」——
+	// 那要求有人持有并管理监听器,见 internal/server/web_listen.go。
+	// 证书只在这里准备一次,换地址时复用同一份(它是 -tls 的产物,与监听地址无关)。
+	var tlsCfg *tls.Config
+	if *useTLS {
+		cert, err := loadOrCreateCert(*certPath, *keyPath)
+		if err != nil {
+			log.Fatalf("准备 TLS 证书失败: %v", err)
+		}
+		tlsCfg = &tls.Config{Certificates: []tls.Certificate{cert}}
+	}
+	web := server.NewWebServer(srv.Handler(), tlsCfg)
+	srv.SetWebServer(web)
+
 	pl := pipeline.New(st, db, srv)
 	go pl.Run(eng)
-	go serveWeb(*addr, srv.Handler(), *useTLS, *certPath, *keyPath)
+	if err := web.Listen(*addr); err != nil {
+		log.Fatalf("Web 服务失败: %v", err)
+	}
 	if *socks5Addr != "" {
 		if *skipSelf && *iface != "" {
 			log.Printf("提示: -socks5-addr 已启用但未设 -skip-self-ip=false,代理进程以本机 IP 出站的游戏流量会被丢弃")
@@ -119,40 +135,6 @@ func main() {
 		}
 	default:
 		log.Println("用法: -pcap <文件> 或 -iface <网卡>")
-	}
-}
-
-// serveWeb 启动 Web 服务(-tls 时用自签证书起 HTTPS,证书不存在则生成,见 tls.go)。
-func serveWeb(addr string, h http.Handler, useTLS bool, certPath, keyPath string) {
-	if useTLS {
-		cert, err := loadOrCreateCert(certPath, keyPath)
-		if err != nil {
-			log.Fatalf("准备 TLS 证书失败: %v", err)
-		}
-		hs := &http.Server{
-			Addr:      addr,
-			Handler:   h,
-			TLSConfig: &tls.Config{Certificates: []tls.Certificate{cert}},
-		}
-		log.Printf("Web 界面: https://localhost%s (自签证书,浏览器首次访问需手动信任)", addr)
-		if err := hs.ListenAndServeTLS("", ""); err != nil {
-			log.Fatalf("HTTPS 服务失败: %v", err)
-		}
-		return
-	}
-	log.Printf("Web 界面: http://localhost%s", addr)
-	// ReadHeaderTimeout: 防慢速 header 攻击(Slowloris),不影响正常请求。
-	// IdleTimeout: 空闲连接最大存活时间,清理断开未检测的残留连接,避免 goroutine 堆积。
-	// 注意:不设 WriteTimeout/ReadTimeout —— SSE 长连接(/api/stream)需要无写超时,
-	// 设了会中断流式推送。ReadHeaderTimeout 只影响 header 读取阶段,不影响 body/SSE。
-	hs := &http.Server{
-		Addr:              addr,
-		Handler:           h,
-		ReadHeaderTimeout: 10 * time.Second,
-		IdleTimeout:       120 * time.Second,
-	}
-	if err := hs.ListenAndServe(); err != nil {
-		log.Fatalf("HTTP 服务失败: %v", err)
 	}
 }
 

@@ -91,6 +91,9 @@ type Server struct {
 	envPath string
 	// socks5Mgr 管理内置代理的启停。改代理配置不必重启进程,也就不打断抓包。
 	socks5Mgr *socks5.Manager
+	// web 托管 Web 服务的监听,使监听地址也能在运行期改(试运行→确认,见 web_listen.go)。
+	// main 启动时注入;为空时改地址的端点返回 503(单元测试与只用到 Handler 的场景)。
+	web *webServer
 
 	injectMu sync.Mutex
 	injects  map[string][]*injectEntry // 账号 -> 已注入精灵(管理员投放,有生命周期,见 admin_inject.go)
@@ -168,6 +171,10 @@ func New(st *store.Store, hub *Hub, db *gamedata.DB, eggAPIKey, smtpUser, smtpPa
 
 // Hub 返回广播中心。
 func (s *Server) Hub() *Hub { return s.hub }
+
+// SetWebServer 注入 Web 监听托管,使管理面板能在运行期改监听地址。
+// main 在开始监听之前调用(见 cmd/rocom-capture/main.go)。
+func (s *Server) SetWebServer(w *webServer) { s.web = w }
 
 // OpcodeName 返回 opcode 的可读名称。
 func (s *Server) OpcodeName(op uint16) string {
@@ -253,6 +260,10 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("POST /api/admin/egg-source", s.handleAdminEggSource)
 	s.mux.HandleFunc("GET /api/admin/config", s.handleAdminConfig)
 	s.mux.HandleFunc("POST /api/admin/config", s.handleAdminConfig)
+	// Web 监听地址(改它要试运行 + 确认,见 api_web_addr.go)
+	s.mux.HandleFunc("POST /api/admin/web-addr", s.handleAdminWebAddr)
+	s.mux.HandleFunc("POST /api/admin/web-addr/confirm", s.handleAdminWebAddrConfirm)
+	s.mux.HandleFunc("POST /api/admin/web-addr/revert", s.handleAdminWebAddrRevert)
 	s.mux.HandleFunc("GET /api/stream", s.handleStream)
 	s.mux.HandleFunc("POST /api/debug/parse", s.handleDebugParse)
 	// 宠物图片(embed 的 webp,路径如 /img/HeadIcon/3001.webp);长缓存,内容随版本变更。
