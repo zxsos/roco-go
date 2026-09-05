@@ -219,6 +219,14 @@ docker logs -f rocom     # 看日志
 docker compose up -d
 ```
 
+预构建镜像(可免登录直接拉取,含 amd64/x86_64):
+
+```bash
+docker pull docker.cnb.cool/test00123/roco:latest
+```
+
+需要其它架构(ARM 等)时从源码本地构建:`docker build -t rocom-capture .`
+
 几个要点:
 
 - **抓包权限**:`--cap-add=NET_ADMIN --cap-add=NET_RAW` 是最小集,别用
